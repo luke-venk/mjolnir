@@ -30,12 +30,13 @@ The code that handles ingesting frames from the cameras, synchronizing the camer
 The code that is responsible for perception and making decisions regarding measuring distance and sector violations will live here. This directory should include object detection, triangulation of rays, and outputting decisions regarding distances and sector violations.
 
 ### Circle Infractions
+The code that is responsible for converting the signals output by our touch-based sensor around the throwing circle into meaningful decisions will live here.
 
 ### Frontend
 The graphical user interface for our web application will live here, and the frontend will be written React / Next.js (TypeScript).
 
-### Interfaces
-The code defining message formats will live here. Because our system includes several independent machines, it is important to have a standard message format defined between applications so they can talk to each other reliably (note: I copied this last phrase directly from Owen's README.md in the TREL monorepo in message_formats/). 
+### Message Formats
+The code defining message formats will live here. Because our system includes several independent applications, it is important to have a standard message format defined between applications so they can talk to each other reliably.
 
 ### Analysis
 Any code or diagrams that help us inform our design decisions for this system should go here. This includes any MATLAB or Python visualizations, or any useful diagrams.
