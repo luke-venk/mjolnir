@@ -1,0 +1,7 @@
+# Ignore local data mounted to Docker container, but keep the actual directory.
+data/*
+!data/.gitkeep
+
+# Python files.
+venv/
+__pycache__/
