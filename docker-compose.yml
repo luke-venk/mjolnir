@@ -1,0 +1,14 @@
+---
+services:
+  backend:
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    ports:
+      - 8000:8000
+    # Default command is to start uvicorn server.
+
+    # Volume mount to store previous throws.
+    volumes:
+      - ./data:/data
+...
