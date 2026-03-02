@@ -2,7 +2,7 @@
 services:
   backend:
     build:
-      context: backend
+      context: backend_python
       dockerfile: Dockerfile
     ports:
       - 8000:8000
