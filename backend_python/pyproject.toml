@@ -1,0 +1,17 @@
+[project]
+name = "backend-python"
+version = "0.1.0"
+description = "Mjölnir Backend"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
