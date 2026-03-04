@@ -15,7 +15,7 @@
  *
  */
 use crate::hardware::Frame;
-use crossbeam_channel::{Receiver, Sender, RecvError, TryRecvError, TrySendError, bounded};
+use crossbeam::channel::{Receiver, Sender, RecvError, TryRecvError, TrySendError, bounded};
 
 #[derive(Debug, Clone)]
 pub struct Queue {
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn test_enqueue_then_dequeue_one() {
         let q = Queue::new(3);
-        assert!(q.enqueue(Frame::new(1)).is_ok());
+        assert!(q.enqueue(Frame::new(vec![1, 2, 3, 4], 1)).is_ok());
         
         let frame = q.dequeue().unwrap().expect("Dequeuing failed and should have succeeded.");
 
@@ -104,10 +104,10 @@ mod tests {
     #[test]
     fn test_drop_oldest_when_full() {
         let q = Queue::new(3);
-        assert!(q.enqueue(Frame::new(1)).is_ok());
-        assert!(q.enqueue(Frame::new(2)).is_ok());
-        assert!(q.enqueue(Frame::new(3)).is_ok());
-        assert!(q.enqueue(Frame::new(4)).is_ok());
+        assert!(q.enqueue(Frame::new(vec![1, 2, 3, 4], 1)).is_ok());
+        assert!(q.enqueue(Frame::new(vec![1, 2, 3, 4], 2)).is_ok());
+        assert!(q.enqueue(Frame::new(vec![1, 2, 3, 4], 3)).is_ok());
+        assert!(q.enqueue(Frame::new(vec![1, 2, 3, 4], 4)).is_ok());
         // Note: The first frame should have been dropped since it's the most stale.
 
         let frame1 = q.dequeue().unwrap().expect("Dequeuing failed and should have succeeded.");

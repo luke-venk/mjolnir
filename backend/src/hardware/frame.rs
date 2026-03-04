@@ -3,16 +3,17 @@
  */
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Frame {
-    // TODO: add image data
+    image_data: Vec<u8>,
     timestamp: u64,
 }
 
 #[allow(dead_code)]
 impl Frame {
-    pub fn new(timestamp: u64) -> Self {
+    pub fn new(image_data: Vec<u8>, timestamp: u64) -> Self {
         Self {
+            image_data,
             timestamp,
         }
     }
@@ -28,7 +29,8 @@ mod tests {
 
     #[test]
     fn test_frame_constructor_and_getter() {
-        let frame = Frame::new(34151);
+        let image_data = vec![1, 2, 3, 4];
+        let frame = Frame::new(image_data, 34151);
         
         assert_eq!(frame.timestamp, 34151);
     }

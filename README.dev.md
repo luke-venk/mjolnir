@@ -20,7 +20,7 @@ Due to these differences, the current plan is to experiment with Python and vali
 
 ## Rust Backend
 ### Usage
-Test server is alive:  `curl localhost:8000/api/hello_world`
+Test server is alive:  `curl localhost:3000/health`
 
 Run unit tests:  `cargo test`  
 

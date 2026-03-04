@@ -2,6 +2,6 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CameraId {
-    CameraLeft,
-    CameraRight,
+    FieldLeft,
+    FieldRight,
 }

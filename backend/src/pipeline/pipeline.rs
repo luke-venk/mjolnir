@@ -39,6 +39,7 @@ pub struct Pipeline {
     consumer_handle: Option<JoinHandle<()>>,
 }
 
+#[allow(dead_code)]
 impl Pipeline {
     pub fn new(_camera_id: CameraId, capacity: usize) -> Self {
         Self {

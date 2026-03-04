@@ -5,7 +5,7 @@
  */
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Clone, Copy, Serialize)]
 pub enum EventType {
     Shotput,
     Discus,
