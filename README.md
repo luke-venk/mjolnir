@@ -23,11 +23,11 @@ Anyways, the following engineers contributed to this project.
 ## Repository Structure
 This section outlines the purpose of each directory in the repository.
 
-### Camera Capture
-The code that handles ingesting frames from the cameras, synchronizing the cameras, and recording the footage will live here. The functionality of this directory is separate from that of computer_vision, but the outputs of the camera_capture system will be fed as inputs to the computer_vision system.
+### Backend
+The backend will be written in Rust and will be responsible for handling the Axum server to serve the frontend and run our complete pipelines for our system. Key responsibilities include ingesting frames from the cameras, using OpenCV tasks to analyze the frames, and outputting a decision regarding infraction status and distance thrown.
 
 ### Computer Vision
-The code that is responsible for perception and making decisions regarding measuring distance and sector violations will live here. This directory should include object detection, triangulation of rays, and outputting decisions regarding distances and sector violations.
+Experimental code responsible for perception and making decisions regarding measuring distance and sector violations can live here. This directory should include object detection, triangulation of rays, and outputting decisions regarding distances and sector violations. This code will be written in Python but the final product for CV will live in the Rust backend.
 
 ### Circle Infractions
 The code that is responsible for converting the signals output by our touch-based sensor around the throwing circle into meaningful decisions will live here.

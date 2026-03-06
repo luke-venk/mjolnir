@@ -1,3 +1,0 @@
-Docker volume mounts this directory to the container's data/ directory.
-
-Stores data for each throw.
