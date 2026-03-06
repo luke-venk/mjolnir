@@ -5,3 +5,6 @@ data/*
 # Python files.
 venv/
 __pycache__/
+
+# Rust files.
+target/
