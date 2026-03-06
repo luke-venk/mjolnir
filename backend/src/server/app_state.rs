@@ -10,5 +10,13 @@ use crate::sports::EventType;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub event_type: Arc<RwLock<Option<EventType>>>,
+    pub event_type: Arc<RwLock<EventType>>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            event_type: Arc::new(RwLock::new(EventType::Shotput)),
+        }
+    }
 }
