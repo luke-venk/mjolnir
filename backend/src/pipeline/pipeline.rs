@@ -1,92 +1,74 @@
-/**
- * This file will handle the implementation of our computer vision pipeline.
- * Each camera will have its own pipeline consisting of the following:
- *   (1) Producer
- *   (2) Queue
- *   (3) Consumer
- * 
- * The producer will handle ingesting the frames from the cameras and enqueue
- * into the queue. The consumer will be a worker that dequeues from the queue
- * and perform the computer vision on the implement, returning a message 
- * communicating the distance the object landed and whether or not the object
- * landed out of bounds. Each producer and consumer will be on its own thread.
- * 
- * The queue will be a thread-safe queue that allows both producers and
- * consumer to enqueue/dequeue while avoiding data races.
- * 
- * This architecture is essential to allow parallelism and to decouple 
- * ingesting camera footage from the heavy computer vision. For example, if 
- * computer vision is taking a very long time to analyze one frame, we don't
- * want that to block our pipeline from receiving the next frame. Furthermore,
- * we can run producers and consumers on their own threads to speed things up.
- */
-
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
+use super::PipelineStage;
+use crate::camera_ingest::ingest_frames;
+use crate::computer_vision::{
+    contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
 };
+use crate::hardware::{CameraId, Frame};
+use crossbeam::channel::bounded;
 use std::thread::{self, JoinHandle};
-use crate::hardware::CameraId;
-use super::queue::Queue;
-use super::producer::producer_run;
-use super::consumer::consumer_run;
 
 pub struct Pipeline {
     _camera_id: CameraId,
-    queue: Queue,
-    running: Arc<AtomicBool>,
-    producer_handle: Option<JoinHandle<()>>,
-    consumer_handle: Option<JoinHandle<()>>,
+    handles: Vec<JoinHandle<()>>,
 }
 
 #[allow(dead_code)]
 impl Pipeline {
-    pub fn new(_camera_id: CameraId, capacity: usize) -> Self {
+    // The Pipeline constructor will create all inter-stage message channels,
+    // create the PipelineStages, spawn each stage, and return a Pipeline.
+    pub fn new(_camera_id: CameraId, capacity_per_channel: usize) -> Self {
+        // TODO(#6): Implement Custom Queue Policy.
+
+        // Define inter-stage message channels for thread-safe message sharing.
+        let (tx_ingest, rx_stage1) = bounded::<Frame>(capacity_per_channel);
+        let (tx_stage1, rx_stage2) = bounded::<Frame>(capacity_per_channel);
+        let (tx_stage2, rx_stage3) = bounded::<Frame>(capacity_per_channel);
+        let (tx_stage3, rx_stage4) = bounded::<Frame>(capacity_per_channel);
+        let (tx_stage4, rx_stage5) = bounded::<Frame>(capacity_per_channel);
+        let (tx_stage5, rx_output) = bounded::<Frame>(capacity_per_channel);
+
+        // Spawn a thread to handle camera ingest from GigEVision API here.
+        let handle_ingest = thread::spawn(move || {
+            ingest_frames(tx_ingest);
+        });
+
+        // Create each of the pipeline stages.
+        // Note, storing handles instead of directly storing the pipeline stages since spawn() moves
+        // the pipeline stage into the thread anyway. Just store handles so can join() later on.
+        let handle_stage1 = PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn();
+        let handle_stage2 =
+            PipelineStage::new(rx_stage2, tx_stage2, intensity_normalization).spawn();
+        let handle_stage3 =
+            PipelineStage::new(rx_stage3, tx_stage3, forward_downsampled_copy).spawn();
+        let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, mog2).spawn();
+        let handle_stage5 = PipelineStage::new(rx_stage5, tx_stage5, contour).spawn();
+
+        // Spawn a thread to handle reporting pipeline outputs to server.
+        let handle_output = thread::spawn(move || {
+            for _frame in rx_output.iter() {
+                // TODO: forward results to output.
+            }
+        });
+
         Self {
             _camera_id,
-            queue: Queue::new(capacity),
-            running: Arc::new(AtomicBool::new(true)),
-            producer_handle: None,
-            consumer_handle: None,
+            handles: vec![
+                handle_ingest,
+                handle_stage1,
+                handle_stage2,
+                handle_stage3,
+                handle_stage4,
+                handle_stage5,
+                handle_output,
+            ],
         }
     }
 
-    pub fn start(&mut self) {
-        // The "_p" prefix corresponds to producer, and "_c" corresponds to consumer.
-        let running_p = Arc::clone(&self.running);
-        let running_c = Arc::clone(&self.running);
-
-        // Clone the handle for the queue for both the producer and consumer to access.
-        let queue_p = self.queue.clone();
-        let queue_c = self.queue.clone();
-
-        let camera_id = self._camera_id;
-        // Spawn producer on its own thread.
-        self.producer_handle = Some(thread::spawn(move || {
-            producer_run(camera_id, queue_p, running_p);
-        }));
-
-        // Spawn consumer on its own thread.
-        self.consumer_handle = Some(thread::spawn(move || {
-            consumer_run(queue_c, running_c);
-        }));
-    }
-
-    // Safely brings down both producer and consumer thread when system stops,
+    // Safely brings down all pipeline stage threads when system stops,
     // and blocks the main thread until these come down.
-    pub fn stop(&mut self) {
-        // Set `running` AtomicBool to false.
-        self.running.store(false, Ordering::Relaxed);
-
-        // Block until producer thread exits and take away handle.
-        if let Some(h) = self.producer_handle.take() {
-            let _ = h.join();
-        }
-
-        // Block until consumer thread exits and take away handle.
-        if let Some(h) = self.consumer_handle.take() {
-            let _ = h.join();
+    pub fn stop(self) {
+        for handle in self.handles {
+            let _ = handle.join();
         }
     }
-
 }

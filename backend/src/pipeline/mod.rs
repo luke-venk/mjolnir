@@ -1,6 +1,5 @@
-pub mod consumer;
 pub mod pipeline;
-pub mod producer;
-pub mod queue;
+pub mod pipeline_stage;
 
 pub use pipeline::Pipeline;
+pub use pipeline_stage::PipelineStage;
