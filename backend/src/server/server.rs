@@ -1,4 +1,4 @@
-use crate::{server::app_state::AppState, sports::EventType};
+use crate::{server::app_state::AppState, schemas::EventType};
 use axum::{
     Json, Router,
     extract::State,

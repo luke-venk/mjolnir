@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::sports::EventType;
+use crate::schemas::EventType;
 
 #[derive(Clone)]
 pub struct AppState {

@@ -1,11 +1,10 @@
 mod camera_ingest;
 mod computer_vision;
-mod hardware;
 mod pipeline;
+mod schemas;
 mod server;
-mod sports;
 
-use crate::hardware::CameraId;
+use crate::schemas::CameraId;
 use crate::pipeline::Pipeline;
 use crate::server::{create_app, start_server};
 
@@ -24,5 +23,5 @@ async fn main() {
     let app = create_app();
 
     // Start the Axum server.
-    start_server(app, "0.0.0.0:3000").await;
+    start_server(app, "0.0.0.0:5000").await;
 }

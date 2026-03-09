@@ -3,7 +3,7 @@ use crate::camera_ingest::ingest_frames;
 use crate::computer_vision::{
     contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
 };
-use crate::hardware::{CameraId, Frame};
+use crate::schemas::{CameraId, Frame};
 use crossbeam::channel::bounded;
 use std::thread::{self, JoinHandle};
 
@@ -16,6 +16,8 @@ pub struct Pipeline {
 impl Pipeline {
     // The Pipeline constructor will create all inter-stage message channels,
     // create the PipelineStages, spawn each stage, and return a Pipeline.
+    // Calling this function automatically starts each of the pipeline
+    // stages.
     pub fn new(_camera_id: CameraId, capacity_per_channel: usize) -> Self {
         // TODO(#6): Implement Custom Queue Policy.
 
@@ -32,7 +34,7 @@ impl Pipeline {
             ingest_frames(tx_ingest);
         });
 
-        // Create each of the pipeline stages.
+        // Create and start each of the pipeline stages.
         // Note, storing handles instead of directly storing the pipeline stages since spawn() moves
         // the pipeline stage into the thread anyway. Just store handles so can join() later on.
         let handle_stage1 = PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn();

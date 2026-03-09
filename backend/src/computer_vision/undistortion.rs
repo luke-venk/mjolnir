@@ -1,10 +1,9 @@
-use crate::hardware::{Frame, Context};
+use crate::schemas::{Frame, Context};
 
 pub fn undistortion(frame: Frame) -> Frame {
     // TODO: implement actual logic
     
     let data = frame.data();
     let new_metadata = frame.context().metadata() + 1;
-    println!("Performing undistortion on frame with metadata: {:?}", new_metadata);  // TODO: remove
     Frame::new(data.to_vec(), Context::new(new_metadata))
 }
