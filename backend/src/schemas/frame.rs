@@ -1,23 +1,23 @@
 /**
  * Each camera frame will consist of bytes representing the actual
- * image as well as metadata (Context).
+ * image as well as timestamp (Context).
  */
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Context {
     // TODO: replace placeholder
-    metadata: u64,
+    timestamp: u64,
 }
 
 impl Context {
-    pub fn new(metadata: u64) -> Self {
+    pub fn new(timestamp: u64) -> Self {
         Self {
-            metadata
+            timestamp
         }
     }
 
-    pub fn metadata(&self) -> u64 {
-        self.metadata
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
     }
 }
 
@@ -54,6 +54,6 @@ mod tests {
         let data = vec![1, 2, 3, 4];
         let frame = Frame::new(data, Context::new(34151));
         
-        assert_eq!(frame.context().metadata(), 34151);
+        assert_eq!(frame.context().timestamp(), 34151);
     }
 }

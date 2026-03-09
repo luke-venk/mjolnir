@@ -46,8 +46,8 @@ mod tests {
         
         let my_function = |f: Frame| -> Frame {
             let new_data = vec![6, 7, 6, 7];
-            let new_metadata = f.context().metadata() + 1;
-            Frame::new(new_data, Context::new(new_metadata))
+            let new_timestamp = f.context().timestamp() + 1;
+            Frame::new(new_data, Context::new(new_timestamp))
         };
 
         let pipeline_stage = PipelineStage::new(rx_pipe, tx_pipe, my_function);
@@ -56,6 +56,6 @@ mod tests {
         let frame_out = rx_out.recv().unwrap();
 
         assert_eq!(frame_out.data(), vec![6, 7, 6, 7]);
-        assert_eq!(frame_out.context().metadata(), 1739);
+        assert_eq!(frame_out.context().timestamp(), 1739);
     }
 }

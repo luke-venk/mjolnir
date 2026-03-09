@@ -4,6 +4,6 @@ pub fn mog2(frame: Frame) -> Frame {
     // TODO: implement actual logic
     
     let data = frame.data();
-    let new_metadata = frame.context().metadata() + 1;
-    Frame::new(data.to_vec(), Context::new(new_metadata))
+    let new_timestamp = frame.context().timestamp() + 1;
+    Frame::new(data.to_vec(), Context::new(new_timestamp))
 }
