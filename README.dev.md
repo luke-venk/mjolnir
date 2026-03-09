@@ -20,8 +20,13 @@ Due to these differences, the current plan is to experiment with Python and vali
 
 ## Rust Backend
 ### Usage
-Test server is alive:  `curl localhost:3000/health`
-
 Run unit tests:  `cargo test`  
 
 Run backend:  `cargo run`
+
+### Routes
+Test server is alive:  `curl localhost:5000/health`
+
+Get the current event:  `curl localhost:5000/event_type`
+
+Set the current event:  `curl -i -X POST localhost:5000/event_type -H "Content-Type: application/json" -d '{"event_type":"discus"}'`
