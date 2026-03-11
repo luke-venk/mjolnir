@@ -38,6 +38,8 @@ export default function Page() {
           <select
             value={selectedThrowType}
             onChange={async (e) => {
+              setCurrentThrow(null);
+              setStatus("waiting");
               const newType = e.target.value as ThrowType;
               setSelectedThrowType(newType);
               await fetch("/throw-type", {
