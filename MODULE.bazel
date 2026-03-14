@@ -1,0 +1,66 @@
+"""
+MODULE file for Mjölnir monorepo.
+
+MODULE files are manifests for Bazel repositories. They live at the repository
+root and publish metadata including the module's name, version, and external
+dependencies. Go to the following link for more information:
+https://bazel.build/external/module
+
+Includes support for Rust and TypeScript, by including dependencies that
+provide definitions (rules) for how to build in Bazel using these languages.
+"""
+
+# Mjölnir module.
+module(
+    name = "mjolnir",
+    version = "0.0.1",
+)
+
+# External dependencies.
+
+##### RUST ##### --------------------------------------------------------------
+# rules_rust: https://github.com/bazelbuild/rules_rust
+# Provides rules for building Rust projects with Bazel.
+bazel_dep(
+    name = "rules_rust",
+    version = "0.69.0",
+)
+
+# Activate Rust module extension from rules_rust.
+# See https://bazelbuild.github.io/rules_rust/
+rust = use_extension(
+    "@rules_rust//rust:extensions.bzl",
+    "rust",
+)
+
+# Tells extension to register Rust toolchain repositories.
+rust.toolchain(
+    edition = "2024",
+    versions = [ "1.94.0" ],
+)
+
+# Make rust_toolchains repo visible to this module. 
+use_repo(rust, "rust_toolchains")
+
+# Register toolchains so Bazel can choose the right one during build.
+register_toolchains("@rust_toolchains//:all")
+
+# crate_universe helps generate Rust targets using Cargo.
+crate = use_extension(
+    "@rules_rust//crate_universe:extensions.bzl",
+    "crate",
+)
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//backend:Cargo.lock",
+    manifests = ["//backend:Cargo.toml"],
+)
+use_repo(crate, "crates")
+
+
+##### TYPESCRIPT ##### --------------------------------------------------------
+# aspect_rules_ts:
+# Provides rules for building TypeScript projects with Bazel.
+
+# Note: Do we need something in this file for cross-compilation?
+# Or like generating builds for a bunch of common computer architectures?
