@@ -8,3 +8,10 @@ __pycache__/
 
 # Rust files.
 target/
+
+# Bazel files.
+# No trailing / since these are symlinks, not directories.
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-mjolnir
