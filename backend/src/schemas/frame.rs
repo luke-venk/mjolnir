@@ -50,6 +50,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_context_constructor_and_getter() {
+        let context = Context::new(6767);
+
+        assert_eq!(context.timestamp(), 6767);
+    }
+
+    #[test]
     fn test_frame_constructor_and_getter() {
         let data = vec![1, 2, 3, 4];
         let frame = Frame::new(data, Context::new(34151));
