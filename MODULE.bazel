@@ -18,9 +18,11 @@ module(
 
 # External dependencies.
 
-##### RUST ##### --------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Rust dependencies
+# -----------------------------------------------------------------------------
 # rules_rust: https://github.com/bazelbuild/rules_rust
-# Provides rules for building Rust projects with Bazel.
+# Provides Bazel rules and toolchains for building Rust code.
 bazel_dep(
     name = "rules_rust",
     version = "0.69.0",
@@ -33,34 +35,60 @@ rust = use_extension(
     "rust",
 )
 
-# Tells extension to register Rust toolchain repositories.
+# Register the Rust toolchain version and edition used by this repo.
 rust.toolchain(
     edition = "2024",
     versions = [ "1.94.0" ],
 )
 
-# Make rust_toolchains repo visible to this module. 
+# Make generated rust_toolchains repo visible to this module. 
 use_repo(rust, "rust_toolchains")
 
 # Register toolchains so Bazel can choose the right one during build.
 register_toolchains("@rust_toolchains//:all")
 
-# crate_universe helps generate Rust targets using Cargo.
+# crate_universe generates Bazel targets for Cargo dependencies.
 crate = use_extension(
     "@rules_rust//crate_universe:extensions.bzl",
     "crate",
 )
+# Imports dependencies from Cargo manifest and lockfile.
 crate.from_cargo(
     name = "crates",
     cargo_lockfile = "//backend:Cargo.lock",
     manifests = ["//backend:Cargo.toml"],
 )
+# Make generated Cargo dependency repository visible to this module.
 use_repo(crate, "crates")
 
 
-##### TYPESCRIPT ##### --------------------------------------------------------
-# aspect_rules_ts:
-# Provides rules for building TypeScript projects with Bazel.
+# -----------------------------------------------------------------------------
+# JavaScript dependencies
+# -----------------------------------------------------------------------------
+# aspect_rules_js:
+# Provides Bazel rules for JavaScript tooling, including running the
+# Next.js development server.
+bazel_dep(
+    name = "aspect_rules_js",
+    version = "3.0.3",
+)
 
-# Note: Do we need something in this file for cross-compilation?
-# Or like generating builds for a bunch of common computer architectures?
+# Use NPM extension and make visible to this module.
+# This ensures consistent, reproducible installations across environments.
+# Note: had to install PNPM and run `pnpm install` to generate pnpm-lock.yaml.
+# Note: had to run `pnpm approve-builds` to generate pnpm-workspace.yaml.
+npm = use_extension(
+    "@aspect_rules_js//npm:extensions.bzl",
+    "npm",
+    dev_dependency = True,
+)
+
+# Translate the NPM lockfile into Bazel targets for NPM packages, allowing
+# Bazel to reference the dependencies in frontend.
+npm.npm_translate_lock(
+    name = "npm",
+    pnpm_lock = "//frontend:pnpm-lock.yaml",
+)
+
+# Make generated NPM repository visible to this module.
+use_repo(npm, "npm")
