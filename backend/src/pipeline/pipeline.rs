@@ -1,5 +1,6 @@
 use super::PipelineStage;
 use crate::camera_ingest::ingest_frames;
+use crate::camera_ingest_config::CameraIngestConfig;
 use crate::computer_vision::{
     contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
 };
@@ -30,8 +31,9 @@ impl Pipeline {
         let (tx_stage5, rx_output) = bounded::<Frame>(capacity_per_channel);
 
         // Spawn a thread to handle camera ingest from GigEVision API here.
+        let config = CameraIngestConfig::load().clone();
         let handle_ingest = thread::spawn(move || {
-            ingest_frames(tx_ingest);
+            ingest_frames(tx_ingest, config);
         });
 
         // Create and start each of the pipeline stages.
