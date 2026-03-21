@@ -1,0 +1,4 @@
+"""
+Empty BUILD.bazel file at repo root to make the root directory a Bazel
+package. Otherwise, it won't build.
+"""
