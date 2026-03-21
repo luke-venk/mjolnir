@@ -1,7 +1,7 @@
 # Bazel
 [Bazel](https://bazel.build/about/intro) is a build tool created by Google that is highly useful for multi-language monorepos like ours. It provides our project the following benefits:
 * Standardizes toolchains so all users use the same toolchain instead of their own locally-installed tooling, which varies a lot for compiled languages like Rust
-* Remote caching and incremental builds are used to significantly speed up build time
+* Incremental builds are used to significantly speed up build time
 * Hermetic builds isolates build from host system, ensuring deterministic and reproducible builds across all machines and computer architectures
 
 ## Setup
