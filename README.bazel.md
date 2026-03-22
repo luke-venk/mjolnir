@@ -30,3 +30,7 @@ To run unit tests, run:
 #### Run Dev Server
 To run the dev server, run:
 `bazel run //frontend:dev`  
+
+#### Build Static Exports
+To build the frontend's static exports, run:  
+`bazel build //frontend:build`  
