@@ -26,4 +26,4 @@ If you are using Mac, run:  `./setup_mac.sh`
 
 If you are using Linux, run:  `./setup_linux.sh`
 
-If you are using Windows, run:  `TODO`
+We aren't supporting development for Windows. If you are using Windows, please use Windows Subsystem for Linux (WSL) and follow the instructions provided for Linux.

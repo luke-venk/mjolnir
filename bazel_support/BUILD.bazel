@@ -1,0 +1,16 @@
+"""
+This file is for Bazel Health Verification only.
+See content of `bazel_health_verifier.sh` for more.
+If that file is every updated/removed, this BUILD.bazel should also be updated/removed.
+"""
+
+package(
+    default_visibility = ["//visibility:private"],
+)
+
+# Trivial rule to test Bazel health.
+genrule(
+    name = "noop",
+    outs = ["noop.txt"],
+    cmd = "echo hi > $@",
+)
