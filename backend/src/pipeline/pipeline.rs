@@ -1,6 +1,6 @@
 use super::PipelineStage;
 use crate::camera_ingest::ingest_frames;
-use crate::camera_ingest_config::CameraIngestConfig;
+use crate::schemas::camera_ingest_config::CameraIngestConfig;
 use crate::computer_vision::{
     contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
 };
@@ -9,7 +9,7 @@ use crossbeam::channel::bounded;
 use std::thread::{self, JoinHandle};
 
 pub struct Pipeline {
-    _camera_id: CameraId,
+    camera_id: CameraId,
     handles: Vec<JoinHandle<()>>,
 }
 
@@ -19,7 +19,7 @@ impl Pipeline {
     // create the PipelineStages, spawn each stage, and return a Pipeline.
     // Calling this function automatically starts each of the pipeline
     // stages.
-    pub fn new(_camera_id: CameraId, capacity_per_channel: usize) -> Self {
+    pub fn new(camera_id: CameraId, capacity_per_channel: usize) -> Self {
         // TODO(#6): Implement Custom Queue Policy.
 
         // Define inter-stage message channels for thread-safe message sharing.
@@ -30,8 +30,9 @@ impl Pipeline {
         let (tx_stage4, rx_stage5) = bounded::<Frame>(capacity_per_channel);
         let (tx_stage5, rx_output) = bounded::<Frame>(capacity_per_channel);
 
+        ////
         // Spawn a thread to handle camera ingest from GigEVision API here.
-        let config = CameraIngestConfig::load().clone();
+        let config = CameraIngestConfig::new(camera_id);
         let handle_ingest = thread::spawn(move || {
             ingest_frames(tx_ingest, config);
         });
@@ -55,7 +56,7 @@ impl Pipeline {
         });
 
         Self {
-            _camera_id,
+            camera_id,
             handles: vec![
                 handle_ingest,
                 handle_stage1,

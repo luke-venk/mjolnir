@@ -1,9 +1,9 @@
 mod camera_ingest;
-mod camera_ingest_config;
 mod computer_vision;
 mod pipeline;
 mod schemas;
 mod server;
+mod tools; 
 
 use crate::schemas::CameraId;
 use crate::pipeline::Pipeline;

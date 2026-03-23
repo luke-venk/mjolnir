@@ -1,8 +1,6 @@
 //defines how cam settigs should be stored and read from env variables
 // reads cameras settings from env variables, sends placeholer frames
-use std::slice;
 use std::thread;
-use std::sync::Once;
 use std::time::Duration;
 use crate::schemas::{Frame, Context};
 use aravis::prelude::*;
@@ -11,7 +9,7 @@ use crossbeam::channel::Sender;
 use crate::camera_ingest::camera_ingest_helpers::{
     buffer_to_frame, configure_camera, create_stream_and_queue_buffers, initialize_aravis,
     open_camera,};
-use crate::camera_ingest_config::CameraIngestConfig;
+use crate::schemas::camera_ingest_config::CameraIngestConfig;
 
 //Intializes Aravis once
 //static ARAVIS_INIT: Once = Once::new();
@@ -41,8 +39,6 @@ pub fn ingest_frames(tx: Sender<Frame>, config: CameraIngestConfig){
         }
         thread::sleep(Duration::from_millis(3000));
     }
-
-    return;
 
     initialize_aravis();
     //Define camera. 

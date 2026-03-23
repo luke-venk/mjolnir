@@ -3,7 +3,7 @@ use std::sync::Once;
 use crate::schemas::{Frame, Context};
 use aravis::prelude::*;
 use aravis::{AcquisitionMode, Aravis, Buffer, Camera, ExposureMode};
-use crate::camera_ingest_config::CameraIngestConfig;
+use crate::schemas::camera_ingest_config::CameraIngestConfig;
 
 //Intializes Aravis once
 static ARAVIS_INIT: Once = Once::new();
@@ -25,16 +25,11 @@ pub fn open_camera(config: &CameraIngestConfig) -> Camera {
 pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig){
     camera.set_acquisition_mode(AcquisitionMode::Continuous).unwrap();
 
-    if let Some(exposure_time_us) = config.exposure_time_us{
-        //mode and time change check it
-        camera.set_exposure_mode(ExposureMode::Timed).unwrap();
-        camera.set_exposure_time(exposure_time_us).unwrap();
-    }
+    camera.set_exposure_mode(ExposureMode::Timed).unwrap();
+    camera.set_exposure_time(config.exposure_time_us).unwrap();
 
-    if let Some(frame_rate_hz) = config.frame_rate_hz{
-        camera.set_frame_rate_enable(true).unwrap();
-        camera.set_frame_rate(frame_rate_hz).unwrap();       
-    }
+    camera.set_frame_rate_enable(true).unwrap();
+    camera.set_frame_rate(config.frame_rate_hz).unwrap();
 
     if config.enable_ptp{
         camera.set_boolean("PtpEnable", true).unwrap();
