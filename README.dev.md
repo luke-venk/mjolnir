@@ -22,8 +22,8 @@ Please use VS Code for this project. Otherwise, you are a freak. Also, install t
 ### Scripts
 In the repository roots, there are scripts to install the dependencies needed to develop software for this project.  
 
-If you are using Mac, run:  `./setup_mac.sh`
+If you are using Mac, run:  `./scripts/setup_mac.sh`
 
-If you are using Linux, run:  `./setup_linux.sh`
+If you are using Linux, run:  `./scripts/setup_linux.sh`
 
 We aren't supporting development for Windows. If you are using Windows, please use Windows Subsystem for Linux (WSL) and follow the instructions provided for Linux.
