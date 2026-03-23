@@ -4,13 +4,8 @@
 * Incremental builds are used to significantly speed up build time
 * Hermetic builds isolates build from host system, ensuring deterministic and reproducible builds across all machines and computer architectures
 
-## Setup
-### Mac
-See the instructions for installing Bazel on macOS [here](https://bazel.build/install/os-x):
-- `brew install bazelisk`  
-
-### Windows
-TODO
+## External Depedencies
+This Rust project doesn't use Cargo, instead specifying dependencies through Bazel. To add a dependency, similar to how you would normally add a dependency in Cargo.toml, specify dependencies in [MODULE.bazel](MODULE.bazel) using `crate.spec(package = "my_package", version = "1.2.3")`. Then, include them in the `deps` argument of your Rust target like `"@crates//:package_name"`.
 
 ## Usage
 There are 4 ways we would want Bazel to build/run our project:
