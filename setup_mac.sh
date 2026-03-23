@@ -51,8 +51,11 @@ if [ ! -d "$HOME/.nvm" ]; then
 fi
 
 export NVM_DIR="$HOME/.nvm"
-# shellcheck disable=SC1090
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  set +e
+  . "$NVM_DIR/nvm.sh"
+  set -e
+fi
 
 echo "Installing rustup..."
 if ! command -v rustup >/dev/null 2>&1; then
@@ -87,5 +90,13 @@ if [ -d "$SCRIPT_DIR/frontend" ]; then
 else
   echo "Frontend directory not found, skipping npm install."
 fi
+
+echo "Installing Bazelisk..."
+if ! command -v bazel >/dev/null 2>&1; then
+    brew install bazelisk
+fi
+
+echo "Generating Rust project..."
+bazel run @rules_rust//tools/rust_analyzer:gen_rust_project
 
 echo "Setup complete."

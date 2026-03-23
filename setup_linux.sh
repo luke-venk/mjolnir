@@ -98,4 +98,14 @@ else
   echo "Frontend directory not found, skipping npm install."
 fi
 
+echo "Installing Bazelisk..."
+if ! command -v bazel >/dev/null 2>&1; then
+    curl -L "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64" -o bazel
+    chmod +x bazel
+    sudo mv bazel /usr/local/bin/bazel
+fi
+
+echo "Generating Rust project..."
+bazel run @rules_rust//tools/rust_analyzer:gen_rust_project
+
 echo "Setup complete."
