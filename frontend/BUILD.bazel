@@ -95,7 +95,7 @@ js_run_devserver(
 # https://nextjs.org/docs/app/api-reference/cli/next#build#next-build-options
 # https://nextjs.org/docs/app/guides/static-exports
 js_run_binary(
-    name = "build",
+    name = "static_exports",
     tool = ":next_js_binary",
     args = ["build", "--webpack"],
     srcs = glob(

@@ -51,10 +51,11 @@ To run the integration dev servers, run both commands in separate terminals:
 `bazel run //frontend:integration`  
 
 ### (4) Production
-Our final product would be a tree-shaken backend binary bundled with the frontend's static assets, running on port 5001.
+The final production build will be a single build target that sets optimization flags on the Rust build and grabs the static export from frontend as assets for the Rust binary to serve.  
+
 #### Run Dev Server
 To build the final product, run:  
 `bazel build TODO`  
 
 To build the frontend's static exports, run the following command. Note that this is automatically done when the final product is built:  
-`bazel build //frontend:build`  
+`bazel build //frontend:static_exports`  
