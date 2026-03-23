@@ -26,7 +26,7 @@ function randomInfractions(): { type: Infraction; confidence: number }[] {
   return infractions;
 }
 
-export async function fetchThrowEvent(
+export async function getThrowEvent(
   throwType: ThrowType,
 ): Promise<ThrowEvent> {
   await new Promise((res) => setTimeout(res, 250)); // simulate network delay

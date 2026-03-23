@@ -9,28 +9,52 @@
 See the instructions for installing Bazel on macOS [here](https://bazel.build/install/os-x):
 - `brew install bazelisk`  
 
-## Using Bazel
+### Windows
+TODO
+
+## Usage
+There are 4 ways we would want Bazel to build/run our project:
+1. Next.js-only dev
+3. Rust-only dev
+2. Integration dev
+4. Production
+
 The general format for building a Bazel target (like our executable) is:  
 `bazel build //<package>:<target>`  
 - `//`: root directory where MODULE.bazel lives
 - `<package>`: the directory containing the BUILD.bazel file
 - `<target>`: the rule inside the BUILD.bazel file
 
-### Backend
-To build our binary, run:  
+### (1) Next.js-only dev
+In this scenario, we would have Next.js serve both the frontend and backend, so Rust would not be involved at all. This provides hot-module reload and quick testing for our frontend.
+
+To run the frontend, run:  
+`bazel run //frontend:dev`  
+
+## (2) Rust-only dev
+In this scenario, we would only have the Axum server and Rust running the backend. No frontend would be used for this.  
+
+To build the backend, run:  
 `bazel build //backend:mjolnir`
 
-To directly run our program, run:  
+To directly run the backend, run:  
 `bazel run //backend:mjolnir`
 
 To run unit tests, run:  
 `bazel test //backend:tests`  
 
-### Frontend
-#### Run Dev Server
-To run the dev server, run:
-`bazel run //frontend:dev`  
+### (3) Integration dev
+In this scenario, we would run both Next.js for frontend and Axum for backend. We would run Next.js on port 3000 and Axum on port 5000.  
 
-#### Build Static Exports
-To build the frontend's static exports, run:  
+To run the integration dev servers, run both commands in separate terminals:  
+`bazel run //backend:mjolnir`  
+`bazel run //frontend:integration`  
+
+### (4) Production
+Our final product would be a tree-shaken backend binary bundled with the frontend's static assets, running on port 5000.
+#### Run Dev Server
+To build the final product, run:  
+`bazel build TODO`  
+
+To build the frontend's static exports, run the following command. Note that this is automatically done when the final product is built:  
 `bazel build //frontend:build`  
