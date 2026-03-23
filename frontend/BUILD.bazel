@@ -57,7 +57,7 @@ js_run_devserver(
 )
 
 # Similar to the previous target, but the API's base URL will point to
-# port 5000, where the Axum server is listening.
+# port 5001, where the Axum server is listening.
 js_run_devserver(
     name = "integration",
     tool = ":next_js_binary",
@@ -85,7 +85,7 @@ js_run_devserver(
     # same-origin Next.js server.
     # Since this is in dev mode, don't static export the frontend.
     env = {
-        "NEXT_PUBLIC_API_BASE_URL": "http://localhost:5000",
+        "NEXT_PUBLIC_API_BASE_URL": "http://localhost:5001",
         "NEXT_PUBLIC_STATIC_EXPORT": "false",
     }
 )

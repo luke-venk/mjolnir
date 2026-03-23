@@ -6,7 +6,7 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize)]
-pub enum EventType {
+pub enum ThrowType {
     Shotput,
     Discus,
     Hammer,

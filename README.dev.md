@@ -25,8 +25,9 @@ Run unit tests:  `cargo test`
 Run backend:  `cargo run`
 
 ### Routes
-Test server is alive:  `curl localhost:5000/health`
+Test server is alive:  `curl localhost:5001/health`
 
-Get the current event:  `curl localhost:5000/event_type`
+Get the current event:  `curl localhost:5001/throw-type`
 
-Set the current event:  `curl -i -X POST localhost:5000/event_type -H "Content-Type: application/json" -d '{"event_type":"discus"}'`
+Set the current event:  `curl -i -X POST localhost:5001/throw-type -H "Content-Type: application/json" -d '{"throw_type":"discus"}'`
+- Note: This can also be done through the frontend if running the application in integration mode.

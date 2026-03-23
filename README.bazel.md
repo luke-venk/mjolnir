@@ -44,14 +44,14 @@ To run unit tests, run:
 `bazel test //backend:tests`  
 
 ### (3) Integration dev
-In this scenario, we would run both Next.js for frontend and Axum for backend. We would run Next.js on port 3000 and Axum on port 5000.  
+In this scenario, we would run both Next.js for frontend and Axum for backend. We would run Next.js on port 3000 and Axum on port 5001.  
 
 To run the integration dev servers, run both commands in separate terminals:  
 `bazel run //backend:mjolnir`  
 `bazel run //frontend:integration`  
 
 ### (4) Production
-Our final product would be a tree-shaken backend binary bundled with the frontend's static assets, running on port 5000.
+Our final product would be a tree-shaken backend binary bundled with the frontend's static assets, running on port 5001.
 #### Run Dev Server
 To build the final product, run:  
 `bazel build TODO`  
