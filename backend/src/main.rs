@@ -23,5 +23,5 @@ async fn main() {
     let app = create_app();
 
     // Start the Axum server.
-    start_server(app, "0.0.0.0:5000").await;
+    start_server(app, "0.0.0.0:5001").await;
 }

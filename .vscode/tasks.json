@@ -1,0 +1,43 @@
+// See https://bazelbuild.github.io/rules_rust/rust_analyzer.html#vscode for more information.
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Bazel Health Verifier",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "panel": "dedicated"
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "type": "shell",
+      "linux": {
+        "command": "echo 'Skipping Bazel Health Verifier for Linux.`"
+      },
+      "osx": {
+        "command": "bash bazel_support/bazel_health_verifier.sh"
+      }
+    },
+    {
+      "label": "Generate rust-project.json",
+      "command": "bazel",
+      "args": ["run", "@rules_rust//tools/rust_analyzer:gen_rust_project"],
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "panel": "dedicated"
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "dependsOn": [
+        "Bazel Health Verifier"
+      ],
+      "dependsOrder": "parallel"
+    }
+  ]
+}

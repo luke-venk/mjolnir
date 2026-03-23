@@ -1,8 +1,8 @@
 pub mod camera;
 pub mod frame;
-pub mod throwing_event;
+pub mod throw_type;
 
 pub use camera::CameraId;
 pub use frame::Context;
 pub use frame::Frame;
-pub use throwing_event::EventType;
+pub use throw_type::ThrowType;

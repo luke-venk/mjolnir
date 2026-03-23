@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { displayNameForInfraction, displayNameForThrowType, ThrowEvent, throwEventSchema, ThrowType } from "@/lib/schemas";
-import { fetchThrowEvent } from "@/lib/api";
+import { getThrowEvent } from "@/lib/api";
 import { ImageGallery } from "@/app/components/image-gallery";
 import { CircleField } from "./components/circle-field";
 import { JavelinField } from "./components/javelin-field";
@@ -22,7 +22,10 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [selectedThrowType, setSelectedThrowType] = useState<ThrowType>(ThrowType.SHOTPUT);
   const [isLoadingCurrentThrow, setIsLoadingCurrentThrow] = useState(false);
-
+  
+  // URL varies based on whether or not the request is same origin (frontend-only
+  // dev, production, etc.) or if request is across servers (integration-dev).
+  const urlPostThrowType = process.env.NEXT_PUBLIC_API_BASE_URL + "/throw-type";
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8 flex flex-col">
@@ -42,11 +45,17 @@ export default function Page() {
               setStatus("waiting");
               const newType = e.target.value as ThrowType;
               setSelectedThrowType(newType);
-              await fetch("/throw-type", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ throwType: newType }),
-              });
+
+              try {
+                const res = await fetch(urlPostThrowType, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ throwType: newType }),
+                });
+              } catch (err) {
+                console.error("POST /throw-type failed. Did you forget to start the Axum server if you are running in integration mode?", err);
+              }
+              
             }}
             className="bg-gray-800 border border-gray-600 text-white rounded px-3 py-2 text-base font-normal focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
@@ -61,7 +70,7 @@ export default function Page() {
           onClick={async () => {
             setIsLoadingCurrentThrow(true);
             try {
-              const data = throwEventSchema.parse(await fetchThrowEvent(selectedThrowType));
+              const data = throwEventSchema.parse(await getThrowEvent(selectedThrowType));
               setCurrentThrow(data);
               setStatus("received");
             } catch (err: unknown) {

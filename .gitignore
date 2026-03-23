@@ -8,6 +8,7 @@ __pycache__/
 
 # Rust files.
 target/
+rust-project.json
 
 # Bazel files.
 # No trailing / since these are symlinks, not directories.

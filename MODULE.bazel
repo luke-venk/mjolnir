@@ -52,12 +52,52 @@ crate = use_extension(
     "@rules_rust//crate_universe:extensions.bzl",
     "crate",
 )
-# Imports dependencies from Cargo manifest and lockfile.
-crate.from_cargo(
-    name = "crates",
-    cargo_lockfile = "//backend:Cargo.lock",
-    manifests = ["//backend:Cargo.toml"],
+
+# Add external Rust dependencies here.
+crate.spec(
+    package = "aravis",
+    version = "0.11.1",
 )
+crate.spec(
+    package = "axum",
+    version = "0.8.8",
+)
+crate.spec(
+    package = "crossbeam",
+    version = "0.8",
+)
+crate.spec(
+    features = ["derive"],
+    package = "serde",
+    version = "1.0.228",
+)
+crate.spec(
+    package = "http-body-util",
+    version = "0.1",
+)
+crate.spec(
+    package = "serde_json",
+    version = "1.0",
+)
+crate.spec(
+    features = ["full"],
+    package = "tokio",
+    version = "1.50.0",
+)
+crate.spec(
+    package = "tower",
+    version = "0.5",
+)
+crate.spec(
+    features = ["cors"],
+    package = "tower-http",
+    version = "0.6.8",
+)
+
+crate.from_specs(
+    name = "crates",
+)
+
 # Make generated Cargo dependency repository visible to this module.
 use_repo(crate, "crates")
 

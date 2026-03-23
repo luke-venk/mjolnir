@@ -1,13 +1,14 @@
-use crate::{server::app_state::AppState, schemas::EventType};
+use crate::{schemas::ThrowType, server::app_state::AppState};
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
+    http::{HeaderValue, Method, StatusCode},
     response::IntoResponse,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tower_http::cors::{Any, CorsLayer};
 
 // Informs us that server is up and running.
 async fn health_check() -> impl IntoResponse {
@@ -19,25 +20,27 @@ async fn health_check() -> impl IntoResponse {
 
 // Request and response bodies for specifying the type of throwing event.
 #[derive(Deserialize)]
-struct PostEventTypeRequest {
-    event_type: String,
+struct PostThrowTypeRequest {
+    // Allow camelCase in frontend and snake_case in backend.
+    #[serde(alias = "throwType")]
+    throw_type: String,
 }
 
 #[derive(Serialize)]
-struct GetEventTypeResponse {
-    event_type: EventType,
+struct GetThrowTypeResponse {
+    throw_type: ThrowType,
 }
 
-// Allows manual input of what type of event the next throw will be.
-async fn post_event_type(
+// Allows user input of what type of event the next throw will be.
+async fn post_throw_type(
     State(state): State<AppState>,
-    Json(payload): Json<PostEventTypeRequest>,
+    Json(payload): Json<PostThrowTypeRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let event_type = match payload.event_type.as_str() {
-        "shotput" => EventType::Shotput,
-        "discus" => EventType::Discus,
-        "hammer" => EventType::Hammer,
-        "javelin" => EventType::Javelin,
+    let throw_type = match payload.throw_type.as_str() {
+        "shotput" => ThrowType::Shotput,
+        "discus" => ThrowType::Discus,
+        "hammer" => ThrowType::Hammer,
+        "javelin" => ThrowType::Javelin,
         _ => {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -46,22 +49,30 @@ async fn post_event_type(
         }
     };
 
-    *state.event_type.write().await = event_type;
+    *state.throw_type.write().await = throw_type;
     Ok(StatusCode::OK)
 }
 
 // Allows query of what the type of event the current throw is.
-async fn get_event_type(State(state): State<AppState>) -> Json<GetEventTypeResponse> {
-    let event_type = *state.event_type.read().await;
-    Json(GetEventTypeResponse { event_type })
+async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeResponse> {
+    let throw_type = *state.throw_type.read().await;
+    Json(GetThrowTypeResponse { throw_type })
 }
 
 pub fn create_app() -> Router {
     let state = AppState::new();
 
+    // Set up CORS layer to allow cross-origin sharing for integration mode.
+    let cors = CorsLayer::new()
+        .allow_origin(HeaderValue::from_static("http://localhost:3000"))
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers(Any);
+
+    // Configure the different routes the router can support, the CORS layer, and app state.
     Router::new()
         .route("/health", get(health_check))
-        .route("/event_type", post(post_event_type).get(get_event_type))
+        .route("/throw-type", post(post_throw_type).get(get_throw_type))
+        .layer(cors)
         .with_state(state)
 }
 
@@ -106,36 +117,36 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_default_event_type_is_shotput() {
+    async fn test_default_throw_type_is_shotput() {
         let app: Router = create_app();
 
         let request = Request::builder()
-            .uri("/event_type")
+            .uri("/throw-type")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["event_type"], "Shotput");
+        assert_eq!(json["throw_type"], "Shotput");
     }
 
     #[tokio::test]
-    async fn test_valid_event_type_post_and_get() {
+    async fn test_valid_throw_type_post_and_get() {
         let app: Router = create_app();
 
         let post_request = Request::builder()
             .method("POST")
-            .uri("/event_type")
+            .uri("/throw-type")
             .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"event_type":"discus"}"#))
+            .body(Body::from(r#"{"throw_type":"discus"}"#))
             .unwrap();
         let post_response = app.clone().oneshot(post_request).await.unwrap();
         assert_eq!(post_response.status(), StatusCode::OK);
 
         let get_request = Request::builder()
-            .uri("/event_type")
+            .uri("/throw-type")
             .body(Body::empty())
             .unwrap();
         let get_response = app.oneshot(get_request).await.unwrap();
@@ -143,18 +154,18 @@ mod tests {
 
         let body = get_response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["event_type"], "Discus");
+        assert_eq!(json["throw_type"], "Discus");
     }
 
     #[tokio::test]
-    async fn test_invalid_event_type_post() {
+    async fn test_invalid_throw_type_post() {
         let app: Router = create_app();
 
         let request = Request::builder()
             .method("POST")
-            .uri("/event_type")
+            .uri("/throw-type")
             .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"event_type":"curling"}"#))
+            .body(Body::from(r#"{"throw_type":"curling"}"#))
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);

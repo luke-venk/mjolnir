@@ -1,32 +1,29 @@
 # Developer README
+## Software Stack
+We are using a monorepo, which in our case is nice since our project features a variety of languages. See the attached READMEs for more information on how to use each component:
+- [Backend](/backend/README.md): Rust
+- [Frontend](/frontend/README.md): TypeScript (Next.js)
+- [Build](/README.bazel.md): Bazel
+- Experimentation: Python and MATLAB (just for validation, see [here](/backend/README.md#python-vs-rust))
 
-## Backend Overview
-The backend will serve several responsibilities, including:
-1. Serving the frontend static files
-2. Allowing manual input from user regarding event type, end of throw, etc. (at least until automation from CV is proven)
-3. Running our pipeline from producer to queue to consumers
+## Setup
+### Bazel (IMPORTANT)
+See [README.bazel.md](/README.bazel.md) for more information on why we are using the Bazel build system for this project.  
 
-### Python vs. Rust
-Python is great for experimentation, but Rust is a lot better for parallelism, packaging, and performance.
+Refer to the [Usage section](/README.bazel.md#usage) for the commands to build and run the project.
 
-Firstly, Rust has true multi-threaded parallelism within a process, allowing threads to run in parallel on different cores. However, Python has the global interpreter lock (GIL) that only allows one thread at a time to execute Python bytecode. If a thread enters native C code (like for OpenCV), the GIL may be released, but it is still to be determined how much of our code will be in native C.
+Before committing any changes, ensure that the entire project builds: `bazel build //...`  
 
-Secondly, Rust is a compiled-language while Python is an interpreted language. This means that for shipping the final product, Rust would be packaged as a single binary that should run anywhere. On the other hand, Python would be packaged as all our code, a Python runtime, and our dependencies, leading to portability difficulties.
+### VS Code Extensions
+Please use VS Code for this project. Otherwise, you are a freak. Also, install the following extensions for a smooth experience:  
+- [Bazel](vscode:extension/BazelBuild.vscode-bazel)
+- [Rust Analyzer](vscode:extension/rust-lang.rust-analyzer)
 
-Thirdly, Rust is significantly better than Python for performance. Furthermore, Rust enforces memory and thread safety at compile time.
+### Scripts
+In the repository roots, there are scripts to install the dependencies needed to develop software for this project.  
 
-Due to these differences, the current plan is to experiment with Python and validate our computer vision. However, our actual pipeline will be implemented in Rust.
+If you are using Mac, run:  `./scripts/setup_mac.sh`
 
+If you are using Linux, run:  `./scripts/setup_linux.sh`
 
-## Rust Backend
-### Usage
-Run unit tests:  `cargo test`  
-
-Run backend:  `cargo run`
-
-### Routes
-Test server is alive:  `curl localhost:5000/health`
-
-Get the current event:  `curl localhost:5000/event_type`
-
-Set the current event:  `curl -i -X POST localhost:5000/event_type -H "Content-Type: application/json" -d '{"event_type":"discus"}'`
+We aren't supporting development for Windows. If you are using Windows, please use Windows Subsystem for Linux (WSL) and follow the instructions provided for Linux.

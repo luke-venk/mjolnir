@@ -1,8 +1,13 @@
+# Refer to README.bazel.md for more information on what each of the
+# targets do.
+# See the following link for how to use aspect_rules_js.
+# https://registry.bazel.build/docs/aspect_rules_js/3.0.0-rc6
+
 # Load Bazel helpers for NPM package linking, the Next.js binary, and running
 # the development server.
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//frontend:next/package_json.bzl", next_bin = "bin")
-load("@aspect_rules_js//js:defs.bzl", "js_run_devserver")
+load("@aspect_rules_js//js:defs.bzl", "js_run_binary", "js_run_devserver")
 
 # Create Bazel targets for NPM packages from the translated pnpm-lock file.
 # Makes NPM dependencies available to other Bazel targets in this package.
@@ -14,26 +19,107 @@ next_bin.next_binary(
     visibility = ["//visibility:public"],
 )
 
-# Run `next dev` through Bazel to run the application in development mode.
+# Runs `next dev` through Bazel to run the application in development mode.
 # https://nextjs.org/docs/app/api-reference/cli/next#development
 js_run_devserver(
     name = "dev",
     tool = ":next_js_binary",
     # Note: had to use WebPack instead of TurboPack to make this work.
     args = ["dev", "--webpack"],
-    data = glob([
-        "app/**",
-        "lib/**",
-        "public/**",
-        "*.ts",
-        # Note: including .mjs was critical because I wasn't doing this
-        # before, and it wasn't styling anything
-        "*.mjs",
-    ]) + [
+        data = glob(
+        [
+            "app/**",
+            "lib/**",
+            "public/**",
+            "*.ts",
+            # Note: including .mjs was critical because I wasn't doing this
+            # before, and it wasn't styling anything
+            "*.mjs",
+        ],
+        exclude = ["next-env.d.ts"],
+    ) + [
         ":node_modules",
         "package.json",
         "tsconfig.json",
     ],
     # Run from frontend package directory to resolve files correctly.
     chdir = package_name(),
+    # Environment variable so frontend knows to make requests to same-origin
+    # Next.js server and not Axum server like in integration testing.
+    # Since this is in dev mode, don't static export the frontend.
+    # Note that environment variables must be prefixed with NEXT_PUBLIC_ to
+    # become available to browser.
+    # https://nextjs.org/docs/pages/guides/environment-variables#bundling-environment-variables-for-the-browser
+    env = {
+        "NEXT_PUBLIC_API_BASE_URL": "",
+        "NEXT_PUBLIC_STATIC_EXPORT": "false",
+    }
+)
+
+# Similar to the previous target, but the API's base URL will point to
+# port 5001, where the Axum server is listening.
+js_run_devserver(
+    name = "integration",
+    tool = ":next_js_binary",
+    # Note: had to use WebPack instead of TurboPack to make this work.
+    args = ["dev", "--webpack"],
+        data = glob(
+        [
+            "app/**",
+            "lib/**",
+            "public/**",
+            "*.ts",
+            # Note: including .mjs was critical because I wasn't doing this
+            # before, and it wasn't styling anything
+            "*.mjs",
+        ],
+        exclude = ["next-env.d.ts"],
+    ) + [
+        ":node_modules",
+        "package.json",
+        "tsconfig.json",
+    ],
+    # Run from frontend package directory to resolve files correctly.
+    chdir = package_name(),
+    # Environment variable so frontend knows to make requests to Axum, and not 
+    # same-origin Next.js server.
+    # Since this is in dev mode, don't static export the frontend.
+    env = {
+        "NEXT_PUBLIC_API_BASE_URL": "http://localhost:5001",
+        "NEXT_PUBLIC_STATIC_EXPORT": "false",
+    }
+)
+
+# Runs `next build` through Bazel to build the frontend's static exports
+# for production mode.
+# https://nextjs.org/docs/app/api-reference/cli/next#build#next-build-options
+# https://nextjs.org/docs/app/guides/static-exports
+js_run_binary(
+    name = "static_exports",
+    tool = ":next_js_binary",
+    args = ["build", "--webpack"],
+    srcs = glob(
+        [
+            "app/**",
+            "lib/**",
+            "public/**",
+            "*.mjs",
+        ],
+        exclude = ["next-env.d.ts"]
+    ) + [
+        "next.config.ts",
+        ":node_modules",
+        "package.json",
+        "tsconfig.json",
+    ],
+    out_dirs = [".next", "out"],
+    copy_srcs_to_bin = True,
+    chdir = package_name(),
+    # Environment variable so frontend knows to make requests to same-origin
+    # Axum server and not Next.js server.
+    # Since this is the final product, static export the frontend.
+    env = {
+        "NEXT_PUBLIC_API_BASE_URL": "",
+        "NEXT_PUBLIC_STATIC_EXPORT": "true",
+    }
 )
