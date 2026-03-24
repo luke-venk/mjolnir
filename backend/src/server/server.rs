@@ -9,6 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::ServeDir;
 
 // Informs us that server is up and running.
 async fn health_check() -> impl IntoResponse {
@@ -60,6 +61,7 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
 }
 
 pub fn create_app() -> Router {
+    // Thread-safe shared app state for current throw event.
     let state = AppState::new();
 
     // Set up CORS layer to allow cross-origin sharing for integration mode.
@@ -68,12 +70,25 @@ pub fn create_app() -> Router {
         .allow_methods([Method::GET, Method::POST])
         .allow_headers(Any);
 
-    // Configure the different routes the router can support, the CORS layer, and app state.
-    Router::new()
+    // Configure the different routes the router can support.
+    let api = Router::new()
         .route("/health", get(health_check))
-        .route("/throw-type", post(post_throw_type).get(get_throw_type))
+        .route("/throw-type", post(post_throw_type).get(get_throw_type));
+
+    // Use the fallback service so any request that isn't one of the
+    // API's routes will be directed to the frontend static exports.
+    // TODO: make path to frontend/out/ more robust.
+    let frontend_out_directory = "/Users/Luke/Code/mjolnir/bazel-bin/frontend/out";
+    let service = ServeDir::new(frontend_out_directory)
+        .append_index_html_on_directories(true);
+        
+    // Nest the routes behind the "/api" prefix so no naming collisions
+    // with frontend requests.
+    Router::new()
+        .nest("/api", api)
         .layer(cors)
         .with_state(state)
+        .fallback_service(service)
 }
 
 pub async fn start_server(app: Router, addr: &str) {

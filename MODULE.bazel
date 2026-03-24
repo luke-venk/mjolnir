@@ -89,7 +89,7 @@ crate.spec(
     version = "0.5",
 )
 crate.spec(
-    features = ["cors"],
+    features = ["cors", "fs"],
     package = "tower-http",
     version = "0.6.8",
 )

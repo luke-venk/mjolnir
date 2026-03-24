@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Yeetelligence",
-  description: "Intelligently judging every yeet",
+  title: "Mjölnir",
+  description: "2 cameras and a crazy dream to revolutionize B2B AI Saas...",
 };
 
 export default function RootLayout({
