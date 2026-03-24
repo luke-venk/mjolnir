@@ -28,16 +28,17 @@ pub fn ingest_frames(tx: Sender<Frame>, config: CameraIngestConfig){
     //5. Frame to hevc through channel
     //6. 
 
-    
+    if config.use_fake_interface {
     //test loop
-    loop {
-        let data = vec![1, 2, 3, 4];
-        let context = Context::new(1234);
-        println!("Dummy frame");
-        if tx.send(Frame::new(data,context)).is_err(){
-            break;
+        loop {
+            let data = vec![1, 2, 3, 4];
+            let context = Context::new(1234);
+            println!("Dummy frame");
+            if tx.send(Frame::new(data,context)).is_err(){
+                break;
+            }
+            thread::sleep(Duration::from_millis(3000));
         }
-        thread::sleep(Duration::from_millis(3000));
     }
 
     initialize_aravis();
@@ -53,25 +54,26 @@ pub fn ingest_frames(tx: Sender<Frame>, config: CameraIngestConfig){
         .expect("Failed to start it");
 
     //Pulling buffers from camera stream
-    loop {
-        let buffer = match stream.timeout_pop_buffer(config.timeout_ms){
-            Some(buffer) => buffer, 
+loop {
+        let buffer = match stream.timeout_pop_buffer(config.timeout_ms) {
+            Some(buffer) => buffer,
             None => continue,
-            // Put something for timeout option
         };
 
+        match buffer.status() {
+            BufferStatus::Success => {
+                let frame = buffer_to_frame(&buffer);
 
-        if buffer.status() == BufferStatus::Success{
-            let frame = buffer_to_frame(&buffer); 
-
-            if tx.send(frame).is_err(){
-                //stopping camera ingest, requeue
-                stream.push_buffer(buffer); 
-                break; 
+                if tx.send(frame).is_err() {
+                    stream.push_buffer(buffer);
+                    break;
+                }
             }
-        } else {
-            eprintln!("Buffer {:?}",buffer.status());
+            status => {
+                eprintln!("Buffer status: {:?}", status);
+            }
         }
-        stream.push_buffer(buffer); 
+
+        stream.push_buffer(buffer);
     }
 }

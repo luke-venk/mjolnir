@@ -48,6 +48,18 @@ pub fn create_stream_and_queue_buffers(camera: &Camera, num_buffers: usize) -> a
     stream
 }
 
+// Takes aravis camera buffer and copies it into Rust memory
+//Takes raw image bytes from buffer to be stored inside pipeline Frame
+pub fn copy_buffer_bytes(buffer: &Buffer) -> Vec<u8> {
+    let (ptr, len) = buffer.data();
+
+    if ptr.is_null() || len == 0 {
+        return Vec::new();
+    }
+
+    unsafe { slice::from_raw_parts(ptr as *const u8, len).to_vec() }
+}
+
 //Takes aravis buffer into your frame type
 pub fn buffer_to_frame(buffer: &Buffer) -> Frame {
     let data = copy_buffer_bytes(buffer);
@@ -67,16 +79,4 @@ pub fn buffer_to_frame(buffer: &Buffer) -> Frame {
     };
     //build and return the pipeline Frame with data
     Frame::new(data, Context::new(timestamp))
-}
-
-// Takes aravis camera buffer and copies it into Rust memory
-//Takes raw image bytes from buffer to be stored inside pipeline Frame
-pub fn copy_buffer_bytes(buffer: &Buffer) -> Vec<u8> {
-    let (ptr, len) = buffer.data();
-
-    if ptr.is_null() || len == 0 {
-        return Vec::new();
-    }
-
-    unsafe { slice::from_raw_parts(ptr as *const u8, len).to_vec() }
 }
