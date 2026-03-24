@@ -116,7 +116,7 @@ mod tests {
         let app: Router = create_app();
 
         let request = Request::builder()
-            .uri("/health")
+            .uri("/api/health")
             .body(Body::empty())
             .unwrap();
 
@@ -136,7 +136,7 @@ mod tests {
         let app: Router = create_app();
 
         let request = Request::builder()
-            .uri("/throw-type")
+            .uri("/api/throw-type")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
@@ -153,7 +153,7 @@ mod tests {
 
         let post_request = Request::builder()
             .method("POST")
-            .uri("/throw-type")
+            .uri("/api/throw-type")
             .header("Content-Type", "application/json")
             .body(Body::from(r#"{"throw_type":"discus"}"#))
             .unwrap();
@@ -161,7 +161,7 @@ mod tests {
         assert_eq!(post_response.status(), StatusCode::OK);
 
         let get_request = Request::builder()
-            .uri("/throw-type")
+            .uri("/api/throw-type")
             .body(Body::empty())
             .unwrap();
         let get_response = app.oneshot(get_request).await.unwrap();
@@ -178,7 +178,7 @@ mod tests {
 
         let request = Request::builder()
             .method("POST")
-            .uri("/throw-type")
+            .uri("/api/throw-type")
             .header("Content-Type", "application/json")
             .body(Body::from(r#"{"throw_type":"curling"}"#))
             .unwrap();
