@@ -77,8 +77,8 @@ pub fn create_app() -> Router {
 
     // Use the fallback service so any request that isn't one of the
     // API's routes will be directed to the frontend static exports.
-    // TODO: make path to frontend/out/ more robust.
-    let frontend_out_directory = "/Users/Luke/Code/mjolnir/bazel-bin/frontend/out";
+    // Note: this only works when running the application in `deploy` mode.
+    let frontend_out_directory = "frontend/out";
     let service = ServeDir::new(frontend_out_directory)
         .append_index_html_on_directories(true);
         
