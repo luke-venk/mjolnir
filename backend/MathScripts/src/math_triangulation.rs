@@ -27,10 +27,7 @@ fn dlt_triangulation(P_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vect
             A[(2 * i + 1, j)] = v * P[(2, j)] - P[(1, j)];
         }
     }
-    //println!("This is A: {:?}", A);
-    //println!("Size of A: {:?} x {:?}", A.nrows(), A.ncols());
     let svd = SVD::new(A, false, true);
-    //println!("This is svd: {:?}", svd);
     let v_t = svd.v_t.expect("SVD with compute_v=true");
     let v = v_t.transpose();
     let X_h = v.column(v.ncols() - 1);

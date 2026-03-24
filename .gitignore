@@ -6,13 +6,13 @@ data/*
 venv/
 __pycache__/
 
-# Rust files.
+# Rust files (e.g. accidental `cargo` output under a crate).
 target/
 rust-project.json
 
-# Bazel files.
-# No trailing / since these are symlinks, not directories.
-bazel-bin
-bazel-out
-bazel-testlogs
-bazel-mjolnir
+# Bazel output symlinks at repo root (bazel-bin, bazel-out, bazel-testlogs,
+# bazel-<workspace>, etc.). Leading / limits this to the repository root.
+/bazel-*
+
+# macOS
+.DS_Store

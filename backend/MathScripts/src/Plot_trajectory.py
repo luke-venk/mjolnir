@@ -26,6 +26,8 @@ def plot_3d_trajectory(X_opt, X_true=None, cov=None, out_path="trajectory_3d.png
         print("No true trajectory provided, only plotting optimized trajectory")
     ax.plot(X_opt[:, 0], X_opt[:, 1], X_opt[:, 2], "r-", alpha=1.0, linewidth=1.5)
 
+
+    # Optional: Plot covariance ellipsoids
     #if cov is not None and np.all(np.isfinite(cov)):
     #    max_std = np.max(np.sqrt(np.diag(cov)))
     #    scale = 0.3 / max_std if max_std > 1.0 else 1.0
