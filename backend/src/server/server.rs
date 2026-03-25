@@ -2,14 +2,12 @@ use crate::{schemas::ThrowType, server::app_state::AppState};
 use axum::{
     Json, Router,
     extract::State,
-    http::{HeaderValue, Method, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
 
 // Informs us that server is up and running.
 async fn health_check() -> impl IntoResponse {
@@ -76,35 +74,6 @@ pub fn create_api_router() -> Router {
     Router::new()
         .nest("/api", http_routes)
         .with_state(state)
-}
-
-// In dev mode, the backend can serve the API via command line, and it will
-// also serve the Next.js server, so it will need CORS. It will not have any
-// embedded assets.
-pub fn create_dev_app() -> Router {
-    // Set up CORS layer to allow cross-origin sharing for integration mode.
-    // Next.js requests will come from port 3000.
-    let cors = CorsLayer::new()
-        .allow_origin(HeaderValue::from_static("http://localhost:3000"))
-        .allow_methods([Method::GET, Method::POST])
-        .allow_headers(Any);
-
-    create_api_router().layer(cors)
-}
-
-// In deploy mode, the backend will serve the API but instead of serving
-// the Next.js server, it will embed the frontend's static exports using
-// rust-embed and serve using axum_embed.
-pub fn create_deploy_app() -> Router {
-    // Use the fallback service so any request that isn't one of the
-    // API's routes will be directed to the frontend static exports.
-    // Note: this only works when running the application in `deploy` mode.
-    let frontend_out_directory = "frontend/out";
-    let service = ServeDir::new(frontend_out_directory)
-        .append_index_html_on_directories(true);
-        
-    create_api_router()
-        .fallback_service(service)
 }
 
 pub async fn start_server(app: Router, addr: &str) {

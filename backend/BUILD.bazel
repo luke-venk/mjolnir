@@ -43,19 +43,35 @@ rust_binary(
     srcs = ["src/bin/dev.rs"],
     deps = [
         ":backend_lib",
+        "@crates//:axum",
         "@crates//:tokio",
+        "@crates//:tower-http",
     ],
 )
 
 # Deploy mode for the backend should be optimized. In this mode, the 
 # backend will serve the API but instead of serving the Next.js server,
 # it will embed the frontend's static exports using rust-embed and 
-# serve using axum_embed. See the following links:
-# https://docs.rs/crate/rust-embed/latest
-# https://docs.rs/axum-embed/latest/axum_embed/
+# serve using axum_embed.
 rust_binary(
     name = "deploy",
-    srcs = ["src/bin/deploy.rs"],
+    srcs = [
+        "src/bin/deploy.rs",
+    ],
+    deps = [
+        ":backend_lib",
+        "@crates//:axum",
+        "@crates//:axum-embed",
+        "@crates//:tokio",
+        "@crates//:rust-embed",
+    ],
+    compile_data = ["//frontend:static_exports"],
+    # At compile-time, this env var tells our source code exactly where
+    # Bazel placed the frontend outputs, so rust-embed can embed it
+    # into the binary directly.
+    rustc_env = {
+        "EMBEDDED_FRONTEND_DIR": "$(execpath //frontend:static_exports)",
+    },
     rustc_flags = select({
         "//:release": [
             "-Cpanic=abort",
@@ -63,12 +79,6 @@ rust_binary(
         ],
         "//conditions:default": ["-Cstrip=symbols"],
     }),
-    deps = [
-        ":backend_lib",
-        "@crates//:axum-embed",
-        "@crates//:tokio",
-        "@crates//:rust-embed",
-    ],
     visibility = ["//visibility:public"],
 )
 

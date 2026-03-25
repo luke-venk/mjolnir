@@ -49,3 +49,5 @@ The final production build uses the deploy target with the release Bazel config 
 To build or run the final product, run:  
 `bazel build --config=release //deploy:mjolnir`  
 `bazel run --config=release //deploy:mjolnir`  
+
+The final product would be the binary found in `bazel-bin/backend/deploy`.
