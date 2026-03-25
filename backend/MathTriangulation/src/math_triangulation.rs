@@ -8,12 +8,14 @@ use std::io::Write;
 use std::time::Instant;
 
 
+/// Helper function to project a 3D point onto a 2D image plane.
 fn project_point(P: Matrix3x4<f64>, x: Vector3<f64>) -> Vector2<f64> {
     let x_h = Vector4::new(x[0], x[1], x[2], 1.0);
     let x_proj = P * x_h;
     Vector2::new(x_proj[0] / x_proj[2], x_proj[1] / x_proj[2])
 }
 
+/// This function does initial estimate of the 3D position using the DLT algorithm.
 fn dlt_triangulation(P_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vector3<f64> {
     let n = P_list.len();
     let mut A = DMatrix::<f64>::zeros(2 * n, 4);
@@ -34,6 +36,8 @@ fn dlt_triangulation(P_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vect
     Vector3::new(X_h[0] / X_h[3], X_h[1] / X_h[3], X_h[2] / X_h[3])
 }
 
+///Setup the problem for the trajectory of a projectile. 
+///This includes the number of position parameters, the drag coefficient, the number of residuals, and the numerical Jacobian.
 struct TrajectoryProblem {
     params: DVector<f64>,
     P_list: Vec<Matrix3x4<f64>>,
@@ -42,12 +46,19 @@ struct TrajectoryProblem {
     omega_phys: f64,
     dt: f64,
     g: Vector3<f64>,
-    drag: f64,
     pixel_sigma: f64,
     physics_sigma: f64,
 }
 
 impl TrajectoryProblem {
+    fn n_position(&self) -> usize {
+        3 * self.n_timesteps
+    }
+
+    fn drag(&self) -> f64 {
+        self.params[self.n_position()]
+    }
+
     fn n_residuals(&self) -> usize {
         let n_cams = self.P_list.len();
         self.n_timesteps * n_cams * 2 + self.n_timesteps.saturating_sub(2) * 3
@@ -72,7 +83,6 @@ impl TrajectoryProblem {
                 omega_phys: self.omega_phys,
                 dt: self.dt,
                 g: self.g,
-                drag: self.drag,
                 pixel_sigma: self.pixel_sigma,
                 physics_sigma: self.physics_sigma,
             };
@@ -84,7 +94,6 @@ impl TrajectoryProblem {
                 omega_phys: self.omega_phys,
                 dt: self.dt,
                 g: self.g,
-                drag: self.drag,
                 pixel_sigma: self.pixel_sigma,
                 physics_sigma: self.physics_sigma,
             };
@@ -111,6 +120,7 @@ impl TrajectoryProblem {
     }
 }
 
+/// Function sets up and returns the trajectory of a projectile using the Levenberg-Marquardt algorithm.
 impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
     type ParameterStorage = VecStorage<f64, Dyn, U1>;
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
@@ -137,11 +147,12 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
                 residuals.push(r[1]);
             }
         }
+        let drag_k = self.drag();
         for t in 1..self.n_timesteps.saturating_sub(1) {
             let X_prev = Vector3::new(self.params[(t - 1) * 3], self.params[(t - 1) * 3 + 1], self.params[(t - 1) * 3 + 2]);
             let X_curr = Vector3::new(self.params[t * 3], self.params[t * 3 + 1], self.params[t * 3 + 2]);
             let X_next = Vector3::new(self.params[(t + 1) * 3], self.params[(t + 1) * 3 + 1], self.params[(t + 1) * 3 + 2]);
-            let phys_res = (X_next - 2.0 * X_curr + X_prev - self.g * self.dt * self.dt - Vector3::new(self.drag, self.drag, self.drag) * self.dt * self.dt) / self.physics_sigma;
+            let phys_res = (X_next - 2.0 * X_curr + X_prev - self.g * self.dt * self.dt - Vector3::new(drag_k, drag_k, drag_k) * self.dt * self.dt) / self.physics_sigma;
             residuals.push(self.omega_phys * phys_res[0]);
             residuals.push(self.omega_phys * phys_res[1]);
             residuals.push(self.omega_phys * phys_res[2]);
@@ -154,6 +165,21 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
     }
 }
 
+/// This function optimizes the trajectory of a projectile using the Levenberg-Marquardt algorithm.
+/// Initial guess for the trajectory is gotten from DLT triangulation.
+/// Then to further optimize the trajectory, we use the Levenberg-Marquardt algorithm.
+/// We return the optimized trajectory and the covariance matrix.
+/// Args:
+///     P_list: List of camera projection matrices. Should be gotten from camera calibration.
+///     pixels: List of pixel coordinates for each camera at each timestep. Should be gotten from CV.
+///     dt: Time step (1/fps).
+///     g: Gravity vector.
+///     drag: Drag coefficient.
+///     pixel_sigma: Standard deviation of the pixel noise.
+///     physics_sigma: Standard deviation of the physics noise.
+///     omega_phys: Hyperparameter for the physics noise.
+/// Returns:
+///     Tuple containing the optimized trajectory and the covariance matrix.
 async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f64>>], dt: f64, g: Option<Vector3<f64>>, drag: f64, pixel_sigma: f64, physics_sigma: f64, omega_phys: f64) -> (Vec<Vector3<f64>>, DMatrix<f64>) {
     let g = g.unwrap_or_else(|| Vector3::new(0.0, 0.0, -9.81));
     let n_timesteps = pixels[0].len();
@@ -167,7 +193,8 @@ async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f6
         }
         X_init.push(dlt_triangulation(P_list, &pixel_t));
     }
-    let params_init: Vec<f64> = X_init.iter().flat_map(|v| vec![v[0], v[1], v[2]]).collect();
+    let mut params_init: Vec<f64> = X_init.iter().flat_map(|v| vec![v[0], v[1], v[2]]).collect();
+    params_init.push(drag);
     let problem = TrajectoryProblem {
         params: DVector::from_vec(params_init),
         P_list: P_list.to_vec(),
@@ -176,7 +203,6 @@ async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f6
         omega_phys,
         dt,
         g,
-        drag,
         pixel_sigma,
         physics_sigma,
     };
@@ -185,156 +211,11 @@ async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f6
         .map(|t| Vector3::new(problem.params[t * 3], problem.params[t * 3 + 1], problem.params[t * 3 + 2]))
         .collect();
     let jacobian = problem.numerical_jacobian(1e-7);
-    let cov = problem.covariance_from_jacobian(&jacobian).unwrap_or_else(|| DMatrix::zeros(problem.params.len(), problem.params.len()));
+    let cov_full = problem.covariance_from_jacobian(&jacobian).unwrap_or_else(|| DMatrix::zeros(3 * n_timesteps + 1, 3 * n_timesteps + 1));
+    let cov = cov_full.view((0, 0), (3 * n_timesteps, 3 * n_timesteps)).into_owned();
     (X_opt, cov)
 }
 
-//==============================================
-// Example usage
-//==============================================
-
-fn _camera_look_at(cam_position: Vector3<f64>, target: Vector3<f64>, up: Vector3<f64>) -> (Matrix3<f64>, Vector3<f64>) {
-    let z = (target - cam_position) / (target - cam_position).norm();
-    let x = up.cross(&z).normalize();
-    let y = z.cross(&x).normalize();
-    let R = Matrix3::new(x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]);
-    let t = -R * cam_position;
-    (R, t)
-}
 
 pub async fn run() {
-    println!("Starting Physics-Informed Triangulation (no GCPs, fixed cameras)");
-
-    let n_cameras = 3usize;
-    let max_timesteps = 25usize;
-    let dt = 0.04_f64;
-    let g = Vector3::new(0.0, 0.0, -9.81);
-    let drag_coef = 0.2_f64;
-    let pixel_sigma = 1.0_f64;
-    let physics_sigma = 0.05_f64;
-    let omega_phys = 1.0_f64;
-
-    let k_intrinsic = Matrix3::new(800.0, 0.0, 0.0, 0.0, 800.0, 0.0, 0.0, 0.0, 1.0);
-    let K_list = vec![k_intrinsic; n_cameras];
-
-    let center = Vector3::new(0.0, 0.0, 0.0);
-    let up = Vector3::new(0.0, 0.0, 1.0);
-    let radius = 4.0_f64;
-    let height = 2.0_f64;
-    let angles = [
-        0.0_f64,
-        2.0 * std::f64::consts::PI / 3.0,
-        4.0 * std::f64::consts::PI / 3.0,
-    ];
-    let cam_positions = Matrix3::new(
-        radius * angles[0].cos(),
-        radius * angles[0].sin(),
-        height,
-        radius * angles[1].cos(),
-        radius * angles[1].sin(),
-        height,
-        radius * angles[2].cos(),
-        radius * angles[2].sin(),
-        height,
-    );
-
-    let mut R_list = Vec::with_capacity(n_cameras);
-    let mut t_list = Vec::with_capacity(n_cameras);
-    for i in 0..n_cameras {
-        let pos_i = Vector3::new(
-            cam_positions[(i, 0)],
-            cam_positions[(i, 1)],
-            cam_positions[(i, 2)],
-        );
-        let (r, t) = _camera_look_at(pos_i, center, up);
-        R_list.push(r);
-        t_list.push(t);
-    }
-
-    let mut P_list = Vec::with_capacity(n_cameras);
-    for i in 0..n_cameras {
-        let k = K_list[i];
-        let r = R_list[i];
-        let t = t_list[i];
-        let rt = Matrix3x4::new(
-            r[(0, 0)],
-            r[(0, 1)],
-            r[(0, 2)],
-            t[0],
-            r[(1, 0)],
-            r[(1, 1)],
-            r[(1, 2)],
-            t[1],
-            r[(2, 0)],
-            r[(2, 1)],
-            r[(2, 2)],
-            t[2],
-        );
-        P_list.push(k * rt);
-    }
-
-    let x0 = Vector3::new(0.0, 0.0, 1.5);
-    let v0 = Vector3::new(1.0, 1.0, 2.5);
-    let mut traj_true: Vec<Vector3<f64>> = Vec::new();
-    let mut x = x0;
-    let mut v = v0;
-    for _ in 0..max_timesteps {
-        traj_true.push(x);
-        let acc = g - drag_coef * v;
-        v = v + acc * dt;
-        x = x + v * dt;
-        if x[2] < 0.2 {
-            break;
-        }
-    }
-    let n_timesteps = traj_true.len();
-
-    let mut pixels: Vec<Vec<Vector2<f64>>> = Vec::new();
-    for i in 0..n_cameras {
-        let mut pixel_t = Vec::with_capacity(n_timesteps);
-        for t in 0..n_timesteps {
-            let pred = project_point(P_list[i], traj_true[t]);
-            pixel_t.push(pred);
-        }
-        pixels.push(pixel_t);
-    }
-
-    let time_start = Instant::now();
-    let (x_opt, cov) = optimize_trajectory(
-        &P_list,
-        &pixels,
-        dt,
-        Some(g),
-        drag_coef,
-        pixel_sigma,
-        physics_sigma,
-        omega_phys,
-    )
-    .await;
-    let time_end = Instant::now();
-
-    println!("Time taken: {:.4} s", time_end.duration_since(time_start).as_secs_f64());
-    println!("Optimized trajectory X_opt:\n{:?}", x_opt);
-    println!("Covariance matrix shape: {} x {}", cov.nrows(), cov.ncols());
-
-    // Ground-truth trajectory
-    let mut file = File::create("trajectory_true.csv").expect("create trajectory_true.csv");
-    for p in &traj_true {
-        writeln!(file, "{},{},{}", p[0], p[1], p[2]).expect("write trajectory");
-    }
-
-    // Optimized trajectory
-    let mut file = File::create("trajectory_optimized.csv").expect("create trajectory_optimized.csv");
-    for p in &x_opt {
-        writeln!(file, "{},{},{}", p[0], p[1], p[2]).expect("write trajectory");
-    }
-
-    // Full covariance as CSV (rows)
-    let mut file = File::create("covariance.csv").expect("create covariance.csv");
-    for i in 0..cov.nrows() {
-        let row: Vec<String> = (0..cov.ncols())
-            .map(|j| format!("{}", cov[(i, j)]))
-            .collect();
-        writeln!(file, "{}", row.join(",")).expect("write cov row");
-    }
 }
