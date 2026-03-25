@@ -60,21 +60,42 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
     Json(GetThrowTypeResponse { throw_type })
 }
 
-pub fn create_app() -> Router {
+// In both dev and deploy mode, the router will require the HTTP routes
+// and the thread-safe shared app state.
+pub fn create_api_router() -> Router {
     // Thread-safe shared app state for current throw event.
     let state = AppState::new();
 
+    // Define HTTP routes.
+    let http_routes = Router::new()
+        .route("/health", get(health_check))
+        .route("/throw-type", post(post_throw_type).get(get_throw_type));
+
+    // Nest the routes behind the "/api" prefix so no naming collisions
+    // with frontend requests.
+    Router::new()
+        .nest("/api", http_routes)
+        .with_state(state)
+}
+
+// In dev mode, the backend can serve the API via command line, and it will
+// also serve the Next.js server, so it will need CORS. It will not have any
+// embedded assets.
+pub fn create_dev_app() -> Router {
     // Set up CORS layer to allow cross-origin sharing for integration mode.
+    // Next.js requests will come from port 3000.
     let cors = CorsLayer::new()
         .allow_origin(HeaderValue::from_static("http://localhost:3000"))
         .allow_methods([Method::GET, Method::POST])
         .allow_headers(Any);
 
-    // Configure the different routes the router can support.
-    let api = Router::new()
-        .route("/health", get(health_check))
-        .route("/throw-type", post(post_throw_type).get(get_throw_type));
+    create_api_router().layer(cors)
+}
 
+// In deploy mode, the backend will serve the API but instead of serving
+// the Next.js server, it will embed the frontend's static exports using
+// rust-embed and serve using axum_embed.
+pub fn create_deploy_app() -> Router {
     // Use the fallback service so any request that isn't one of the
     // API's routes will be directed to the frontend static exports.
     // Note: this only works when running the application in `deploy` mode.
@@ -82,12 +103,7 @@ pub fn create_app() -> Router {
     let service = ServeDir::new(frontend_out_directory)
         .append_index_html_on_directories(true);
         
-    // Nest the routes behind the "/api" prefix so no naming collisions
-    // with frontend requests.
-    Router::new()
-        .nest("/api", api)
-        .layer(cors)
-        .with_state(state)
+    create_api_router()
         .fallback_service(service)
 }
 
@@ -106,14 +122,13 @@ pub async fn start_server(app: Router, addr: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::create_app;
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_health_check() {
-        let app: Router = create_app();
+        let app: Router = create_api_router();
 
         let request = Request::builder()
             .uri("/api/health")
@@ -133,7 +148,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_default_throw_type_is_shotput() {
-        let app: Router = create_app();
+        let app: Router = create_api_router();
 
         let request = Request::builder()
             .uri("/api/throw-type")
@@ -149,7 +164,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_valid_throw_type_post_and_get() {
-        let app: Router = create_app();
+        let app: Router = create_api_router();
 
         let post_request = Request::builder()
             .method("POST")
@@ -174,7 +189,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_throw_type_post() {
-        let app: Router = create_app();
+        let app: Router = create_api_router();
 
         let request = Request::builder()
             .method("POST")

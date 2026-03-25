@@ -1,6 +1,6 @@
 use backend_lib::schemas::CameraId;
 use backend_lib::pipeline::Pipeline;
-use backend_lib::server::{create_app, start_server};
+use backend_lib::server::{create_dev_app, start_server};
 
 // Start tokio async runtime.
 #[tokio::main]
@@ -13,7 +13,7 @@ async fn main() {
     // TODO(#7): Implement Clean Shutdown.
 
     // Build the Axum router.
-    let app = create_app();
+    let app = create_dev_app();
 
     // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
