@@ -8,11 +8,11 @@ Note that to build the optimized version, use the 'release' flag.
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 sh_binary(
-    name = "deploy_mjolnir",
+    name = "mjolnir",
     srcs = ["deploy_mjolnir.sh"],
     data = [
         "//frontend:static_exports",
-        "//backend:mjolnir",
+        "//backend:deploy",
     ],
     visibility = ["//visibility:public"],
 )

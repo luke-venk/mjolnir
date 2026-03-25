@@ -1,14 +1,20 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-rust_binary(
-    name = "mjolnir",
-    srcs = glob(["src/**/*.rs"]),
+# Define a library that compiles the source code and can be used by
+# both the dev and deploy binaries. Can be optimized using command
+# line arguments.
+rust_library(
+    name = "backend_lib",
+    crate_name = "backend_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/bin/*.rs"],
+    ),
     rustc_flags = select({
         "//:release": [
             "-Ccodegen-units=1",
             "-Cpanic=abort",
             "-Copt-level=3",
-            "-Cstrip=symbols",
         ],
         "//conditions:default": [],
     }),
@@ -23,12 +29,56 @@ rust_binary(
     visibility = ["//visibility:public"],
 )
 
+# Note, the main reason for splitting into dev and deploy
+# binaries is to handle differences in how the applications serve
+# the frontend. Optimization can technically occur for either target
+# using `--config=release` (see .bazelrc).
+
+# Dev mode for the backend doesn't have to be optimized. In this mode,
+# the backend can serve the API via command line, and it will also serve
+# the Next.js server, so it will need CORS. It will not have any embedded
+# assets.
+rust_binary(
+    name = "dev",
+    srcs = ["src/bin/dev.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:tokio",
+    ],
+)
+
+# Deploy mode for the backend should be optimized. In this mode, the 
+# backend will serve the API but instead of serving the Next.js server,
+# it will embed the frontend's static exports using rust-embed and 
+# serve using axum_embed. See the following links:
+# https://docs.rs/crate/rust-embed/latest
+# https://docs.rs/axum-embed/latest/axum_embed/
+rust_binary(
+    name = "deploy",
+    srcs = ["src/bin/deploy.rs"],
+    rustc_flags = select({
+        "//:release": [
+            "-Cpanic=abort",
+            "-Cstrip=symbols",
+        ],
+        "//conditions:default": ["-Cstrip=symbols"],
+    }),
+    deps = [
+        ":backend_lib",
+        "@crates//:axum-embed",
+        "@crates//:tokio",
+        "@crates//:rust-embed",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# Unit tests to test the backend library.
 rust_test(
     name = "tests",
-    crate = ":mjolnir",
+    crate = ":backend_lib",
     deps = [
         "@crates//:axum",
         "@crates//:http-body-util",
         "@crates//:tower",
-    ]
+    ],
 )

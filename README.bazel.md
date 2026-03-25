@@ -30,8 +30,8 @@ To run the frontend, run:
 In this scenario, we would only have the Axum server and Rust running the backend. No frontend would be used for this. You can interact with the backend through the command line using curl, instructions for which are found in the [backend README](/backend/README.md#usage).  
 
 To build or run the backend, run:  
-`bazel build //backend:mjolnir`
-`bazel run //backend:mjolnir`
+`bazel build //backend:dev`
+`bazel run //backend:dev`
 
 To run unit tests, run:  
 `bazel test //backend:tests`  
@@ -40,12 +40,12 @@ To run unit tests, run:
 In this scenario, we would run both Next.js for frontend and Axum for backend. We would run Next.js on port 3000 and Axum on port 5001. You can interact with the frontend in your browser at `localhost:3000` and confirm the throw events are updated in the backend through the command line.  
 
 To run the integration dev servers, run both commands in separate terminals:  
-`bazel run //backend:mjolnir`  
+`bazel run //backend:dev`  
 `bazel run //frontend:integration`  
 
 ### (4) Production
-The final production build will be a single build target that sets optimization flags on the Rust build and grabs the static export from frontend as assets for the Rust binary to serve. When running this, you can open your browser to `localhost:5001` and interact with the application.  
+The final production build uses the deploy target with the release Bazel config (found in .bazelrc) to optimize the backend build and serve the embedded frontend assets. When running this, you can open your browser to `localhost:5001` and interact with the application.  
 
 To build or run the final product, run:  
-`bazel build //deploy:deploy_mjolnir`  
-`bazel run //deploy:deploy_mjolnir`  
+`bazel build --config=release //deploy:mjolnir`  
+`bazel run --config=release //deploy:mjolnir`  

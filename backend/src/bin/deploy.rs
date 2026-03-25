@@ -1,13 +1,6 @@
-mod camera_ingest;
-mod computer_vision;
-mod pipeline;
-mod schemas;
-mod server;
-
-use crate::schemas::CameraId;
-use crate::pipeline::Pipeline;
-use crate::server::{create_app, start_server};
-
+use backend_lib::schemas::CameraId;
+use backend_lib::pipeline::Pipeline;
+use backend_lib::server::{create_app, start_server};
 
 // Start tokio async runtime.
 #[tokio::main]
