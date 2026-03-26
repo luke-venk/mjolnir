@@ -4,10 +4,9 @@ mod pipeline;
 mod schemas;
 mod server;
 
-use crate::schemas::CameraId;
 use crate::pipeline::Pipeline;
+use crate::schemas::CameraId;
 use crate::server::{create_app, start_server};
-
 
 // Start tokio async runtime.
 #[tokio::main]
