@@ -1,18 +1,13 @@
-//defines how cam settigs should be stored and read from env variables
-// reads cameras settings from env variables, sends placeholer frames
 use std::thread;
 use std::time::Duration;
 use crate::schemas::{Frame, Context};
 use aravis::prelude::*;
-use aravis::{AcquisitionMode, Aravis, Buffer, BufferStatus, Camera, ExposureMode};
+use aravis::{Aravis, Buffer, BufferStatus};
 use crossbeam::channel::Sender; 
 use crate::camera_ingest::camera_ingest_helpers::{
     buffer_to_frame, configure_camera, create_stream_and_queue_buffers, initialize_aravis,
     open_camera,};
 use crate::schemas::camera_ingest_config::CameraIngestConfig;
-
-//Intializes Aravis once
-//static ARAVIS_INIT: Once = Once::new();
 
 // Ingests frames from the cameras using the GigEVision API, and enqueues
 // the frames into the camera ingest sender for the camera's pipeline to
@@ -27,7 +22,7 @@ pub fn ingest_frames(tx: Sender<Frame>, config: CameraIngestConfig){
     //4. Convert each buffer to Frame
     //5. Frame to hevc through channel
     //6. 
-
+    let config = config.validate().expect("invalid camera ingest config");
     if config.use_fake_interface {
     //test loop
         loop {
@@ -39,6 +34,7 @@ pub fn ingest_frames(tx: Sender<Frame>, config: CameraIngestConfig){
             }
             thread::sleep(Duration::from_millis(3000));
         }
+        //return;
     }
 
     initialize_aravis();
@@ -54,8 +50,8 @@ pub fn ingest_frames(tx: Sender<Frame>, config: CameraIngestConfig){
         .expect("Failed to start it");
 
     //Pulling buffers from camera stream
-loop {
-        let buffer = match stream.timeout_pop_buffer(config.timeout_ms) {
+    loop {
+        let buffer: aravis::Buffer = match stream.timeout_pop_buffer(config.timeout_ms) {
             Some(buffer) => buffer,
             None => continue,
         };

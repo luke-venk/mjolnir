@@ -2,7 +2,7 @@ use std::slice;
 use std::sync::Once;
 use crate::schemas::{Frame, Context};
 use aravis::prelude::*;
-use aravis::{AcquisitionMode, Aravis, Buffer, Camera, ExposureMode};
+use aravis::{AcquisitionMode, Aravis, Buffer, Camera, Stream};
 use crate::schemas::camera_ingest_config::CameraIngestConfig;
 
 //Intializes Aravis once
@@ -18,31 +18,42 @@ pub fn initialize_aravis(){
 
 //opens camera
 pub fn open_camera(config: &CameraIngestConfig) -> Camera {
-    Camera::new(config.device_id.as_deref()).unwrap()
+    Camera::new(Some(&config.device_id))
+        .unwrap_or_else(|_|panic!("Failed to open with ID {}", config.device_id))
 }
 
 //configuration values from CameraIngestConfig
 pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig){
-    camera.set_acquisition_mode(AcquisitionMode::Continuous).unwrap();
+    camera
+        .set_exposure_time(config.exposure_time_us)
+        .expect("Failed to set exposure time");
 
-    camera.set_exposure_mode(ExposureMode::Timed).unwrap();
-    camera.set_exposure_time(config.exposure_time_us).unwrap();
+    camera
+        .set_frame_rate(config.frame_rate_hz)
+        .expect("Failed to set frame rate");
 
-    camera.set_frame_rate_enable(true).unwrap();
-    camera.set_frame_rate(config.frame_rate_hz).unwrap();
+    
+    if let Some(aperture) = config.aperture {
+        let _ = camera.set_float("Iris", aperture);
+    }
 
-    if config.enable_ptp{
-        camera.set_boolean("PtpEnable", true).unwrap();
+    if config.enable_ptp {
+        let _ = camera.set_boolean("PtpEnable", true);
     }
 }
 
-pub fn create_stream_and_queue_buffers(camera: &Camera, num_buffers: usize) -> aravis::Stream {
-    let stream = camera.create_stream().unwrap();
+pub fn create_stream_and_queue_buffers(camera: &Camera, num_buffers: usize) -> Stream {
+    let stream = camera
+        .create_stream()
+        .expect("Failed to create camera stream");
 
-    let payload_size = camera.payload().unwrap() as usize;
+    let payload = camera
+        .payload()
+        .expect("Failed to get camera payload size");
 
     for _ in 0..num_buffers {
-        stream.push_buffer(Buffer::new_allocate(payload_size));
+        let buffer = Buffer::new_allocate(payload as usize);
+        stream.push_buffer(buffer);
     }
 
     stream

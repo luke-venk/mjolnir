@@ -1,8 +1,32 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_library")
+
+
+rust_library(
+    name = "mjolnir_lib",
+    crate_name = "mjolnir",
+    srcs = glob([
+        "src/**/*.rs",
+    ], exclude = [
+        "src/main.rs",
+        "src/bin/**/*.rs",
+    ]),
+    crate_root = "src/lib.rs",
+    deps = [
+        "@crates//:aravis",
+        "@crates//:axum",
+        "@crates//:clap",
+        "@crates//:crossbeam",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:tokio",
+        "@crates//:tower-http",
+    ],
+)
 
 rust_binary(
     name = "mjolnir",
     srcs = glob(["src/**/*.rs"]),
+    deps = [":mjolnir_lib", "@crates//:tokio",],
     rustc_flags = select({
         "//:release": [
             "-Ccodegen-units=1",
@@ -12,20 +36,25 @@ rust_binary(
         ],
         "//conditions:default": [],
     }),
-    deps = [
-        "@crates//:aravis",
-        "@crates//:axum",
-        "@crates//:crossbeam",
-        "@crates//:serde",
-        "@crates//:serde_json",
-        "@crates//:tokio",
-        "@crates//:tower-http",
-    ],
+)
+
+
+rust_binary(
+    name = "discover_cameras",
+    srcs = ["src/bin/discover_cameras.rs"],
+    deps = [":mjolnir_lib", "@crates//:aravis",],
+)
+
+rust_binary(
+    name = "record_from_cameras",
+    srcs = ["src/bin/record_from_cameras.rs"],
+    deps = [":mjolnir_lib", "@crates//:clap",
+        "@crates//:crossbeam",],
 )
 
 rust_test(
     name = "tests",
-    crate = ":mjolnir",
+    crate = ":mjolnir_lib",
     deps = [
         "@crates//:aravis",
         "@crates//:axum",
