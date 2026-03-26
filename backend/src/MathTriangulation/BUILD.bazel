@@ -3,8 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 rust_binary(
     name = "math_scripts",
     srcs = [
-        "src/main.rs",
-        "src/math_triangulation.rs",
+        "main.rs",
+        "math_triangulation.rs",
     ],
     deps = [
         "@crates//:argmin",

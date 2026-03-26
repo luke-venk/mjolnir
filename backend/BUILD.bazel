@@ -13,8 +13,11 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
+        "@crates//:argmin",
         "@crates//:axum",
         "@crates//:crossbeam",
+        "@crates//:levenberg-marquardt",
+        "@crates//:nalgebra",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",

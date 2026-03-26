@@ -10,10 +10,16 @@ __pycache__/
 target/
 rust-project.json
 
-/bazel-*
+# Bazel files.
+# No trailing / since these are symlinks, not directories.
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-mjolnir
+
 .DS_Store
 
-
+#files are related to math triangulation analysis
 *.png
 *.jpg
 *.csv

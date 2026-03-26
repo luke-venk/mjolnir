@@ -1,21 +1,21 @@
-use nalgebra::{Matrix3, Matrix3x4, Vector3, Vector2, Vector4, DMatrix, DVector};
-use nalgebra::linalg::SVD;
-use nalgebra::base::VecStorage;
-use nalgebra::dimension::{Dyn, U1};
-use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt};
 use std::fs::File;
 use std::io::Write;
 use std::time::Instant;
 
+use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt};
+use nalgebra::base::VecStorage;
+use nalgebra::dimension::{Dyn, U1};
+use nalgebra::linalg::SVD;
+use nalgebra::{DMatrix, DVector, Matrix3, Matrix3x4, Vector2, Vector3, Vector4};
 
-/// Helper function to project a 3D point onto a 2D image plane.
+// Helper function to project a 3D point onto a 2D image plane.
 fn project_point(P: Matrix3x4<f64>, x: Vector3<f64>) -> Vector2<f64> {
     let x_h = Vector4::new(x[0], x[1], x[2], 1.0);
     let x_proj = P * x_h;
     Vector2::new(x_proj[0] / x_proj[2], x_proj[1] / x_proj[2])
 }
 
-/// This function does initial estimate of the 3D position using the DLT algorithm.
+// This function does initial estimate of the 3D position using the DLT algorithm.
 fn dlt_triangulation(P_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vector3<f64> {
     let n = P_list.len();
     let mut A = DMatrix::<f64>::zeros(2 * n, 4);
@@ -36,8 +36,8 @@ fn dlt_triangulation(P_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vect
     Vector3::new(X_h[0] / X_h[3], X_h[1] / X_h[3], X_h[2] / X_h[3])
 }
 
-///Setup the problem for the trajectory of a projectile. 
-///This includes the number of position parameters, the drag coefficient, the number of residuals, and the numerical Jacobian.
+//Setup the problem for the trajectory of a projectile. 
+//This includes the number of position parameters, the drag coefficient, the number of residuals, and the numerical Jacobian.
 struct TrajectoryProblem {
     params: DVector<f64>,
     P_list: Vec<Matrix3x4<f64>>,
@@ -120,7 +120,7 @@ impl TrajectoryProblem {
     }
 }
 
-/// Function sets up and returns the trajectory of a projectile using the Levenberg-Marquardt algorithm.
+// Function sets up and returns the trajectory of a projectile using the Levenberg-Marquardt algorithm.
 impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
     type ParameterStorage = VecStorage<f64, Dyn, U1>;
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
@@ -165,21 +165,21 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
     }
 }
 
-/// This function optimizes the trajectory of a projectile using the Levenberg-Marquardt algorithm.
-/// Initial guess for the trajectory is gotten from DLT triangulation.
-/// Then to further optimize the trajectory, we use the Levenberg-Marquardt algorithm.
-/// We return the optimized trajectory and the covariance matrix.
-/// Args:
-///     P_list: List of camera projection matrices. Should be gotten from camera calibration.
-///     pixels: List of pixel coordinates for each camera at each timestep. Should be gotten from CV.
-///     dt: Time step (1/fps).
-///     g: Gravity vector.
-///     drag: Drag coefficient.
-///     pixel_sigma: Standard deviation of the pixel noise.
-///     physics_sigma: Standard deviation of the physics noise.
-///     omega_phys: Hyperparameter for the physics noise.
-/// Returns:
-///     Tuple containing the optimized trajectory and the covariance matrix.
+// This function optimizes the trajectory of a projectile using the Levenberg-Marquardt algorithm.
+// Initial guess for the trajectory is gotten from DLT triangulation.
+// Then to further optimize the trajectory, we use the Levenberg-Marquardt algorithm.
+// We return the optimized trajectory and the covariance matrix.
+// Args:
+//     P_list: List of camera projection matrices. Should be gotten from camera calibration.
+//     pixels: List of pixel coordinates for each camera at each timestep. Should be gotten from CV.
+//     dt: Time step (1/fps).
+//     g: Gravity vector.
+//     drag: Drag coefficient.
+//     pixel_sigma: Standard deviation of the pixel noise.
+//     physics_sigma: Standard deviation of the physics noise.
+//     omega_phys: Hyperparameter for the physics noise.
+// Returns:
+//     Tuple containing the optimized trajectory and the covariance matrix.
 async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f64>>], dt: f64, g: Option<Vector3<f64>>, drag: f64, pixel_sigma: f64, physics_sigma: f64, omega_phys: f64) -> (Vec<Vector3<f64>>, DMatrix<f64>) {
     let g = g.unwrap_or_else(|| Vector3::new(0.0, 0.0, -9.81));
     let n_timesteps = pixels[0].len();
@@ -214,8 +214,4 @@ async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f6
     let cov_full = problem.covariance_from_jacobian(&jacobian).unwrap_or_else(|| DMatrix::zeros(3 * n_timesteps + 1, 3 * n_timesteps + 1));
     let cov = cov_full.view((0, 0), (3 * n_timesteps, 3 * n_timesteps)).into_owned();
     (X_opt, cov)
-}
-
-
-pub async fn run() {
 }

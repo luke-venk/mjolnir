@@ -8,12 +8,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 def plot_3d_trajectory(X_opt, X_true=None, cov=None, out_path="trajectory_3d.png"):
-    try:
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
-    except ImportError:
-        print("Install matplotlib to plot: pip install matplotlib")
-        return
     n = len(X_opt)
     fig = plt.figure(figsize=(10, 6))
     ax = fig.add_subplot(111, projection="3d")
