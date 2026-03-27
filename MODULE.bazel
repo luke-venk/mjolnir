@@ -18,12 +18,6 @@ module(
 
 # External dependencies.
 
-# Shell script tooling.
-bazel_dep(
-    name = "rules_shell",
-    version = "0.7.1",
-)
-
 # -----------------------------------------------------------------------------
 # Rust dependencies
 # -----------------------------------------------------------------------------

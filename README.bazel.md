@@ -44,10 +44,10 @@ To run the integration dev servers, run both commands in separate terminals:
 `bazel run //frontend:integration`  
 
 ### (4) Production
-The final production build uses the deploy target with the release Bazel config (found in .bazelrc) to optimize the backend build and serve the embedded frontend assets. When running this, you can open your browser to `localhost:5001` and interact with the application.  
+The final production build uses the prod target with the release Bazel config (found in .bazelrc) to optimize the backend build and serve the embedded frontend assets. When running this, you can open your browser to `localhost:5001` and interact with the application.  
 
 To build or run the final product, run:  
-`bazel build --config=release //deploy:mjolnir`  
-`bazel run --config=release //deploy:mjolnir`  
+`bazel build --config=release //backend:prod`  
+`bazel run --config=release //backend:prod`  
 
-The final product would be the binary found in `bazel-bin/backend/deploy`.
+The final product would be the binary found in `bazel-bin/backend/prod`.

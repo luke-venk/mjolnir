@@ -58,7 +58,7 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
     Json(GetThrowTypeResponse { throw_type })
 }
 
-// In both dev and deploy mode, the router will require the HTTP routes
+// In both dev and prod mode, the router will require the HTTP routes
 // and the thread-safe shared app state.
 pub fn create_api_router() -> Router {
     // Thread-safe shared app state for current throw event.

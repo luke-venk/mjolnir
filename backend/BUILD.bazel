@@ -1,14 +1,14 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 # Define a library that compiles the source code and can be used by
-# both the dev and deploy binaries. Can be optimized using command
+# both the dev and prod binaries. Can be optimized using command
 # line arguments.
 rust_library(
     name = "backend_lib",
     crate_name = "backend_lib",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/bin/*.rs"],
+        exclude = ["src/main.*.rs"]
     ),
     rustc_flags = select({
         "//:release": [
@@ -29,7 +29,7 @@ rust_library(
     visibility = ["//visibility:public"],
 )
 
-# Note, the main reason for splitting into dev and deploy
+# Note, the main reason for splitting into dev and prod
 # binaries is to handle differences in how the applications serve
 # the frontend. Optimization can technically occur for either target
 # using `--config=release` (see .bazelrc).
@@ -40,7 +40,7 @@ rust_library(
 # assets.
 rust_binary(
     name = "dev",
-    srcs = ["src/bin/dev.rs"],
+    srcs = ["src/main.dev.rs"],
     deps = [
         ":backend_lib",
         "@crates//:axum",
@@ -49,15 +49,13 @@ rust_binary(
     ],
 )
 
-# Deploy mode for the backend should be optimized. In this mode, the 
+# Prod mode for the backend should be optimized. In this mode, the 
 # backend will serve the API but instead of serving the Next.js server,
 # it will embed the frontend's static exports using rust-embed and 
 # serve using axum_embed.
 rust_binary(
-    name = "deploy",
-    srcs = [
-        "src/bin/deploy.rs",
-    ],
+    name = "prod",
+    srcs = ["src/main.prod.rs"],
     deps = [
         ":backend_lib",
         "@crates//:axum",
