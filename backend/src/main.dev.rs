@@ -2,7 +2,7 @@ use backend_lib::schemas::CameraId;
 use backend_lib::pipeline::Pipeline;
 use backend_lib::server::{create_api_router, start_server};
 
-use axum::{Router, http::{HeaderValue, Method}};
+use axum::{Router, http::Method};
 use tower_http::cors::{Any, CorsLayer};
 
 // In dev mode, the backend can serve the API via command line, and it will
@@ -12,8 +12,8 @@ pub fn create_dev_app() -> Router {
     // Set up CORS layer to allow cross-origin sharing for integration mode.
     // Next.js requests will come from port 3000.
     let cors = CorsLayer::new()
-        .allow_origin(HeaderValue::from_static("http://localhost:3000"))
-        .allow_methods([Method::GET, Method::POST])
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::HEAD])
         .allow_headers(Any);
 
     create_api_router().layer(cors)

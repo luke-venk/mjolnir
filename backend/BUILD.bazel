@@ -11,11 +11,7 @@ rust_library(
         exclude = ["src/main.*.rs"]
     ),
     rustc_flags = select({
-        "//:release": [
-            "-Ccodegen-units=1",
-            "-Cpanic=abort",
-            "-Copt-level=3",
-        ],
+        "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
     }),
     deps = [
@@ -26,7 +22,6 @@ rust_library(
         "@crates//:tokio",
         "@crates//:tower-http",
     ],
-    visibility = ["//visibility:public"],
 )
 
 # Note, the main reason for splitting into dev and prod
@@ -35,9 +30,9 @@ rust_library(
 # using `--config=release` (see .bazelrc).
 
 # Dev mode for the backend doesn't have to be optimized. In this mode,
-# the backend can serve the API via command line, and it will also serve
-# the Next.js server, so it will need CORS. It will not have any embedded
-# assets.
+# the backend can serve the API via command line and it runs alongside
+# the Next.js server. Since the Next.js requests come from a different
+# origin, so CORS is needed. It will not have any embedded assets.
 rust_binary(
     name = "dev",
     srcs = ["src/main.dev.rs"],
@@ -70,14 +65,14 @@ rust_binary(
     rustc_env = {
         "EMBEDDED_FRONTEND_DIR": "$(execpath //frontend:static_exports)",
     },
-    rustc_flags = select({
+    rustc_flags = ["-Cstrip=symbols"] + select({
         "//:release": [
             "-Cpanic=abort",
-            "-Cstrip=symbols",
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
         ],
-        "//conditions:default": ["-Cstrip=symbols"],
+        "//conditions:default": [],
     }),
-    visibility = ["//visibility:public"],
 )
 
 # Unit tests to test the backend library.
@@ -85,7 +80,6 @@ rust_test(
     name = "tests",
     crate = ":backend_lib",
     deps = [
-        "@crates//:axum",
         "@crates//:http-body-util",
         "@crates//:tower",
     ],
