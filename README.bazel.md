@@ -21,36 +21,33 @@ The general format for building a Bazel target (like our executable) is:
 - `<target>`: the rule inside the BUILD.bazel file
 
 ### (1) Next.js-only dev
-In this scenario, we would have Next.js serve both the frontend and backend, so Rust would not be involved at all. This provides hot-module reload and quick testing for our frontend.
+In this scenario, we would have Next.js serve both the frontend and backend, so Rust would not be involved at all. This provides hot-module reload and quick testing for our frontend. You can interact with the frontend in your browser at `localhost:3000`.  
 
 To run the frontend, run:  
 `bazel run //frontend:dev`  
 
 ## (2) Rust-only dev
-In this scenario, we would only have the Axum server and Rust running the backend. No frontend would be used for this.  
+In this scenario, we would only have the Axum server and Rust running the backend. No frontend would be used for this. You can interact with the backend through the command line using curl, instructions for which are found in the [backend README](/backend/README.md#usage).  
 
-To build the backend, run:  
-`bazel build //backend:mjolnir`
-
-To directly run the backend, run:  
-`bazel run //backend:mjolnir`
+To build or run the backend, run:  
+`bazel build //backend:dev`
+`bazel run //backend:dev`
 
 To run unit tests, run:  
 `bazel test //backend:tests`  
 
 ### (3) Integration dev
-In this scenario, we would run both Next.js for frontend and Axum for backend. We would run Next.js on port 3000 and Axum on port 5001.  
+In this scenario, we would run both Next.js for frontend and Axum for backend. We would run Next.js on port 3000 and Axum on port 5001. You can interact with the frontend in your browser at `localhost:3000` and confirm the throw events are updated in the backend through the command line.  
 
 To run the integration dev servers, run both commands in separate terminals:  
-`bazel run //backend:mjolnir`  
+`bazel run //backend:dev`  
 `bazel run //frontend:integration`  
 
 ### (4) Production
-The final production build will be a single build target that sets optimization flags on the Rust build and grabs the static export from frontend as assets for the Rust binary to serve.  
+The final production build uses the prod target with the release Bazel config (found in .bazelrc) to optimize the backend build and serve the embedded frontend assets. When running this, you can open your browser to `localhost:5001` and interact with the application.  
 
-#### Run Dev Server
-To build the final product, run:  
-`bazel build TODO`  
+To build or run the final product, run:  
+`bazel build --config=release //backend:prod`  
+`bazel run --config=release //backend:prod`  
 
-To build the frontend's static exports, run the following command. Note that this is automatically done when the final product is built:  
-`bazel build //frontend:static_exports`  
+The final product would be the binary found in `bazel-bin/backend/prod`.

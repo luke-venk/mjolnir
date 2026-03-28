@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   // See https://nextjs.org/docs/app/guides/static-exports.
   ...(isStaticExport ? {output: "export"} : {}),
   images: {
+    unoptimized: isStaticExport,
     remotePatterns: [
       {
         protocol: "https",

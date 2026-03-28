@@ -2,13 +2,12 @@ use crate::{schemas::ThrowType, server::app_state::AppState};
 use axum::{
     Json, Router,
     extract::State,
-    http::{HeaderValue, Method, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tower_http::cors::{Any, CorsLayer};
 
 // Informs us that server is up and running.
 async fn health_check() -> impl IntoResponse {
@@ -59,20 +58,21 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
     Json(GetThrowTypeResponse { throw_type })
 }
 
-pub fn create_app() -> Router {
+// In both dev and prod mode, the router will require the HTTP routes
+// and the thread-safe shared app state.
+pub fn create_api_router() -> Router {
+    // Thread-safe shared app state for current throw event.
     let state = AppState::new();
 
-    // Set up CORS layer to allow cross-origin sharing for integration mode.
-    let cors = CorsLayer::new()
-        .allow_origin(HeaderValue::from_static("http://localhost:3000"))
-        .allow_methods([Method::GET, Method::POST])
-        .allow_headers(Any);
-
-    // Configure the different routes the router can support, the CORS layer, and app state.
-    Router::new()
+    // Define HTTP routes.
+    let http_routes = Router::new()
         .route("/health", get(health_check))
-        .route("/throw-type", post(post_throw_type).get(get_throw_type))
-        .layer(cors)
+        .route("/throw-type", post(post_throw_type).get(get_throw_type));
+
+    // Nest the routes behind the "/api" prefix so no naming collisions
+    // with frontend requests.
+    Router::new()
+        .nest("/api", http_routes)
         .with_state(state)
 }
 
@@ -91,17 +91,16 @@ pub async fn start_server(app: Router, addr: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::create_app;
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_health_check() {
-        let app: Router = create_app();
+        let app: Router = create_api_router();
 
         let request = Request::builder()
-            .uri("/health")
+            .uri("/api/health")
             .body(Body::empty())
             .unwrap();
 
@@ -118,10 +117,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_default_throw_type_is_shotput() {
-        let app: Router = create_app();
+        let app: Router = create_api_router();
 
         let request = Request::builder()
-            .uri("/throw-type")
+            .uri("/api/throw-type")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
@@ -134,11 +133,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_valid_throw_type_post_and_get() {
-        let app: Router = create_app();
+        let app: Router = create_api_router();
 
         let post_request = Request::builder()
             .method("POST")
-            .uri("/throw-type")
+            .uri("/api/throw-type")
             .header("Content-Type", "application/json")
             .body(Body::from(r#"{"throw_type":"discus"}"#))
             .unwrap();
@@ -146,7 +145,7 @@ mod tests {
         assert_eq!(post_response.status(), StatusCode::OK);
 
         let get_request = Request::builder()
-            .uri("/throw-type")
+            .uri("/api/throw-type")
             .body(Body::empty())
             .unwrap();
         let get_response = app.oneshot(get_request).await.unwrap();
@@ -159,11 +158,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_throw_type_post() {
-        let app: Router = create_app();
+        let app: Router = create_api_router();
 
         let request = Request::builder()
             .method("POST")
-            .uri("/throw-type")
+            .uri("/api/throw-type")
             .header("Content-Type", "application/json")
             .body(Body::from(r#"{"throw_type":"curling"}"#))
             .unwrap();
