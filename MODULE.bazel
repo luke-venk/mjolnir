@@ -63,26 +63,38 @@ crate.spec(
     version = "0.8.8",
 )
 crate.spec(
+    package = "axum-embed",
+    version = "0.1.0",
+)
+crate.spec(
     package = "crossbeam",
     version = "0.8",
 )
 crate.spec(
-    features = ["derive"],
     package = "serde",
     version = "1.0.228",
+    features = ["derive"],
 )
 crate.spec(
     package = "http-body-util",
     version = "0.1",
 )
 crate.spec(
+    package = "rust-embed",
+    version = "8.11.0",
+    features = [
+        "debug-embed",
+        "interpolate-folder-path",
+    ],
+)
+crate.spec(
     package = "serde_json",
     version = "1.0",
 )
 crate.spec(
-    features = ["full"],
     package = "tokio",
     version = "1.50.0",
+    features = ["full"],
 )
 crate.spec(
     package = "nalgebra",
@@ -101,9 +113,9 @@ crate.spec(
     version = "0.5",
 )
 crate.spec(
-    features = ["cors"],
     package = "tower-http",
     version = "0.6.8",
+    features = ["cors"],
 )
 
 crate.from_specs(

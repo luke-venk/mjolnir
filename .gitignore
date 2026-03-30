@@ -16,10 +16,4 @@ bazel-bin
 bazel-out
 bazel-testlogs
 bazel-mjolnir
-
-.DS_Store
-
-#files are related to math triangulation analysis
-*.png
-*.jpg
-*.csv
+*.bazel.lock

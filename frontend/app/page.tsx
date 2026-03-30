@@ -25,7 +25,7 @@ export default function Page() {
   
   // URL varies based on whether or not the request is same origin (frontend-only
   // dev, production, etc.) or if request is across servers (integration-dev).
-  const urlPostThrowType = process.env.NEXT_PUBLIC_API_BASE_URL + "/throw-type";
+  const urlPostThrowType = process.env.NEXT_PUBLIC_API_BASE_URL + "/api/throw-type";
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8 flex flex-col">

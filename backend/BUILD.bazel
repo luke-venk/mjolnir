@@ -1,15 +1,17 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-rust_binary(
-    name = "mjolnir",
-    srcs = glob(["src/**/*.rs"]),
+# Define a library that compiles the source code and can be used by
+# both the dev and prod binaries. Can be optimized using command
+# line arguments.
+rust_library(
+    name = "backend_lib",
+    crate_name = "backend_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.*.rs"]
+    ),
     rustc_flags = select({
-        "//:release": [
-            "-Ccodegen-units=1",
-            "-Cpanic=abort",
-            "-Copt-level=3",
-            "-Cstrip=symbols",
-        ],
+        "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
     }),
     deps = [
@@ -25,12 +27,63 @@ rust_binary(
     ],
 )
 
+# Note, the main reason for splitting into dev and prod
+# binaries is to handle differences in how the applications serve
+# the frontend. Optimization can technically occur for either target
+# using `--config=release` (see .bazelrc).
+
+# Dev mode for the backend doesn't have to be optimized. In this mode,
+# the backend can serve the API via command line and it runs alongside
+# the Next.js server. Since the Next.js requests come from a different
+# origin, so CORS is needed. It will not have any embedded assets.
+rust_binary(
+    name = "dev",
+    srcs = ["src/main.dev.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:axum",
+        "@crates//:tokio",
+        "@crates//:tower-http",
+    ],
+)
+
+# Prod mode for the backend should be optimized. In this mode, the 
+# backend will serve the API but instead of serving the Next.js server,
+# it will embed the frontend's static exports using rust-embed and 
+# serve using axum_embed.
+rust_binary(
+    name = "prod",
+    srcs = ["src/main.prod.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:axum",
+        "@crates//:axum-embed",
+        "@crates//:tokio",
+        "@crates//:rust-embed",
+    ],
+    compile_data = ["//frontend:static_exports"],
+    # At compile-time, this env var tells our source code exactly where
+    # Bazel placed the frontend outputs, so rust-embed can embed it
+    # into the binary directly.
+    rustc_env = {
+        "EMBEDDED_FRONTEND_DIR": "$(execpath //frontend:static_exports)",
+    },
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Cpanic=abort",
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# Unit tests to test the backend library.
 rust_test(
     name = "tests",
-    crate = ":mjolnir",
+    crate = ":backend_lib",
     deps = [
-        "@crates//:axum",
         "@crates//:http-body-util",
         "@crates//:tower",
-    ]
+    ],
 )

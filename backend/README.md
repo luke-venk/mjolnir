@@ -18,9 +18,9 @@ Due to these differences, our approach will be to experiment with Python to vali
 ## Usage
 Once the backend is running, you can run the following commands to interact with the backend.  
 
-Test server is alive:  `curl localhost:5001/health`
+Test server is alive:  `curl localhost:5001/api/health`
 
-Get the current throw type:  `curl localhost:5001/throw-type`
+Get the current throw type:  `curl localhost:5001/api/throw-type`
 
-Set the current throw type:  `curl -i -X POST localhost:5001/throw-type -H "Content-Type: application/json" -d '{"throw_type":"discus"}'`
+Set the current throw type:  `curl -i -X POST localhost:5001/api/throw-type -H "Content-Type: application/json" -d '{"throw_type":"discus"}'`
 - Note: This can also be done through the frontend if running the application in integration mode.  
