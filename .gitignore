@@ -17,3 +17,7 @@ bazel-out
 bazel-testlogs
 bazel-mjolnir
 *.bazel.lock
+
+*.csv
+*.jpg
+*.png
