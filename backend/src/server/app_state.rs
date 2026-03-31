@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::schemas::ThrowType;
+use crate::throws::ThrowType;
 
 #[derive(Clone)]
 pub struct AppState {

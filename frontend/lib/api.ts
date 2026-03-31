@@ -26,9 +26,28 @@ function randomInfractions(): { type: Infraction; confidence: number }[] {
   return infractions;
 }
 
-export async function getThrowEvent(
-  throwType: ThrowType,
-): Promise<ThrowEvent> {
+export async function getThrowEvent(throwType: ThrowType): Promise<ThrowEvent> {
+  // If in fake-data mode, whether or not the simulated throw data is generated
+  // by Next.js or Axum depends on if it's in frontend-only dev mode (Next.js
+  // generates it) or integration/prod mode (Axum generates it).
+  const fetchFromAxum = process.env.NEXT_PUBLIC_FETCH_FROM_AXUM === "true";
+
+  // URL varies based on whether or not the request is same origin (frontend-only
+  // dev, production, etc.) or if request is across servers (integration-dev).
+  // If in fake-data mode, call this HTTP route to get the simulated throw from
+  // the backend.
+  const urlGetSimulateThrow =
+    process.env.NEXT_PUBLIC_API_BASE_URL + "/api/simulate-throw";
+
+  if (fetchFromAxum) {
+    const res = await fetch(urlGetSimulateThrow);
+    if (!res.ok) {
+      console.error("Failed to fetch simluated throw from backend.");
+    } else {
+      return await res.json();
+    }
+  }
+
   await new Promise((res) => setTimeout(res, 250)); // simulate network delay
 
   const { circleDiameter, fieldLength } =
@@ -58,6 +77,6 @@ export async function getThrowEvent(
       "https://placeholdpicsum.dev/photo/1600/900",
       "https://placeholdpicsum.dev/photo/1200/675",
     ].sort(() => Math.random() - 0.5),
-    landing_point: infractions.length ? undefined : [randomX, randomY],
+    landingPoint: infractions.length ? undefined : [randomX, randomY],
   };
 }

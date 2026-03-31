@@ -16,11 +16,14 @@ rust_library(
     }),
     deps = [
         "@crates//:axum",
+        "@crates//:chrono",
         "@crates//:crossbeam",
+        "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
         "@crates//:tower-http",
+        "@crates//:uuid",
     ],
 )
 
@@ -29,13 +32,29 @@ rust_library(
 # the frontend. Optimization can technically occur for either target
 # using `--config=release` (see .bazelrc).
 
+# TODO: add documentation for fake vs. real.
+
 # Dev mode for the backend doesn't have to be optimized. In this mode,
 # the backend can serve the API via command line and it runs alongside
 # the Next.js server. Since the Next.js requests come from a different
 # origin, so CORS is needed. It will not have any embedded assets.
+
 rust_binary(
-    name = "dev",
+    name = "dev-fake",
     srcs = ["src/main.dev.rs"],
+    crate_features = ["fake"],
+    deps = [
+        ":backend_lib",
+        "@crates//:axum",
+        "@crates//:tokio",
+        "@crates//:tower-http",
+    ],
+)
+
+rust_binary(
+    name = "dev-real",
+    srcs = ["src/main.dev.rs"],
+    crate_features = ["real"],
     deps = [
         ":backend_lib",
         "@crates//:axum",
@@ -49,8 +68,41 @@ rust_binary(
 # it will embed the frontend's static exports using rust-embed and 
 # serve using axum_embed.
 rust_binary(
-    name = "prod",
+    name = "prod-fake",
     srcs = ["src/main.prod.rs"],
+    crate_features = ["fake"],
+    deps = [
+        ":backend_lib",
+        "@crates//:axum",
+        "@crates//:axum-embed",
+        "@crates//:rust-embed",
+        "@crates//:tokio",
+    ],
+    compile_data = ["//frontend:static_exports"],
+    # At compile-time, this env var tells our source code exactly where
+    # Bazel placed the frontend outputs, so rust-embed can embed it
+    # into the binary directly.
+    rustc_env = {
+        "EMBEDDED_FRONTEND_DIR": "$(execpath //frontend:static_exports)",
+    },
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Cpanic=abort",
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# Prod mode for the backend should be optimized. In this mode, the 
+# backend will serve the API but instead of serving the Next.js server,
+# it will embed the frontend's static exports using rust-embed and 
+# serve using axum_embed.
+rust_binary(
+    name = "prod-real",
+    srcs = ["src/main.prod.rs"],
+    crate_features = ["real"],
     deps = [
         ":backend_lib",
         "@crates//:axum",
