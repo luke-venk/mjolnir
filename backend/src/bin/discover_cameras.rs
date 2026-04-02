@@ -51,7 +51,7 @@ pub fn print_discovered_cameras(cameras: &Vec<DiscoveredCamera>) {
 
 pub fn main() {
     println!("Discovering cameras on LAN...");
-    let aravis = Aravis::initialize().expect("Failed to initializee Aravis.");
+    let aravis = Aravis::initialize().expect("Failed to initialize Aravis.");
     let cameras = discover_cameras(&aravis);
     print_discovered_cameras(&cameras);
 }

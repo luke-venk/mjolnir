@@ -100,3 +100,14 @@ rust_binary(
         "@crates//:aravis",
     ]
 )
+
+rust_binary(
+    name = "record_from_cameras",
+    srcs = ["src/bin/record_from_cameras.rs"],
+    deps = [
+        "@crates//:aravis",
+        "@crates//:clap",
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ]
+)

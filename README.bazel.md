@@ -55,3 +55,9 @@ The final product would be the binary found in `bazel-bin/backend/prod`.
 ## Usage - Discover Cameras
 To build the auxiliary binary for discovering cameras on the LAN, run the following command:  
 `bazel build //backend:discover_cameras`  
+
+## Usage - Record from Cameras
+To run the auxiliary binary for recording from the discovered cameras on the LAN, run the following command:
+```
+bazel run //backend:record_from_cameras -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --max-frames 100
+```
