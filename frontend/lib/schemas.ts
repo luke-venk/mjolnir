@@ -17,10 +17,10 @@ export function displayNameForInfraction(infraction: Infraction) {
 }
 
 export enum ThrowType {
-  DISCUS = "discus",
-  HAMMER = "hammer",
-  JAVELIN = "javelin",
-  SHOTPUT = "shotput",
+  DISCUS = "Discus",
+  HAMMER = "Hammer",
+  JAVELIN = "Javelin",
+  SHOTPUT = "Shotput",
 }
 
 export function displayNameForThrowType(throwType: ThrowType) {
@@ -66,7 +66,7 @@ export const throwEventSchema = z
     distance: z.number().nonnegative(),
     infractions: z.array(infractionSchema),
     images: z.array(z.url()),
-    landing_point: z.tuple([z.number(), z.number()]).optional(),
+    landingPoint: z.tuple([z.number(), z.number()]).optional(),
   })
   .strict();
 

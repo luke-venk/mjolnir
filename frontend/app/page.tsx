@@ -132,13 +132,13 @@ export default function Page() {
           {currentThrow ? (
             selectedThrowType === ThrowType.JAVELIN ? (
                 <JavelinField
-                  landingPoint={currentThrow.landing_point}
+                  landingPoint={currentThrow.landingPoint}
                   infractions={currentThrow.infractions.map((i) => i.type)}
                 />
               ) : (
                 <CircleField
                   throwType={selectedThrowType}
-                  landingPoint={currentThrow.landing_point}
+                  landingPoint={currentThrow.landingPoint}
                   infractions={currentThrow.infractions.map((i) => i.type)}
                 />
               )

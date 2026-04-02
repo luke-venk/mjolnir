@@ -24,13 +24,28 @@ pub fn create_prod_app() -> Router {
         .fallback_service(serve_assets)
 }
 
-// Start tokio async runtime.
-#[tokio::main]
-async fn main() {
+// Only start per-camera CV pipelines if using real data instead of
+// simulating random throw data.
+#[cfg(feature = "real")]
+fn start_pipelines() {
     // Start the 2 pipelines (one for each camera).
     let rolling_buffer_size: usize = 10;
     let _ = Pipeline::new(CameraId::FieldLeft, rolling_buffer_size);
     let _ = Pipeline::new(CameraId::FieldRight, rolling_buffer_size);
+    println!("Running prod backend with real throw data on localhost:5001/.");
+}
+
+// If simulating random throw data, no need to start pipelines.
+#[cfg(feature = "fake")]
+fn start_pipelines() {
+    println!("Running prod backend with simulated throw data on localhost:5001/.");
+}
+
+// Start tokio async runtime.
+#[tokio::main]
+async fn main() {
+    // Start CV pipelines if using real data, otherwise do nothing.
+    start_pipelines();
 
     // TODO(#7): Implement Clean Shutdown.
 

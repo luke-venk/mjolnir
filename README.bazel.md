@@ -7,6 +7,19 @@
 ## External Depedencies
 This Rust project doesn't use Cargo, instead specifying dependencies through Bazel. To add a dependency, similar to how you would normally add a dependency in Cargo.toml, specify dependencies in [MODULE.bazel](MODULE.bazel) using `crate.spec(package = "my_package", version = "1.2.3")`. Then, include them in the `deps` argument of your Rust target like `"@crates//:package_name"`.
 
+## Backend Configurations
+There will be 4 possible targets for the backend binary found in [backend/BUILD.bazel](backend/BUILD.bazel):
+1. Dev Fake
+2. Dev Real
+3. Prod Fake
+4. Prod Real
+
+### Dev vs. Prod
+The difference between development (dev) and production (prod) mode is that _dev_ mode relies on Next.js on port 3000 to run the frontend, while _prod_ mode statically exports the frontend and embeds it directly into the binary. These significantly different implementations require different entry points.
+
+### Fake vs. Real
+The difference between fake and real is that _fake_ mode uses simulated throw data, while _real_ mode actually starts up the per-camera computer vision pipeline and processes real frames to determine where the throw landed. We just use conditional compilation via `#[cfg(feature)]` flags to separate the functionality.
+
 ## Usage
 There are 4 ways we would want Bazel to build/run our project:
 1. Next.js-only dev
@@ -23,15 +36,14 @@ The general format for building a Bazel target (like our executable) is:
 ### (1) Next.js-only dev
 In this scenario, we would have Next.js serve both the frontend and backend, so Rust would not be involved at all. This provides hot-module reload and quick testing for our frontend. You can interact with the frontend in your browser at `localhost:3000`.  
 
-To run the frontend, run:  
-`bazel run //frontend:dev`  
+To run the frontend alone with simulated data, run:  
+`bazel run //frontend:dev-fake`  
 
-## (2) Rust-only dev
+### (2) Rust-only dev
 In this scenario, we would only have the Axum server and Rust running the backend. No frontend would be used for this. You can interact with the backend through the command line using curl, instructions for which are found in the [backend README](/backend/README.md#usage).  
 
-To build or run the backend, run:  
-`bazel build //backend:dev`
-`bazel run //backend:dev`
+To build/run the backend, run:  
+`bazel run //backend:dev`  
 
 To run unit tests, run:  
 `bazel test //backend:tests`  

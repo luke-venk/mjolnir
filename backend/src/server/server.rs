@@ -1,4 +1,4 @@
-use crate::{schemas::ThrowType, server::app_state::AppState};
+use crate::{server::app_state::AppState, throws::{simulate_throw::simulate_throw_event, *}};
 use axum::{
     Json, Router,
     extract::State,
@@ -15,19 +15,6 @@ async fn health_check() -> impl IntoResponse {
         "status": "ok",
         "message": "Server is running.",
     }))
-}
-
-// Request and response bodies for specifying the type of throwing event.
-#[derive(Deserialize)]
-struct PostThrowTypeRequest {
-    // Allow camelCase in frontend and snake_case in backend.
-    #[serde(alias = "throwType")]
-    throw_type: String,
-}
-
-#[derive(Serialize)]
-struct GetThrowTypeResponse {
-    throw_type: ThrowType,
 }
 
 // Allows user input of what type of event the next throw will be.
@@ -58,6 +45,13 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
     Json(GetThrowTypeResponse { throw_type })
 }
 
+// Runs random throw simulation based on throw type stored in
+// app state and returns in frontend-compatible schema.
+async fn get_simulated_throw(State(state): State<AppState>) -> Json<GetSimulatedThrowResponse> {
+    let throw_type: ThrowType = *state.throw_type.read().await;
+    Json(simulate_throw_event(throw_type))
+}
+
 // In both dev and prod mode, the router will require the HTTP routes
 // and the thread-safe shared app state.
 pub fn create_api_router() -> Router {
@@ -67,7 +61,8 @@ pub fn create_api_router() -> Router {
     // Define HTTP routes.
     let http_routes = Router::new()
         .route("/health", get(health_check))
-        .route("/throw-type", post(post_throw_type).get(get_throw_type));
+        .route("/throw-type", post(post_throw_type).get(get_throw_type))
+        .route("/simulate-throw", get(get_simulated_throw));
 
     // Nest the routes behind the "/api" prefix so no naming collisions
     // with frontend requests.

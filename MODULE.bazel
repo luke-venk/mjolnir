@@ -67,17 +67,20 @@ crate.spec(
     version = "0.1.0",
 )
 crate.spec(
+    package = "chrono",
+    version = "0.4.44",
+)
+crate.spec(
     package = "crossbeam",
     version = "0.8",
 )
 crate.spec(
-    package = "serde",
-    version = "1.0.228",
-    features = ["derive"],
-)
-crate.spec(
     package = "http-body-util",
     version = "0.1",
+)
+crate.spec(
+    package = "rand",
+    version = "0.10.0",
 )
 crate.spec(
     package = "rust-embed",
@@ -86,6 +89,11 @@ crate.spec(
         "debug-embed",
         "interpolate-folder-path",
     ],
+)
+crate.spec(
+    package = "serde",
+    version = "1.0.228",
+    features = ["derive"],
 )
 crate.spec(
     package = "serde_json",
@@ -104,6 +112,11 @@ crate.spec(
     package = "tower-http",
     version = "0.6.8",
     features = ["cors"],
+)
+crate.spec(
+    package = "uuid",
+    version = "1.23.0",
+    features = ["v4", "serde"],
 )
 
 crate.from_specs(
