@@ -1,6 +1,6 @@
-Capture diagnostic frame output from LUCID cameras using Aravis and Python.
+Capture diagnostic frame output from LUCID cameras using Python and Aravis.
 
-`capture_aravis.py` is a small acquisition and debugging tool for LUCID cameras. It opens a selected camera, receives frames through Aravis, validates them, and optionally writes per-frame output to disk.
+`capture_aravis.py` is a small acquisition and debugging tool for our cameras. It opens a selected camera, receives frames through Aravis, validates them, and optionally writes per-frame output to disk.
 
 It is designed primarily for:
 
@@ -10,7 +10,7 @@ It is designed primarily for:
 - throughput measurement
 - isolating capture-path issues from file I/O overhead
 
-It is **not** a final video recorder.
+It is **not** a final video recorder. By default, it writes per-frame artifacts rather than an encoded video stream.
 
 ---
 
@@ -22,7 +22,7 @@ It is **not** a final video recorder.
   - maximum saved frame count
 - Save per-frame:
   - RAW bytes
-  - PNG preview (SIGNIFICANTLY SLOWS)
+  - PNG preview
   - JSON metadata
 - Run in **stats-only** mode for acquisition benchmarking
 - Reduce output pressure with:
@@ -432,25 +432,6 @@ python3 capture_aravis.py \
 
 ---
 
-## Recommended Test Progression
-
-When debugging stability, use this order:
-
-1. **Single camera, stats-only**
-2. **Other camera, stats-only**
-3. **Dual camera, stats-only**
-4. **Single camera, raw-only**
-5. **Dual camera, raw-only**
-6. **Sampled save**
-7. **Full output with PNG + JSON**, only if everything above is stable
-
-This progression helps separate:
-- acquisition issues
-- from persistence overhead
-- from dual-camera contention
-
----
-
 ## Troubleshooting Tips
 
 ### Very low saved FPS
@@ -475,6 +456,370 @@ Check:
 
 ### High timeout count
 This usually means buffers are not arriving as often as expected. Investigate camera-side acquisition configuration and host/stream transport health.
+
+---
+
+## Camera / Network Validation Checklist with Aravis 0.8 Tools
+
+Before blaming Python, disk I/O, or Aravis bindings, first prove the camera and transport path are configured correctly.
+
+This section focuses on the `arv-tool-0.8` commands that are useful during bring-up and throughput validation.
+
+### 1. Verify `AcquisitionMode` is `Continuous`
+
+Read the current value:
+
+```bash
+arv-tool-0.8 control AcquisitionMode
+```
+
+Expected result:
+
+```text
+AcquisitionMode = Continuous
+```
+
+If it is not continuous, set it:
+
+```bash
+arv-tool-0.8 control AcquisitionMode Continuous
+```
+
+Then read it back again to verify the write actually stuck:
+
+```bash
+arv-tool-0.8 control AcquisitionMode
+```
+
+### 2. Verify `TriggerMode` is `Off`
+
+Read the current value:
+
+```bash
+arv-tool-0.8 control TriggerMode
+```
+
+Expected result:
+
+```text
+TriggerMode = Off
+```
+
+If trigger mode is enabled, streaming may stall or wait for external/software triggers instead of free-running.
+
+Disable it:
+
+```bash
+arv-tool-0.8 control TriggerMode Off
+```
+
+Verify again:
+
+```bash
+arv-tool-0.8 control TriggerMode
+```
+
+### 3. Verify PTP is enabled
+
+Read the enable state:
+
+```bash
+arv-tool-0.8 control PtpEnable
+```
+
+Expected result:
+
+```text
+PtpEnable = true
+```
+
+If needed, enable it:
+
+```bash
+arv-tool-0.8 control PtpEnable true
+```
+
+Then read it back again:
+
+```bash
+arv-tool-0.8 control PtpEnable
+```
+
+To validate that PTP traffic is actually present on the wire, use `tcpdump` on the camera network interface:
+
+```bash
+sudo tcpdump -i <interface> -nn udp port 319 or udp port 320
+```
+
+You should see PTP event and general messages while the cameras are connected and PTP is enabled.
+
+### 4. Verify jumbo frames / packet size
+
+There are two separate things to validate:
+
+1. the camera GVSP packet size
+2. the host NIC MTU
+
+They must agree. Setting one without the other is a common half-fix.
+
+Read the camera packet size, commonly exposed as `GevSCPSPacketSize`:
+
+```bash
+arv-tool-0.8 control GevSCPSPacketSize
+```
+
+Expected result:
+
+```text
+GevSCPSPacketSize = 9000
+```
+
+If needed, set it:
+
+```bash
+arv-tool-0.8 control GevSCPSPacketSize 9000
+```
+
+Then verify:
+
+```bash
+arv-tool-0.8 control GevSCPSPacketSize
+```
+
+### 5. Verify packet delay
+
+Read the current inter-packet delay, commonly exposed as `GevSCPD`:
+
+```bash
+arv-tool-0.8 control GevSCPD
+```
+
+If needed, set it:
+
+```bash
+arv-tool-0.8 control GevSCPD <value>
+```
+
+Increasing inter-packet delay reduces burst pressure on the network path, but it also lowers the maximum achievable FPS. Use the smallest delay that gives stable capture.
+
+### 6. Set the host NIC MTU to 9000
+
+This must be done on the network interface connected to the camera or the camera network.
+
+#### macOS
+
+List interfaces:
+
+```bash
+networksetup -listallhardwareports
+ifconfig
+```
+
+Temporarily set MTU 9000:
+
+```bash
+sudo ifconfig <interface> mtu 9000
+```
+
+Verify:
+
+```bash
+ifconfig <interface>
+```
+
+Look for `mtu 9000` in the interface output.
+
+#### Linux
+
+List interfaces:
+
+```bash
+ip link show
+```
+
+Temporarily set MTU 9000:
+
+```bash
+sudo ip link set dev <interface> mtu 9000
+```
+
+Verify:
+
+```bash
+ip link show dev <interface>
+```
+
+For NetworkManager-based systems, make it persistent with either the GUI or your distro’s network config. For direct `systemd-networkd` or `/etc/network/interfaces` setups, persist MTU there.
+
+#### Windows
+
+On Windows, set jumbo frames through the adapter GUI:
+
+1. Open **Device Manager**
+2. Expand **Network adapters**
+3. Open the camera NIC’s **Properties**
+4. Go to the **Advanced** tab
+5. Find **Jumbo Packet** or **Jumbo Frames**
+6. Set it to `9000`, `9014 Bytes`, or the closest supported value around 9000
+7. Apply the change
+
+Use the NIC status/details views or the adapter properties page to confirm the setting was applied.
+
+### 7. Other `arv-tools-0.8` commands worth using during bring-up
+
+These are the main Aravis 0.8 CLI tools and options that are useful for this workflow.
+
+#### `arv-tool-0.8`
+
+Read a feature:
+
+```bash
+arv-tool-0.8 control <FeatureName>
+```
+
+Write a feature:
+
+```bash
+arv-tool-0.8 control <FeatureName> <value>
+```
+
+Inspect GenICam data:
+
+```bash
+arv-tool-0.8 genicam
+```
+
+Useful features to inspect while tuning:
+
+```bash
+arv-tool-0.8 control AcquisitionMode
+arv-tool-0.8 control TriggerMode
+arv-tool-0.8 control AcquisitionFrameRate
+arv-tool-0.8 control AcquisitionFrameRateEnable
+arv-tool-0.8 control ExposureTime
+arv-tool-0.8 control GevSCPSPacketSize
+arv-tool-0.8 control GevSCPD
+arv-tool-0.8 control PtpEnable
+```
+
+### 8. Set and verify frame rate
+
+Frame rate can be limited by several things at once:
+
+- the configured acquisition frame rate
+- exposure time
+- link bandwidth
+- packet size / MTU mismatch
+- packet delay
+- host receive path issues
+- disk write overhead
+
+Read the relevant values:
+
+```bash
+arv-tool-0.8 control AcquisitionFrameRate
+arv-tool-0.8 control AcquisitionFrameRateEnable
+arv-tool-0.8 control ExposureTime
+```
+
+If the camera requires an enable node for manual frame-rate control, turn that on first:
+
+```bash
+arv-tool-0.8 control AcquisitionFrameRateEnable true
+```
+
+Set the frame rate:
+
+```bash
+arv-tool-0.8 control AcquisitionFrameRate 30
+```
+
+Verify:
+
+```bash
+arv-tool-0.8 control AcquisitionFrameRate
+```
+
+Make sure exposure time is short enough that it is not the real frame-rate limiter.
+
+### 9. Prove you are not missing frames as frame rate increases
+
+Start with the acquisition path without disk overhead:
+
+```bash
+python3 capture_aravis.py \
+  --camera-index 0 \
+  --output fps_validation \
+  --duration 10 \
+  --stats-only \
+  --buffer-count 64 \
+  --warmup-seconds 0.5 \
+  --stats-interval 1.0
+```
+
+At each tested frame rate, you want:
+
+- `good_buffers` increasing steadily
+- `timeouts = 0` or very close to zero
+- `bad_status = 0`
+- `size_mismatch = 0`
+- `avg_good_fps` close to the configured rate
+
+If stats-only fails, do not trust any saved-frame result yet. Fix transport/acquisition first.
+
+Then test persistence:
+
+```bash
+python3 capture_aravis.py \
+  --camera-index 0 \
+  --output fps_validation_saved \
+  --duration 10 \
+  --no-preview \
+  --no-json \
+  --buffer-count 64 \
+  --warmup-seconds 0.5 \
+  --stats-interval 1.0
+```
+
+For a healthy path with raw saving enabled, compare:
+
+- `good_buffers`
+- `frames_saved`
+- `frames_skipped_by_sampling`
+- `avg_good_fps`
+- `avg_saved_fps`
+
+If `save-every 1` is in effect and there are no write errors, then `frames_saved` should closely track `good_buffers` after warmup.
+
+If you run for a fixed duration, expected frame count is approximately:
+
+```text
+expected_frames ≈ frame_rate × capture_seconds
+```
+
+Allow for:
+
+- warmup discard period
+- startup/shutdown edge effects
+- any intentional sampling via `--save-every`
+
+A practical check is:
+
+```text
+good_buffers ≈ expected_frames
+frames_saved ≈ good_buffers          (when saving every frame)
+frames_saved ≈ good_buffers / N      (when using --save-every N)
+```
+
+Inspect saved files directly:
+
+```bash
+find fps_validation_saved -name '*.raw' | wc -l
+find fps_validation_saved -name '*.png' | wc -l
+find fps_validation_saved -name '*.json' | wc -l
+```
+
+These counts should agree with the script summary for the enabled outputs.
 
 ---
 
