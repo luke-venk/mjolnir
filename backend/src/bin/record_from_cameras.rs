@@ -189,14 +189,27 @@ fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
         .expect("Failed to set resolution in camera configuration.");
 
     // Aperture.
-    if let Some(aperture) = config.aperture {
-        camera.set_float("Iris", aperture).expect("Failed to set iris to aperture value");
-    }
+    // if let Some(aperture) = config.aperture {
+    //     camera.set_float("Iris", aperture).expect("Failed to set iris to aperture value");
+    // }
 
     // PTP enabling.
     if config.enable_ptp {
         camera.set_boolean("PtpEnable", true).expect("Failed to enable ptp");
     }
+
+    // camera.gv_auto_packet_size().expect("err auto packet size");
+    camera.gv_set_packet_size(8064).expect("err auto packet size");
+    camera.gv_set_packet_delay(5000).expect("err auto packet delay");
+    println!("Packet size: {}", camera.gv_get_packet_size().expect("fdsafsd"));
+    // camera.set_integer("GevSCPSPacketSize", 8100).ok();
+
+    camera.set_pixel_format(aravis::PixelFormat::MONO_8).expect("err");
+
+    camera.set_gain(0.0).expect("err");
+
+    camera.set_frame_rate_enable(true).expect("err");
+
 }
 
 /// Creates Aravis camera stream and allocates frame buffers.
@@ -325,7 +338,7 @@ fn record_one_camera(
         "Configured camera {}: width={} height={} payload={} exposure_us={} frame_rate_hz={}",
         config.device_id, width, height, payload, config.exposure_time_us, config.frame_rate_hz
     );
-    
+
     // Start Aravis camera aquisition.
     camera
         .start_acquisition()
