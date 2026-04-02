@@ -1,5 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
+# -----------------------------------------------------------------------------
+# MAIN BINARY
+# -----------------------------------------------------------------------------
+
 # Define a library that compiles the source code and can be used by
 # both the dev and prod binaries. Can be optimized using command
 # line arguments.
@@ -83,4 +87,16 @@ rust_test(
         "@crates//:http-body-util",
         "@crates//:tower",
     ],
+)
+
+# -----------------------------------------------------------------------------
+# AUXILIARY BINARIES
+# -----------------------------------------------------------------------------
+
+rust_binary(
+    name = "discover_cameras",
+    srcs = ["src/bin/discover_cameras.rs"],
+    deps = [
+        "@crates//:aravis",
+    ]
 )

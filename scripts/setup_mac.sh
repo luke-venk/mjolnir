@@ -18,6 +18,8 @@ brew install \
   curl \
   wget \
   cmake \
+  aravis \
+  pkgconf \
   pkg-config \
   openssl \
   readline \
@@ -100,5 +102,6 @@ fi
 echo "Generating Rust project..."
 cd "$PROJECT_ROOT"
 bazel run @rules_rust//tools/rust_analyzer:gen_rust_project
+
 
 echo "Setup complete."

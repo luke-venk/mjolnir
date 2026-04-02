@@ -7,7 +7,7 @@
 ## External Depedencies
 This Rust project doesn't use Cargo, instead specifying dependencies through Bazel. To add a dependency, similar to how you would normally add a dependency in Cargo.toml, specify dependencies in [MODULE.bazel](MODULE.bazel) using `crate.spec(package = "my_package", version = "1.2.3")`. Then, include them in the `deps` argument of your Rust target like `"@crates//:package_name"`.
 
-## Usage
+## Usage - Main Server
 There are 4 ways we would want Bazel to build/run our project:
 1. Next.js-only dev
 3. Rust-only dev
@@ -51,3 +51,7 @@ To build or run the final product, run:
 `bazel run --config=release //backend:prod`  
 
 The final product would be the binary found in `bazel-bin/backend/prod`.
+
+## Usage - Discover Cameras
+To build the auxiliary binary for discovering cameras on the LAN, run the following command:  
+`bazel build //backend:discover_cameras`  
