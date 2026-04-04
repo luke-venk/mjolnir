@@ -147,12 +147,17 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
                 residuals.push(r[1]);
             }
         }
+        // Discrete physics residual (matches Python `trajectory_residual`):
+        // X_next - 2*X_curr + X_prev - g*dt^2 + drag * 0.5 * dt * (X_next - X_prev), scaled by physics_sigma.
+        // The drag term is linear-in-velocity style using the centered finite-difference (X_next - X_prev).
         let drag_k = self.drag();
         for t in 1..self.n_timesteps.saturating_sub(1) {
             let X_prev = Vector3::new(self.params[(t - 1) * 3], self.params[(t - 1) * 3 + 1], self.params[(t - 1) * 3 + 2]);
             let X_curr = Vector3::new(self.params[t * 3], self.params[t * 3 + 1], self.params[t * 3 + 2]);
             let X_next = Vector3::new(self.params[(t + 1) * 3], self.params[(t + 1) * 3 + 1], self.params[(t + 1) * 3 + 2]);
-            let phys_res = (X_next - 2.0 * X_curr + X_prev - self.g * self.dt * self.dt - Vector3::new(drag_k, drag_k, drag_k) * self.dt * self.dt) / self.physics_sigma;
+            let phys_res = (X_next - 2.0 * X_curr + X_prev - self.g * self.dt * self.dt
+                + drag_k * 0.5 * self.dt * (X_next - X_prev))
+                / self.physics_sigma;
             residuals.push(self.omega_phys * phys_res[0]);
             residuals.push(self.omega_phys * phys_res[1]);
             residuals.push(self.omega_phys * phys_res[2]);
