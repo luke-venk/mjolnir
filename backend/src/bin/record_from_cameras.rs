@@ -1,29 +1,31 @@
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::slice;
 use std::sync::Once;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
+use anyhow::{Context, Result};
 use aravis::prelude::*;
 use aravis::{Aravis, Buffer, BufferStatus, Camera, Stream};
+use backend_lib::camera_ingest::{
+    H265CameraEncoder, ensure_ffmpeg_lossless_hevc_support, recover_h265_to_png, sanitize,
+};
 use clap::{Parser, ValueEnum};
-use serde::Serialize;
-use serde_json::to_string_pretty;
+
+//was using this command for testing with fake monostream: 
+//ffmpeg -f lavfi -i testsrc=duration=10:size=3840x2140:rate=30 -pix_fmt gray output_mono8.mp4
+
+
 
 static ARAVIS_INIT: Once = Once::new();
 
-// TODO: this file is messy, reorganize into several files.
-
-/// The command line arguments we'd expect for the cameras to record.
 #[derive(Parser, Debug, Clone)]
 #[command(name = "record_from_cameras")]
-#[command(about = "Records raw frames from Aravis camera(s) into an output directory.")]
+#[command(about = "Records Aravis camera frames into one lossless H.265 stream per camera.")]
 pub struct RecordFromCamerasArgs {
     #[arg(long = "camera", required = true)]
     pub cameras: Vec<String>,
 
-    /// Exposure time in microseconds.
     #[arg(long = "exposure-us", default_value_t = 100.0)]
     pub exposure_us: f64,
 
@@ -33,35 +35,31 @@ pub struct RecordFromCamerasArgs {
     #[arg(long, value_enum, default_value_t = Resolution::UHD4K)]
     pub resolution: Resolution,
 
-    /// Optional lens iris feature value. Only applied if the device exposes an Iris feature.
     #[arg(long)]
     pub aperture: Option<f64>,
 
     #[arg(long, default_value_t = 16)]
     pub num_buffers: usize,
 
-    /// Timeout for waiting on a frame buffer, in milliseconds.
     #[arg(long, default_value_t = 200)]
     pub timeout_ms: u64,
 
-    /// Output directory where frames will be written to.
     #[arg(long)]
     pub save_recordings_dir: String,
 
-    /// Stop recording after this many frames per camera.
+    #[arg(long)]
+    pub recover_to_png_dir: Option<String>,
+
     #[arg(long)]
     pub max_frames: Option<usize>,
 
-    /// Stop recording after this many seconds.
     #[arg(long)]
     pub max_duration: Option<f64>,
 
-    /// Whether to enable Precision Time Protocol if supported by the device.
     #[arg(long, default_value_t = false)]
     pub enable_ptp: bool,
 }
 
-/// Different resolutions we might want to record with.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum Resolution {
     #[value(name = "720p")]
@@ -82,21 +80,13 @@ impl Resolution {
     }
 }
 
-/// Configuration for what specs we want to use while recording.
-// TODO: adjust this based on what discover_cameras.rs actually returns.
 #[derive(Debug, Clone)]
 pub struct CameraIngestConfig {
     pub device_id: String,
-
-    // Core capture settings.
     pub exposure_time_us: f64,
     pub frame_rate_hz: f64,
     pub resolution: Resolution,
-
-    // Optional / hardware-dependent.
     pub aperture: Option<f64>,
-
-    // System-level config.
     pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
@@ -125,112 +115,92 @@ impl CameraIngestConfig {
         }
     }
 
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<()> {
         if self.device_id.is_empty() {
-            return Err("device_id cannot be empty".to_string());
+            anyhow::bail!("device_id cannot be empty");
         }
         if self.exposure_time_us <= 0.0 {
-            return Err("exposure_time_us must be > 0".to_string());
+            anyhow::bail!("exposure_time_us must be > 0");
         }
         if self.frame_rate_hz <= 0.0 {
-            return Err("frame_rate_hz must be > 0".to_string());
+            anyhow::bail!("frame_rate_hz must be > 0");
         }
         if self.num_buffers == 0 {
-            return Err("num_buffers must be > 0".to_string());
+            anyhow::bail!("num_buffers must be > 0");
         }
         Ok(())
     }
 }
 
-/// Metadata for each frame to be recorded in addition to raw files.
-#[derive(Debug, Serialize)]
-struct FrameMetadata {
-    device_id: String,
-    frame_index: usize,
-    width: i32,
-    height: i32,
-    payload_bytes: usize,
-    system_timestamp_ns: u64,
-    buffer_timestamp_ns: u64,
-    frame_id: u64,
-    exposure_time_us: f64,
-    frame_rate_hz: f64,
-}
-
-/// Initializes Aravis once in a thread-safe manner?
 fn initialize_aravis() {
     ARAVIS_INIT.call_once(|| {
         Aravis::initialize().expect("Failed to initialize Aravis.");
     });
 }
 
-/// Use Aravis to open each camera.
 fn open_camera(device_id: &str) -> Camera {
     Camera::new(Some(device_id))
         .unwrap_or_else(|_| panic!("ERROR: Failed to open camera with device_id={device_id}"))
 }
 
-/// Loads camera configuration into Aravis library camera configuration.
-fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
-    // Exposure time.
+fn configure_camera(camera: &Camera, config: &CameraIngestConfig) -> Result<()> {
     camera
         .set_exposure_time(config.exposure_time_us)
-        .expect("Failed to set exposure time in camera configuration.");
-
-    // Frame rate.
+        .context("set exposure time")?;
     camera
         .set_frame_rate(config.frame_rate_hz)
-        .expect("Failed to set frame rate in camera configuration.");
+        .context("set frame rate")?;
 
-    // Resolution.
     let (width, height) = config.resolution.dimensions();
     camera
         .set_region(0, 0, width, height)
-        .expect("Failed to set resolution in camera configuration.");
+        .context("set camera region")?;
 
-    // Aperture.
-    // if let Some(aperture) = config.aperture {
-    //     camera.set_float("Iris", aperture).expect("Failed to set iris to aperture value");
-    // }
-
-    // PTP enabling.
-    if config.enable_ptp {
-        camera.set_boolean("PtpEnable", true).expect("Failed to enable ptp");
+    if let Some(aperture) = config.aperture {
+        if let Err(error) = camera.set_float("Iris", aperture) {
+            eprintln!(
+                "Camera {} does not accept Iris={aperture}: {error}",
+                config.device_id
+            );
+        }
     }
 
-    // camera.gv_auto_packet_size().expect("err auto packet size");
-    camera.gv_set_packet_size(8064).expect("err auto packet size");
-    camera.gv_set_packet_delay(5000).expect("err auto packet delay");
-    println!("Packet size: {}", camera.gv_get_packet_size().expect("fdsafsd"));
-    // camera.set_integer("GevSCPSPacketSize", 8100).ok();
+    if config.enable_ptp {
+        camera
+            .set_boolean("PtpEnable", true)
+            .context("enable PTP")?;
+    }
 
-    camera.set_pixel_format(aravis::PixelFormat::MONO_8).expect("err");
+    camera
+        .gv_set_packet_size(8064)
+        .context("set packet size")?;
+    camera
+        .gv_set_packet_delay(5000)
+        .context("set packet delay")?;
+    // Atlas frames are captured as 8-bit monochrome so the encoder sees MONO_8 / gray bytes.
+    camera
+        .set_pixel_format(aravis::PixelFormat::MONO_8)
+        .context("set MONO_8 pixel format")?;
+    camera.set_gain(0.0).context("set gain")?;
+    camera
+        .set_frame_rate_enable(true)
+        .context("enable frame rate control")?;
 
-    camera.set_gain(0.0).expect("err");
-
-    camera.set_frame_rate_enable(true).expect("err");
-
+    Ok(())
 }
 
-/// Creates Aravis camera stream and allocates frame buffers.
-fn create_stream_and_queue_buffers(camera: &Camera, num_buffers: usize) -> Stream {
-    let stream = camera
-        .create_stream()
-        .expect("Failed to create camera stream.");
-
-    let payload_size = camera
-        .payload()
-        .expect("Failed to get camera payload size.");
+fn create_stream_and_queue_buffers(camera: &Camera, num_buffers: usize) -> Result<Stream> {
+    let stream = camera.create_stream().context("create camera stream")?;
+    let payload_size = camera.payload().context("read camera payload size")?;
 
     for _ in 0..num_buffers {
         let buffer = Buffer::new_allocate(payload_size as usize);
         stream.push_buffer(buffer);
     }
 
-    stream
+    Ok(stream)
 }
 
-/// Converts an Aravis buffer into a vector of bytes.
 fn copy_buffer_bytes(buffer: &Buffer) -> Vec<u8> {
     let (ptr, len) = buffer.data();
 
@@ -238,234 +208,172 @@ fn copy_buffer_bytes(buffer: &Buffer) -> Vec<u8> {
         return Vec::new();
     }
 
-    // SAFETY: `ptr` is non-null and Aravis guarantees the buffer data
-    // is valid for `len` bytes for the lifetime of the buffer reference.
     unsafe { slice::from_raw_parts(ptr as *const u8, len).to_vec() }
 }
 
-/// Helper function to format timestamp string.
-fn timestamp_string() -> String {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time before UNIX_EPOCH");
-    format!("{}_{}", now.as_secs(), now.subsec_nanos())
+fn ensure_dir(path: &Path) -> Result<()> {
+    fs::create_dir_all(path).with_context(|| format!("create directory {}", path.display()))
 }
 
-/// Helper function to ensure output directory exists.
-fn ensure_dir(path: &PathBuf) {
-    fs::create_dir_all(path)
-        .unwrap_or_else(|e| panic!("failed to create directory {}: {e}", path.display()));
-}
-
-/// Helper function to clean string values.
-fn sanitize(value: &str) -> String {
-    value
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
-}
-
-fn write_frame_files(
-    output_dir: &PathBuf,
-    camera_id: &str,
-    frame_index: usize,
-    data: &[u8],
-    metadata: &FrameMetadata,
-) {
-    let basename = format!(
-        "{}_frame_{:06}_{}",
-        sanitize(camera_id),
-        frame_index,
-        timestamp_string()
-    );
-
-    let raw_path = output_dir.join(format!("{basename}.raw"));
-    let json_path = output_dir.join(format!("{basename}.json"));
-
-    let mut raw_file = File::create(&raw_path)
-        .unwrap_or_else(|e| panic!("failed to create {}: {e}", raw_path.display()));
-    raw_file
-        .write_all(data)
-        .unwrap_or_else(|e| panic!("failed to write {}: {e}", raw_path.display()));
-
-    let json = to_string_pretty(metadata).expect("failed to serialize frame metadata");
-    let mut json_file = File::create(&json_path)
-        .unwrap_or_else(|e| panic!("failed to create {}: {e}", json_path.display()));
-    json_file
-        .write_all(json.as_bytes())
-        .unwrap_or_else(|e| panic!("failed to write {}: {e}", json_path.display()));
-}
-
-/// Records stream from
 fn record_one_camera(
     config: &CameraIngestConfig,
-    output_base_dir: &PathBuf,
+    output_base_dir: &Path,
+    recover_base_dir: Option<&Path>,
     max_frames: Option<usize>,
     max_duration: Option<f64>,
-) {
-    // Validates camera ingest config.
-    config
-        .validate()
-        .expect("Invalid camera ingest configuration.");
+) -> Result<()> {
+    config.validate()?;
 
-    // Ensures that output directory for camera exists.
     let camera_dir = output_base_dir.join(sanitize(&config.device_id));
-    ensure_dir(&camera_dir);
+    ensure_dir(&camera_dir)?;
 
-    // Open Aravis camera, apply configuration, start stream, and queue buffers.
     println!("-------------------------");
-    println!("Opening cameras");
+    println!("Opening camera {}", config.device_id);
     println!("-------------------------");
-    println!("Opening camera {}\n", config.device_id);
+
     let camera = open_camera(&config.device_id);
-    configure_camera(&camera, config);
-    let stream = create_stream_and_queue_buffers(&camera, config.num_buffers);
+    configure_camera(&camera, config)?;
+    let stream = create_stream_and_queue_buffers(&camera, config.num_buffers)?;
 
-    // Print to user that camera has been configured.
     let (_, _, width, height) = camera
         .region()
-        .expect("Failed to read camera region after configuration.");
+        .context("read camera region after configuration")?;
     let payload = camera
         .payload()
-        .expect("failed to read payload after configuration");
+        .context("read camera payload after configuration")?;
+
     println!(
         "Configured camera {}: width={} height={} payload={} exposure_us={} frame_rate_hz={}",
         config.device_id, width, height, payload, config.exposure_time_us, config.frame_rate_hz
     );
 
-    // Start Aravis camera aquisition.
+    let width_u32 = u32::try_from(width).context("camera width does not fit into u32")?;
+    let height_u32 = u32::try_from(height).context("camera height does not fit into u32")?;
+    // Create one long-lived lossless H.265 encoder for this camera instead of writing raw frames.
+    let mut encoder = H265CameraEncoder::new(
+        &camera_dir,
+        &config.device_id,
+        width_u32,
+        height_u32,
+        config.frame_rate_hz,
+    )?;
+
     camera
         .start_acquisition()
-        .expect("Failed to start acquisition.");
+        .context("start camera acquisition")?;
 
-    // Keep track of start time and the number of saved frames.
     let start = Instant::now();
-    let mut frames_saved = 0usize;
-
-    loop {
-        // Stop streaming if a maximum number of frames was configured and
-        // the camera has recorded that many frames.
-        if let Some(limit) = max_frames {
-            if frames_saved >= limit {
-                break;
+    let mut frames_written = 0u64;
+    let recording_result: Result<()> = (|| {
+        loop {
+            if let Some(limit) = max_frames {
+                if frames_written >= limit as u64 {
+                    break;
+                }
             }
-        }
 
-        // Stop streaming if a maximum duration was configured and the
-        // camera has recorded for that amount of time.
-        if let Some(seconds) = max_duration {
-            if start.elapsed() >= Duration::from_secs_f64(seconds) {
-                break;
+            if let Some(seconds) = max_duration {
+                if start.elapsed() >= Duration::from_secs_f64(seconds) {
+                    break;
+                }
             }
-        }
 
-        // Load camera buffer.
-        let buffer = match stream.timeout_pop_buffer(config.timeout_ms) {
-            Some(buffer) => buffer,
-            None => {
-                eprintln!(
-                    "Timeout waiting for buffer from camera {}",
-                    config.device_id
-                );
-                continue;
-            }
-        };
-
-        match buffer.status() {
-            BufferStatus::Success => {
-                // If loading the buffer worked, copy the frame buffer into raw bytes.
-                let data = copy_buffer_bytes(&buffer);
-
-                if data.is_empty() {
-                    eprintln!("Empty buffer from camera {}.", config.device_id);
-                    stream.push_buffer(buffer);
+            let buffer = match stream.timeout_pop_buffer(config.timeout_ms) {
+                Some(buffer) => buffer,
+                None => {
+                    eprintln!(
+                        "Timeout waiting for buffer from camera {}",
+                        config.device_id
+                    );
                     continue;
                 }
+            };
 
-                // Store metadata.
-                let metadata = FrameMetadata {
-                    device_id: config.device_id.clone(),
-                    frame_index: frames_saved,
-                    width,
-                    height,
-                    payload_bytes: data.len(),
-                    system_timestamp_ns: buffer.system_timestamp(),
-                    buffer_timestamp_ns: buffer.timestamp(),
-                    frame_id: buffer.frame_id(),
-                    exposure_time_us: config.exposure_time_us,
-                    frame_rate_hz: config.frame_rate_hz,
-                };
+            match buffer.status() {
+                BufferStatus::Success => {
+                    let data = copy_buffer_bytes(&buffer);
 
-                // Write the frame's raw bytes and metadata to file.
-                write_frame_files(
-                    &camera_dir,
-                    &config.device_id,
-                    frames_saved,
-                    &data,
-                    &metadata,
-                );
+                    if data.is_empty() {
+                        eprintln!("Empty buffer from camera {}.", config.device_id);
+                        stream.push_buffer(buffer);
+                        continue;
+                    }
 
-                frames_saved += 1;
+                    encoder.push_frame(&data)?;
+                    frames_written += 1;
 
-                // Every 10 frames, print an update to the user.
-                if frames_saved % 10 == 0 {
-                    println!(
-                        "Camera {}: saved {} frame(s)",
-                        config.device_id, frames_saved
+                    if frames_written % 10 == 0 {
+                        println!(
+                            "Camera {}: encoded {} frame(s) to lossless H.265",
+                            config.device_id, frames_written
+                        );
+                    }
+                }
+                status => {
+                    eprintln!(
+                        "Camera {} returned non-success buffer status: {:?}",
+                        config.device_id, status
                     );
                 }
             }
-            status => {
-                eprintln!(
-                    "Camera {} returned non-success buffer status: {:?}",
-                    config.device_id, status
-                );
-            }
+
+            stream.push_buffer(buffer);
         }
 
-        stream.push_buffer(buffer);
-    }
+        Ok(())
+    })();
 
     let _ = camera.stop_acquisition();
+    recording_result?;
 
+    let summary = encoder.finish()?;
     println!(
-        "Finished camera {}. Saved {} frame(s) into {}",
+        "Finished camera {}. Wrote {} frame(s) to {}",
         config.device_id,
-        frames_saved,
-        camera_dir.display()
+        summary.frames_written,
+        summary.h265_path.display()
     );
-}
 
-pub fn main() {
-    println!("-------------------------");
-    println!("RECORDING FROM CAMERAS...");
-    println!("-------------------------\n");
-
-    // Store command line arguments for recording.
-    println!("-----------------------------");
-    println!("Camera ingest configurations:");
-    println!("-----------------------------\n");
-    let args: RecordFromCamerasArgs = RecordFromCamerasArgs::parse();
-
-    // Ensure that at least one stop condition was provided.
-    if args.max_frames.is_none() && args.max_duration.is_none() {
-        panic!("You must provide at least one stopping condition: --max-frames or --max-duration")
+    if let Some(recover_base_dir) = recover_base_dir {
+        let png_dir = recover_base_dir.join(sanitize(&config.device_id));
+        // Optional same-command recovery: decode the recorded H.265 stream back into PNG frames.
+        let recovery = recover_h265_to_png(&summary.h265_path, &png_dir)?;
+        println!(
+            "Recovered {} PNG frame(s) for camera {} into {}",
+            recovery.frames_recovered,
+            config.device_id,
+            recovery.output_dir.display()
+        );
     }
 
-    // Initialize Aravis tool and create output directory.
-    initialize_aravis();
-    let output_dir = PathBuf::from(&args.save_recordings_dir);
-    ensure_dir(&output_dir);
+    Ok(())
+}
 
-    // Parse command line arguments into camera ingest configs.
+fn run() -> Result<()> {
+    println!("-------------------------------");
+    println!("LOSSLESS H.265 CAMERA RECORDING");
+    println!("-------------------------------\n");
+
+    let args = RecordFromCamerasArgs::parse();
+
+    if args.max_frames.is_none() && args.max_duration.is_none() {
+        anyhow::bail!(
+            "You must provide at least one stopping condition: --max-frames or --max-duration"
+        );
+    }
+
+    ensure_ffmpeg_lossless_hevc_support()?;
+    initialize_aravis();
+
+    let output_dir = PathBuf::from(&args.save_recordings_dir);
+    ensure_dir(&output_dir)?;
+    let recover_dir = args.recover_to_png_dir.as_ref().map(PathBuf::from);
+    if let Some(recover_dir) = recover_dir.as_ref() {
+        ensure_dir(recover_dir)?;
+    }
+
     for camera_id in &args.cameras {
-        let camera_ingest_config: CameraIngestConfig = CameraIngestConfig::new(
+        let config = CameraIngestConfig::new(
             camera_id.clone(),
             args.exposure_us,
             args.frame_rate_hz,
@@ -476,18 +384,103 @@ pub fn main() {
             args.timeout_ms,
         );
 
-        // Validate configuration.
-        camera_ingest_config
-            .validate()
-            .expect("Invalid camera ingest configuration.");
-        println!("{camera_ingest_config:#?}\n");
-
-        // Begin recording.
+        println!("{config:#?}\n");
         record_one_camera(
-            &camera_ingest_config,
+            &config,
             &output_dir,
+            recover_dir.as_deref(),
             args.max_frames,
             args.max_duration,
+        )?;
+    }
+
+    Ok(())
+}
+
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("record_from_cameras failed: {error:#}");
+        std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CameraIngestConfig, RecordFromCamerasArgs, Resolution};
+    use clap::Parser;
+
+    #[test]
+    fn resolution_dimensions_match_expected_values() {
+        assert_eq!(Resolution::HD.dimensions(), (1280, 720));
+        assert_eq!(Resolution::FullHD.dimensions(), (1920, 1080));
+        assert_eq!(Resolution::UHD4K.dimensions(), (3840, 2160));
+    }
+
+    #[test]
+    fn camera_ingest_config_validate_rejects_invalid_values() {
+        let empty_id = CameraIngestConfig::new(
+            String::new(),
+            100.0,
+            30.0,
+            Resolution::UHD4K,
+            None,
+            false,
+            16,
+            200,
         );
+        assert!(empty_id.validate().is_err());
+
+        let bad_exposure = CameraIngestConfig::new(
+            "cam-a".to_string(),
+            0.0,
+            30.0,
+            Resolution::UHD4K,
+            None,
+            false,
+            16,
+            200,
+        );
+        assert!(bad_exposure.validate().is_err());
+
+        let bad_buffers = CameraIngestConfig::new(
+            "cam-a".to_string(),
+            100.0,
+            30.0,
+            Resolution::UHD4K,
+            None,
+            false,
+            0,
+            200,
+        );
+        assert!(bad_buffers.validate().is_err());
+    }
+
+    #[test]
+    fn cli_parses_recovery_flag_and_limits() {
+        let args = RecordFromCamerasArgs::try_parse_from([
+            "record_from_cameras",
+            "--camera",
+            "cam-a",
+            "--camera",
+            "cam-b",
+            "--save-recordings-dir",
+            "/tmp/out",
+            "--recover-to-png-dir",
+            "/tmp/png",
+            "--max-duration",
+            "1.5",
+            "--resolution",
+            "4k",
+            "--frame-rate-hz",
+            "30",
+        ])
+        .expect("CLI args should parse");
+
+        assert_eq!(args.cameras, vec!["cam-a", "cam-b"]);
+        assert_eq!(args.save_recordings_dir, "/tmp/out");
+        assert_eq!(args.recover_to_png_dir.as_deref(), Some("/tmp/png"));
+        assert_eq!(args.max_duration, Some(1.5));
+        assert!(matches!(args.resolution, Resolution::UHD4K));
+        assert_eq!(args.frame_rate_hz, 30.0);
     }
 }

@@ -19,8 +19,10 @@ rust_library(
         "//conditions:default": [],
     }),
     deps = [
+        "@crates//:anyhow",
         "@crates//:axum",
         "@crates//:crossbeam",
+        "@crates//:scuffle-h265",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
@@ -89,6 +91,16 @@ rust_test(
     ],
 )
 
+rust_test(
+    name = "record_from_cameras_tests",
+    crate = ":record_from_cameras",
+)
+
+rust_test(
+    name = "recover_h265_to_png_tests",
+    crate = ":recover_h265_to_png",
+)
+
 # -----------------------------------------------------------------------------
 # AUXILIARY BINARIES
 # -----------------------------------------------------------------------------
@@ -102,12 +114,43 @@ rust_binary(
 )
 
 rust_binary(
-    name = "record_from_cameras",
-    srcs = ["src/bin/record_from_cameras.rs"],
+    name = "record_from_cameras_raw",
+    srcs = ["src/bin/record_from_cameras_original.rs"],
     deps = [
         "@crates//:aravis",
         "@crates//:clap",
         "@crates//:serde",
         "@crates//:serde_json",
     ]
+)
+
+rust_binary(
+    name = "record_from_cameras",
+    srcs = ["src/bin/record_from_cameras.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:anyhow",
+        "@crates//:aravis",
+        "@crates//:clap",
+    ]
+)
+
+alias(
+    name = "record_from_cameras_h265",
+    actual = ":record_from_cameras",
+)
+
+alias(
+    name = "record_cameras",
+    actual = ":record_from_cameras",
+)
+
+rust_binary(
+    name = "recover_h265_to_png",
+    srcs = ["src/bin/recover_h265_to_png.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:anyhow",
+        "@crates//:clap",
+    ],
 )

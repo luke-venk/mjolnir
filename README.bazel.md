@@ -57,7 +57,29 @@ To build the auxiliary binary for discovering cameras on the LAN, run the follow
 `bazel build //backend:discover_cameras`  
 
 ## Usage - Record from Cameras
-To run the auxiliary binary for recording from the discovered cameras on the LAN, run the following command:
+To run the H.265 camera recorder and optionally recover PNGs in the same Bazel run, use:
 ```
-bazel run //backend:record_from_cameras -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --max-frames 100
+bazel run //backend:record_from_cameras -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --recover-to-png-dir ~/Downloads/camera_png --max-frames 100
 ```
+This writes one lossless `.h265` stream per camera into `--save-recordings-dir`, and if `--recover-to-png-dir` is provided it also decodes the compressed stream back into `frame_000000.png`, `frame_000001.png`, and so on in the same run.
+
+If you still need the original raw `.raw` + `.json` behavior, it remains available as:
+```
+bazel run //backend:record_from_cameras_raw -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --max-frames 100
+```
+The legacy H.265 alias targets below point at the same recorder:
+```
+bazel run //backend:record_from_cameras_h265 -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --recover-to-png-dir ~/Downloads/camera_png --max-frames 100
+
+bazel run //backend:record_cameras -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --recover-to-png-dir ~/Downloads/camera_png --max-frames 100
+```
+
+System requirement: `ffmpeg` must be installed on the host and built with `libx265` support. If it is not on `PATH`, set `MJOLNIR_FFMPEG_BIN` to the full executable path before running the binary.
+
+## Usage - Recover Lossless H.265 to PNG
+To decode a previously recorded `.h265` stream back into PNG frames, run:
+```
+bazel run //backend:recover_h265_to_png -- --h265-path ~/Downloads/camera_out/Lucid_Vision_Labs-ATP124S-M-224300917/Lucid_Vision_Labs-ATP124S-M-224300917.h265 --output-dir ~/Downloads/camera_out/recovered
+```
+
+Recovery inspects the H.265 SPS with `scuffle-h265` before decoding and then uses `ffmpeg` to write `frame_000000.png`, `frame_000001.png`, and so on. Use a new or empty output directory for recovery so the generated PNG count is unambiguous.
