@@ -1,9 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-# -----------------------------------------------------------------------------
-# MAIN BINARY
-# -----------------------------------------------------------------------------
-
 # Define a library that compiles the source code and can be used by
 # both the dev and prod binaries. Can be optimized using command
 # line arguments.
@@ -19,7 +15,9 @@ rust_library(
         "//conditions:default": [],
     }),
     deps = [
+        "@crates//:aravis",
         "@crates//:axum",
+        "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:serde",
         "@crates//:serde_json",
@@ -32,6 +30,10 @@ rust_library(
 # binaries is to handle differences in how the applications serve
 # the frontend. Optimization can technically occur for either target
 # using `--config=release` (see .bazelrc).
+
+# -----------------------------------------------------------------------------
+# MAIN BINARY
+# -----------------------------------------------------------------------------
 
 # Dev mode for the backend doesn't have to be optimized. In this mode,
 # the backend can serve the API via command line and it runs alongside
@@ -97,7 +99,7 @@ rust_binary(
     name = "discover_cameras",
     srcs = ["src/bin/discover_cameras.rs"],
     deps = [
-        "@crates//:aravis",
+        ":backend_lib",
     ]
 )
 
@@ -105,9 +107,7 @@ rust_binary(
     name = "record_from_cameras",
     srcs = ["src/bin/record_from_cameras.rs"],
     deps = [
-        "@crates//:aravis",
+        ":backend_lib",
         "@crates//:clap",
-        "@crates//:serde",
-        "@crates//:serde_json",
     ]
 )
