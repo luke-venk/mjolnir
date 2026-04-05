@@ -58,7 +58,7 @@ pub async fn run() {
     let pixel_sigma = 1.0;
     let physics_sigma = 0.01;
     let omega_phys = 1.0;
-    let (X_opt, _cov) = optimize_trajectory(&P_list, &pixels, dt, g, drag, pixel_sigma, physics_sigma, omega_phys).await;
+    let (X_opt, _cov, _drag_opt, _success) = optimize_trajectory(&P_list, &pixels, dt, g, drag, pixel_sigma, physics_sigma, omega_phys).await;
     println!("This is X: \n{:?}", X_opt);
     println!("This is covariance: \n{:?}", _cov);
 }
@@ -174,7 +174,7 @@ pub async fn run() {
     }
 
     let time_start = Instant::now();
-    let (x_opt, cov) = optimize_trajectory(
+    let (x_opt, cov, drag_opt, success) = optimize_trajectory(
         &P_list,
         &pixels,
         dt,

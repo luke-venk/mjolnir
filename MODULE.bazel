@@ -92,6 +92,14 @@ crate.spec(
     version = "0.34.1",
 )
 crate.spec(
+    package = "rand",
+    version = "0.8.5",
+)
+crate.spec(
+    package = "rand_distr",
+    version = "0.4.3",
+)
+crate.spec(
     package = "rust-embed",
     version = "8.11.0",
     features = [
