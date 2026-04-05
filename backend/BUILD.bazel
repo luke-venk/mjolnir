@@ -15,8 +15,13 @@ rust_library(
         "//conditions:default": [],
     }),
     deps = [
+        "@crates//:argmin",
         "@crates//:axum",
         "@crates//:crossbeam",
+        "@crates//:levenberg-marquardt",
+        "@crates//:nalgebra",
+        "@crates//:rand",
+        "@crates//:rand_distr",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
