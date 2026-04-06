@@ -45,7 +45,7 @@ impl CameraIngestConfig {
             resolution: args.resolution,
             aperture: None,
             enable_ptp: false,
-            num_buffers: 64,
+            num_buffers: 8,
             timeout_ms: 5000,
         }
     }

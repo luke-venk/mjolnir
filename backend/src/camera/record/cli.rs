@@ -25,7 +25,7 @@ pub struct RecordFromCamerasArgs {
     pub aperture: Option<f64>,
 
     /// The number of buffers the cameras can push frames to, enabling asynchrony.
-    #[arg(long, default_value_t = 64)]
+    #[arg(long, default_value_t = 8)]
     pub num_buffers: usize,
 
     /// Timeout for waiting on a frame buffer, in milliseconds.
