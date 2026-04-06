@@ -16,7 +16,8 @@
 /// needed for streaming, CameraSettings just needed for user to control 
 /// sliders).
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::thread::{self, sleep};
+use std::time;
 
 use backend_lib::camera::stream::{CameraSettings, FrameData, LiveViewApp};
 use backend_lib::camera::stream::capture::run_capture_thread;
@@ -52,19 +53,22 @@ fn main() -> eframe::Result<()> {
     thread::spawn(move || {
         run_capture_thread(camera_ingest_config_clone, latest_frame_clone, camera_settings_clone);
     });
-
+    while true {
+        sleep(time::Duration::from_secs(1000));
+    }
+    Ok(())
     // Set up eframe.
-    let options = eframe::NativeOptions {
-        // 983.0 came from 720.0 * 1.365, which is the division of 4096 / 3000 (camera sensor pixels).
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Mjölnir Live Stream")
-            .with_inner_size([983.0, 720.0]), 
-        ..Default::default()
-    };
+    // let options = eframe::NativeOptions {
+    //     // 983.0 came from 720.0 * 1.365, which is the division of 4096 / 3000 (camera sensor pixels).
+    //     viewport: egui::ViewportBuilder::default()
+    //         .with_title("Mjölnir Live Stream")
+    //         .with_inner_size([983.0, 720.0]), 
+    //     ..Default::default()
+    // };
 
-    eframe::run_native(
-        "Mjölnir Live Stream",
-        options,
-        Box::new(|_cc| Ok(Box::new(LiveViewApp::new(latest_frame, camera_settings)))),
-    )
+    // eframe::run_native(
+    //     "Mjölnir Live Stream",
+    //     options,
+    //     Box::new(|_cc| Ok(Box::new(LiveViewApp::new(latest_frame, camera_settings)))),
+    // )
 }
