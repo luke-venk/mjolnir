@@ -1,4 +1,4 @@
-use super::Resolution;
+use crate::camera::Resolution;
 
 use clap::Parser;
 
@@ -29,7 +29,7 @@ pub struct RecordFromCamerasArgs {
     pub num_buffers: usize,
 
     /// Timeout for waiting on a frame buffer, in milliseconds.
-    #[arg(long, default_value_t = 1000)]
+    #[arg(long, default_value_t = 5000)]
     pub timeout_ms: u64,
 
     /// Output directory where frames will be written to.
@@ -53,7 +53,10 @@ impl RecordFromCamerasArgs {
     pub fn validate(&self) -> Result<(), String> {
         // Ensure that at least one stop condition was provided.
         if self.max_frames.is_none() && self.max_duration.is_none() {
-            Err("You must provide at least one stopping condition: --max-frames or --max-duration".to_string())
+            Err(
+                "You must provide at least one stopping condition: --max-frames or --max-duration"
+                    .to_string(),
+            )
         } else {
             Ok(())
         }

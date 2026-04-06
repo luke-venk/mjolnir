@@ -19,6 +19,7 @@ rust_library(
         "@crates//:axum",
         "@crates//:clap",
         "@crates//:crossbeam",
+        "@crates//:eframe",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
@@ -96,7 +97,7 @@ rust_test(
 # -----------------------------------------------------------------------------
 
 rust_binary(
-    name = "discover_cameras",
+    name = "discover",
     srcs = ["src/bin/discover_cameras.rs"],
     deps = [
         ":backend_lib",
@@ -104,10 +105,21 @@ rust_binary(
 )
 
 rust_binary(
-    name = "record_from_cameras",
+    name = "record",
     srcs = ["src/bin/record_from_cameras.rs"],
     deps = [
         ":backend_lib",
         "@crates//:clap",
+    ]
+)
+
+rust_binary(
+    name = "stream",
+    srcs = ["src/bin/live_stream.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:clap",
+        "@crates//:eframe",
+        "@crates//:egui",
     ]
 )

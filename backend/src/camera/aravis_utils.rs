@@ -2,7 +2,7 @@
 /// discovery and recording tools.
 use std::slice;
 
-use crate::camera::record::CameraIngestConfig;
+use crate::camera::CameraIngestConfig;
 use aravis::prelude::*;
 use aravis::{Aravis, Buffer, Camera, Stream};
 
@@ -12,12 +12,9 @@ pub fn initialize_aravis() -> Aravis {
 }
 
 /// Create and return a Camera object.
-pub fn create_camera(camera_id: &str) -> Camera {
-    // Update device list first, same as Python's Aravis.update_device_list() does.
-    unsafe { aravis::get_device_list() };
-
+pub fn create_camera(camera_id: &str) -> Result<Camera, String> {
     Camera::new(Some(camera_id))
-        .unwrap_or_else(|_| panic!("ERROR: Failed to create camera with camera_id={camera_id}"))
+        .map_err(|_| format!("ERROR: Failed to create camera with camera_id = {camera_id}. Please try recording/streaming again..."))
 }
 
 /// Loads our information from our custom camera configuration type
@@ -51,49 +48,45 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
             .expect("Failed to enable PTP in camera configuration.");
     }
 
-    // Packet size negotiation.
+    // Packet size.
     // GigE Vision streams camera data over UDP. Automatically setting the packet
     // size works by sending test packets of decreasing sizes until one gets through
     // without fragmentation, discovering the Maximum Transmission Unit (MTU), the
     // largest payload that can travel end-to-end without being split.
-    // Standard Ethernet MTU is about 1500 bytes.
+    // Standard Ethernet MTU is about 1500 bytes, but for jumob packets we need
+    // around 8064 bytes. For some reason, automatic packet size negotation isn't
+    // detecting an MTU of higher than 1508, so we configure it manually here.
 
-    camera
-        .gv_auto_packet_size()
-        .expect("Failed to automatically set the packet size in camera configuration");
+    // camera
+    //     .gv_auto_packet_size()
+    //     .expect("Failed to automatically set the packet size in camera configuration");
 
-    println!(
-        "Negotiated packet size: {}",
-        camera
-            .gv_get_packet_size()
-            .expect("Failed to read packet size.")
-    );
+    // println!(
+    //     "Negotiated packet size: {}",
+    //     camera
+    //         .gv_get_packet_size()
+    //         .expect("Failed to read packet size.")
+    // );
 
     camera
         .gv_set_packet_size(8064)
         .expect("Failed to manually set the packet size in camera configuration.");
 
-    println!(
-        "Negotiated packet size: {}",
-        camera
-            .gv_get_packet_size()
-            .expect("Failed to read packet size.")
-    );
-    // // Packet delay.
-    // camera
-    //     .gv_set_packet_delay(0)
-    //     .expect("Failed to set the packet delay in camera configuration.");
+    // Packet delay.
+    camera
+        .gv_set_packet_delay(0)
+        .expect("Failed to set the packet delay in camera configuration.");
 
-    // // Pixel format.
+    // Pixel format.
     camera
         .set_pixel_format(aravis::PixelFormat::MONO_8)
         .expect("Failed to set the pixel format in camera configuration.");
 
-    // // Camera gains.
-    // camera.set_gain(0.0).expect("Failed to set the gains in camera configuration.");
+    // Camera gains.
+    camera.set_gain(0.0).expect("Failed to set the gains in camera configuration.");
 
     // Frame rate enable.
-    // camera.set_frame_rate_enable(true).expect("Failed to enable frame rate in camera configuration.");
+    camera.set_frame_rate_enable(true).expect("Failed to enable frame rate in camera configuration.");
 }
 
 /// Creates Aravis camera stream and allocates frame buffers.

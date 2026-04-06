@@ -2,6 +2,7 @@
 use clap::ValueEnum;
 
 use crate::camera::record::cli::RecordFromCamerasArgs;
+use crate::camera::stream::cli::StreamFromCamerasArgs;
 
 /// Configuration for what specs we want to use while recording.
 #[derive(Debug, Clone)]
@@ -23,7 +24,7 @@ pub struct CameraIngestConfig {
 }
 
 impl CameraIngestConfig {
-    pub fn new(args: RecordFromCamerasArgs) -> Self {
+    pub fn from_record_args(args: RecordFromCamerasArgs) -> Self {
         Self {
             camera_id: args.camera_id,
             exposure_time_us: args.exposure_us,
@@ -33,6 +34,19 @@ impl CameraIngestConfig {
             enable_ptp: args.enable_ptp,
             num_buffers: args.num_buffers,
             timeout_ms: args.timeout_ms,
+        }
+    }
+
+    pub fn from_stream_args(args: StreamFromCamerasArgs) -> Self {
+        Self {
+            camera_id: args.camera_id,
+            exposure_time_us: args.exposure_us,
+            frame_rate_hz: args.frame_rate_hz,
+            resolution: args.resolution,
+            aperture: None,
+            enable_ptp: false,
+            num_buffers: 64,
+            timeout_ms: 5000,
         }
     }
     

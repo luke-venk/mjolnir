@@ -1,6 +1,6 @@
 /// Tool for users to record footage from the cameras using Aravis and
 /// store the frames to disk using the command-line.
-use backend_lib::camera::record::CameraIngestConfig;
+use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::record::cli::RecordFromCamerasArgs;
 use backend_lib::camera::record::record_from_one_camera;
 use backend_lib::camera::record::writer::{ensure_dir, string_to_pathbuf};
@@ -21,7 +21,7 @@ pub fn main() {
     ensure_dir(&output_base_dir);
 
     // Parse command line arguments into camera ingest config.
-    let camera_ingest_config: CameraIngestConfig = CameraIngestConfig::new(args.clone());
+    let camera_ingest_config: CameraIngestConfig = CameraIngestConfig::from_record_args(args.clone());
     camera_ingest_config
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));

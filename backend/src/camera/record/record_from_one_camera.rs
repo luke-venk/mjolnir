@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use super::CameraIngestConfig;
+use crate::camera::CameraIngestConfig;
 use super::writer::{FrameMetadata, ensure_dir, sanitize_path_name, write_frame_files};
 use crate::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
@@ -21,7 +21,13 @@ pub fn record_from_one_camera(
     ensure_dir(&output_camera_dir);
 
     // Create Aravis camera, apply configuration, start stream, and queue buffers.
-    let camera = create_camera(&config.camera_id);
+    let camera = match create_camera(&config.camera_id) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            return;
+        },
+    };
     configure_camera(&camera, &config);
     let stream = create_stream_and_allocate_buffers(&camera, config.num_buffers);
 

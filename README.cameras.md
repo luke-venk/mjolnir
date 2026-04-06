@@ -22,7 +22,7 @@ We have 2 binaries related to using the cameras.
 This program is uses to discover cameras on the local area network (LAN).
 
 To run this program, run the following command:  
-`bazel run //backend:discover_cameras`  
+`bazel run //backend:discover`  
 
 An example output looks like the following:
 ```
@@ -34,9 +34,14 @@ Note that it takes up to a few minutes for the laptop, once plugged in, to be ab
 ## Record from Cameras
 To run the auxiliary binary for recording from the discovered cameras on the LAN, run the following command:
 ```
-bazel run //backend:record_from_cameras -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --max-frames 100
+bazel run //backend:record -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --max-frames 100
 ```
 
 ```
-bazel run //backend:record_from_cameras -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 100 --frame-rate-hz 5 --output-dir ~/Downloads/camera_out --max-frames 10
+bazel run //backend:record -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 100 --frame-rate-hz 5 --output-dir ~/Downloads/camera_out --max-frames 10
+```
+
+## Stream from Cameras
+```
+bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
 ```
