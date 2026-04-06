@@ -80,10 +80,19 @@ pub enum Resolution {
 
 impl Resolution {
     pub fn dimensions(&self) -> (i32, i32) {
+        // Check https://www.edmundoptics.com/p/lucid-vision-labst-atlas-atp124s-mc-sony-imx545-123mp-ip67-monochrome-camera/49821/.
         match self {
-            Resolution::HD => (1280, 720),
-            Resolution::FullHD => (1920, 1080),
-            Resolution::UHD4K => (3840, 2160),
+            Resolution::HD => (1024, 750),
+            Resolution::FullHD => (2048, 1500),
+            Resolution::UHD4K => (4096, 3000),
+        }
+    }
+
+    pub fn binning(&self) -> i32 {
+        match self {
+            Resolution::HD => 4,
+            Resolution::FullHD => 2,
+            Resolution::UHD4K => 1,
         }
     }
 }

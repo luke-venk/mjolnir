@@ -1,6 +1,5 @@
 /// Data for a single captured frame passed from capture thread
 /// to UI thread.
-use std::time::Instant;
 
 pub struct FrameData {
     // Raw Mono8 pixel bytes.
@@ -10,5 +9,5 @@ pub struct FrameData {
     // Frame height in pixels.
     pub height: u32,
     // Time when frame was received.
-    pub received_at: Instant,
+    pub received_at_ns: u64,
 }

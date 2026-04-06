@@ -1,6 +1,6 @@
 /// Shared code for interacting with Aravis library, used by both
 /// discovery and recording tools.
-use std::slice;
+use std::{i32, slice};
 
 use crate::camera::CameraIngestConfig;
 use aravis::prelude::*;
@@ -25,16 +25,23 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
         .set_exposure_time(config.exposure_time_us)
         .expect("Failed to set exposure time in camera configuration.");
 
+    // Frame rate enable.
+    camera.set_frame_rate_enable(true).expect("Failed to enable frame rate in camera configuration.");
+
     // Frame rate.
     camera
         .set_frame_rate(config.frame_rate_hz)
         .expect("Failed to set frame rate in camera configuration.");
 
     // Resolution.
-    let (width, height) = config.resolution.dimensions();
+    // Use binning to downsample (if necessary) from full resolution
+    // to smaller resolution.
     camera
-        .set_region(0, 0, width, height)
+        .set_region(0, 0, 4096, 3000)
         .expect("Failed to set resolution in camera configuration.");
+    if camera.is_binning_available().expect("Error: Binning is not available for this camera.") {
+        camera.set_binning(config.resolution.binning(), config.resolution.binning()).expect("Error: Failed to set binning for camera.");
+    }
 
     // Aperture.
     // if let Some(aperture) = config.aperture {
@@ -74,7 +81,7 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
 
     // Packet delay.
     camera
-        .gv_set_packet_delay(0)
+        .gv_set_packet_delay(5000)
         .expect("Failed to set the packet delay in camera configuration.");
 
     // Pixel format.
@@ -84,9 +91,6 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
 
     // Camera gains.
     camera.set_gain(0.0).expect("Failed to set the gains in camera configuration.");
-
-    // Frame rate enable.
-    camera.set_frame_rate_enable(true).expect("Failed to enable frame rate in camera configuration.");
 }
 
 /// Creates Aravis camera stream and allocates frame buffers.
@@ -118,7 +122,7 @@ pub fn copy_buffer_bytes(buffer: &Buffer) -> Vec<u8> {
     let (ptr, len) = buffer.data();
 
     if ptr.is_null() || len == 0 {
-        return Vec::new();
+        panic!("ERROR: Aravis buffer was empty");
     }
 
     // `ptr` is non-null and Aravis guarantees the buffer data is valid
