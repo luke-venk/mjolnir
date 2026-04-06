@@ -81,9 +81,16 @@ crate.spec(
     version = "0.8",
 )
 crate.spec(
-    package = "serde",
-    version = "1.0.228",
-    features = ["derive"],
+    package = "eframe",
+    version = "0.34.1",
+)
+crate.spec(
+    package = "egui",
+    version = "0.34.1",
+)
+crate.spec(
+    package = "epaint",
+    version = "0.34.1",
 )
 crate.spec(
     package = "http-body-util",
@@ -100,6 +107,11 @@ crate.spec(
 crate.spec(
     package = "scuffle-h265",
     version = "0.2.2",
+)
+crate.spec(
+    package = "serde",
+    version = "1.0.228",
+    features = ["derive"],
 )
 crate.spec(
     package = "serde_json",

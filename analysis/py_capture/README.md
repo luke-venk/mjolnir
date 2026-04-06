@@ -45,9 +45,9 @@ It is **not** a final video recorder.
 ## Requirements
 
 ### Software
-- Python 3
 - [Aravis](https://github.com/AravisProject/aravis) with Python GI bindings
 - Pillow
+- *Python 3*: NOTE, do NOT run using Python like `python3 capture_aravis.py ...`. The pyenv in this repository is set to Python 3.14, while the script `capture_aravis.py` relies on PyGObject which isn't compatible with the pyenv-managed Python 3.14. The fix is to install the requirements to the Homebrew installation with `brew install libffi pygobject3` and then run with `/opt/homebrew/bin/python3 capture_aravis.py ...`
 
 ### Python imports used
 - `gi.repository.Aravis`

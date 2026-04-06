@@ -1,0 +1,55 @@
+/// Tool for users to stream footage from the cameras using Aravis and
+/// tune camera intrinsics quickly, rather than storing raw bytes to
+/// disk and converting to PNG afterhand.
+///
+/// This program requires 2 threads:
+///   (1) Main thread: UI rendering
+///   (2) Capture thread: Uses Aravis to get frames
+/// This is required for one, because capture calls `timeout_pop_buffer`
+/// which blocks the capture thread, and two, because macOS specifically
+/// requires a main thread, not a background thread, for windowing systems
+/// like the egui UI.
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+use backend_lib::camera::stream::{FrameData, LiveViewApp};
+use backend_lib::camera::stream::capture::run_capture_thread;
+use backend_lib::camera::CameraIngestConfig;
+
+use backend_lib::camera::stream::cli::StreamFromCamerasArgs;
+use clap::Parser;
+use eframe::egui;
+
+fn main() -> eframe::Result<()> {
+    println!("------------------------");
+    println!("LIVE STREAMING FROM CAMERA...");
+    println!("------------------------\n");
+
+    // Parse command-line arguments and create camera configuration.
+    let args: StreamFromCamerasArgs = StreamFromCamerasArgs::parse();
+    let camera_ingest_config: CameraIngestConfig = CameraIngestConfig::from_stream_args(args.clone());
+
+    // Create shared latest frame to be shared between the UI thread (this one)
+    // and the capture thread.
+    let latest_frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
+    let latest_frame_clone = Arc::clone(&latest_frame);
+
+    // Spawn capture thread on new thread.
+    thread::spawn(move || {
+        run_capture_thread(camera_ingest_config, latest_frame_clone);
+    });
+
+    // Set up eframe.
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("Mjölnir Live Stream")
+            .with_inner_size([1280.0, 720.0]), // TODO: update from just 720p
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "Mjölnir Live Stream",
+        options,
+        Box::new(|_cc| Ok(Box::new(LiveViewApp::new(latest_frame)))),
+    )
+}

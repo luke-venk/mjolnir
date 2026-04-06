@@ -12,7 +12,7 @@ rust_library(
     crate_name = "backend_lib",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.*.rs"]
+        exclude = ["src/main.*.rs"],
     ),
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
@@ -20,8 +20,11 @@ rust_library(
     }),
     deps = [
         "@crates//:anyhow",
+        "@crates//:aravis",
         "@crates//:axum",
+        "@crates//:clap",
         "@crates//:crossbeam",
+        "@crates//:eframe",
         "@crates//:scuffle-h265",
         "@crates//:serde",
         "@crates//:serde_json",
@@ -35,10 +38,10 @@ rust_library(
 # the frontend. Optimization can technically occur for either target
 # using `--config=release` (see .bazelrc).
 
-# Dev mode for the backend doesn't have to be optimized. In this mode,
-# the backend can serve the API via command line and it runs alongside
-# the Next.js server. Since the Next.js requests come from a different
-# origin, so CORS is needed. It will not have any embedded assets.
+# -----------------------------------------------------------------------------
+# MAIN TARGETS
+# -----------------------------------------------------------------------------
+
 rust_binary(
     name = "dev",
     srcs = ["src/main.dev.rs"],
@@ -50,10 +53,6 @@ rust_binary(
     ],
 )
 
-# Prod mode for the backend should be optimized. In this mode, the 
-# backend will serve the API but instead of serving the Next.js server,
-# it will embed the frontend's static exports using rust-embed and 
-# serve using axum_embed.
 rust_binary(
     name = "prod",
     srcs = ["src/main.prod.rs"],
@@ -65,9 +64,6 @@ rust_binary(
         "@crates//:rust-embed",
     ],
     compile_data = ["//frontend:static_exports"],
-    # At compile-time, this env var tells our source code exactly where
-    # Bazel placed the frontend outputs, so rust-embed can embed it
-    # into the binary directly.
     rustc_env = {
         "EMBEDDED_FRONTEND_DIR": "$(execpath //frontend:static_exports)",
     },
@@ -81,7 +77,6 @@ rust_binary(
     }),
 )
 
-# Unit tests to test the backend library.
 rust_test(
     name = "tests",
     crate = ":backend_lib",
@@ -108,20 +103,21 @@ rust_test(
 rust_binary(
     name = "discover_cameras",
     srcs = ["src/bin/discover_cameras.rs"],
-    deps = [
-        "@crates//:aravis",
-    ]
+    deps = [":backend_lib"],
+)
+
+alias(
+    name = "discover",
+    actual = ":discover_cameras",
 )
 
 rust_binary(
     name = "record_from_cameras_raw",
     srcs = ["src/bin/record_from_cameras_original.rs"],
     deps = [
-        "@crates//:aravis",
+        ":backend_lib",
         "@crates//:clap",
-        "@crates//:serde",
-        "@crates//:serde_json",
-    ]
+    ],
 )
 
 rust_binary(
@@ -132,7 +128,7 @@ rust_binary(
         "@crates//:anyhow",
         "@crates//:aravis",
         "@crates//:clap",
-    ]
+    ],
 )
 
 alias(
@@ -153,4 +149,20 @@ rust_binary(
         "@crates//:anyhow",
         "@crates//:clap",
     ],
+)
+
+rust_binary(
+    name = "live_stream",
+    srcs = ["src/bin/live_stream.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:clap",
+        "@crates//:eframe",
+        "@crates//:egui",
+    ],
+)
+
+alias(
+    name = "stream",
+    actual = ":live_stream",
 )
