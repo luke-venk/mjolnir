@@ -1,7 +1,6 @@
 /// Capture thread that runs alongside UI thread that pulls frames from
 /// Aravis and places them into shared buffer for the UI thread to read.
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
 use super::FrameData;
 use crate::camera::aravis_utils::{
@@ -36,13 +35,11 @@ pub fn run_capture_thread(
 
     println!("Acquisition started.");
 
-    let mut acquisition_start = Instant::now();
-
     // Live streaming loop.
     loop {
         // Debug statement to check if slider changed values here.
-        // println!("Exposure time (µs): {}", camera_settings.lock().unwrap().exposure_us);
-        // println!("Frame rate (Hz): {}", camera_settings.lock().unwrap().frame_rate_hz);
+        println!("Exposure time (µs): {}", camera_settings.lock().unwrap().exposure_us);
+        println!("Frame rate (Hz): {}", camera_settings.lock().unwrap().frame_rate_hz);
 
         // Load camera buffer.
         // Block current thread until frame buffer delivered or the timeout elapses.
@@ -81,11 +78,5 @@ pub fn run_capture_thread(
         }
 
         stream.push_buffer(buffer);
-
-        let now = Instant::now();
-        println!("Instataneous frame rate = {}", 1000.0 / now.duration_since(acquisition_start).as_millis() as f64);
-
-        acquisition_start = now;
-
     }
 }

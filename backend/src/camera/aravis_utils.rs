@@ -36,9 +36,9 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
     // Resolution.
     // Use binning to downsample (if necessary) from full resolution
     // to smaller resolution.
-    // camera
-    //     .set_region(0, 0, 4096, 3000)
-    //     .expect("Failed to set resolution in camera configuration.");
+    camera
+        .set_region(0, 0, 4096, 3000)
+        .expect("Failed to set resolution in camera configuration.");
     if camera.is_binning_available().expect("Error: Binning is not available for this camera.") {
         camera.set_binning(config.resolution.binning(), config.resolution.binning()).expect("Error: Failed to set binning for camera.");
     }
