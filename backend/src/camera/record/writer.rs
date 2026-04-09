@@ -13,14 +13,6 @@ pub fn ensure_dir(path: &PathBuf) {
         .unwrap_or_else(|e| panic!("Failed to create directory {}: {e}", path.display()));
 }
 
-/// Helper function to format timestamp string.
-fn timestamp_string() -> String {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time before UNIX_EPOCH");
-    format!("{}_{}", now.as_secs(), now.subsec_nanos())
-}
-
 /// Helper function to ensure string values are safe paths.
 pub fn sanitize_path_name(value: &str) -> String {
     value
@@ -68,9 +60,8 @@ pub fn write_to_disk(
 ) {
     // Determine file name based on frame index and timestamp.
     let file_name = format!(
-        "frame_{:06}_{}",
+        "frame_{:04}",
         frame_index,
-        timestamp_string()
     );
     let raw_path = output_camera_dir.join(format!("{file_name}.raw"));
     let json_path = output_camera_dir.join(format!("{file_name}.json"));

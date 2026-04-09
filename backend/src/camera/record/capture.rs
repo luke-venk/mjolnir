@@ -19,11 +19,12 @@ pub fn run_capture_thread(
     println!("Beginning recording for camera {}.",config.camera_id);
     
     // Ensure output directory exists.
-    let output_camera_dir = output_base_dir.join(sanitize_path_name(&config.camera_id));
+    let camera_id = config.camera_id.clone();
+    let output_camera_dir = output_base_dir.join(sanitize_path_name(&camera_id));
     ensure_dir(&output_camera_dir);
 
     // Create Aravis camera, apply configuration, start stream, and queue buffers.
-    let camera = match create_camera(&config.camera_id) {
+    let camera = match create_camera(&camera_id) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{e}");
@@ -96,9 +97,10 @@ pub fn run_capture_thread(
             BufferStatus::Success => {
                 let elapsed_since_start = start_time.elapsed();
                 println!(
-                    "Frame {} received at {:.2}s",
+                    "Frame {} received at {:.2}s for {}.",
                     frames_saved,
-                    elapsed_since_start.as_secs_f64()
+                    elapsed_since_start.as_secs_f64(),
+                    camera_id,
                 );
 
                 // Take the buffer from the stream and store its information, and then
