@@ -21,32 +21,37 @@ pub struct CameraIngestConfig {
     pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
+
+    // Tool to request streaming restart if specifications are changed.
+    pub restart_requested: bool,
 }
 
 impl CameraIngestConfig {
     pub fn from_record_args(args: RecordFromCamerasArgs) -> Self {
         Self {
             camera_id: args.camera_id,
-            exposure_time_us: args.exposure_us,
+            exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,
             aperture: args.aperture,
             enable_ptp: args.enable_ptp,
             num_buffers: args.num_buffers,
             timeout_ms: args.timeout_ms,
+            restart_requested: false,
         }
     }
 
     pub fn from_stream_args(args: StreamFromCamerasArgs) -> Self {
         Self {
             camera_id: args.camera_id,
-            exposure_time_us: args.exposure_us,
+            exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,
             aperture: None,
             enable_ptp: false,
-            num_buffers: 64,
+            num_buffers: 8,
             timeout_ms: 5000,
+            restart_requested: false,
         }
     }
     
@@ -68,7 +73,7 @@ impl CameraIngestConfig {
 }
 
 /// Different resolutions we might want to record with.
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 pub enum Resolution {
     #[value(name = "720p")]
     HD,
@@ -81,10 +86,27 @@ pub enum Resolution {
 
 impl Resolution {
     pub fn dimensions(&self) -> (i32, i32) {
+        // Check https://www.edmundoptics.com/p/lucid-vision-labst-atlas-atp124s-mc-sony-imx545-123mp-ip67-monochrome-camera/49821/.
         match self {
-            Resolution::HD => (1280, 720),
-            Resolution::FullHD => (1920, 1080),
+            Resolution::HD => (1024, 750),
+            Resolution::FullHD => (2048, 1500),
             Resolution::UHD4K => (4096, 3000),
+        }
+    }
+
+    pub fn binning(&self) -> i32 {
+        match self {
+            Resolution::HD => 4,
+            Resolution::FullHD => 2,
+            Resolution::UHD4K => 1,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            Resolution::HD => "720p".to_string(),
+            Resolution::FullHD => "1080p".to_string(),
+            Resolution::UHD4K => "4k".to_string(),
         }
     }
 }

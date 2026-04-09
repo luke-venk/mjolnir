@@ -11,8 +11,8 @@ pub struct RecordFromCamerasArgs {
     pub camera_id: String,
 
     /// Exposure time in microseconds.
-    #[arg(long = "exposure-us", default_value_t = 100.0)]
-    pub exposure_us: f64,
+    #[arg(long = "exposure-us", default_value_t = 10000.0)]
+    pub exposure_time_us: f64,
 
     #[arg(long = "frame-rate-hz", default_value_t = 30.0)]
     pub frame_rate_hz: f64,
@@ -25,7 +25,7 @@ pub struct RecordFromCamerasArgs {
     pub aperture: Option<f64>,
 
     /// The number of buffers the cameras can push frames to, enabling asynchrony.
-    #[arg(long, default_value_t = 64)]
+    #[arg(long, default_value_t = 8)]
     pub num_buffers: usize,
 
     /// Timeout for waiting on a frame buffer, in milliseconds.
@@ -45,7 +45,7 @@ pub struct RecordFromCamerasArgs {
     pub max_duration: Option<f64>,
 
     /// Whether to enable Precision Time Protocol if supported by the device.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = true)]
     pub enable_ptp: bool,
 }
 

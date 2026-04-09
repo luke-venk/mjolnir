@@ -157,6 +157,7 @@ rust_binary(
     deps = [
         ":backend_lib",
         "@crates//:clap",
+        "@crates//:crossbeam",
         "@crates//:eframe",
         "@crates//:egui",
     ],
