@@ -15,8 +15,8 @@ use std::thread;
 use backend_lib::camera::stream::{FrameData, LiveViewApp};
 use backend_lib::camera::stream::capture::run_capture_thread;
 use backend_lib::camera::CameraIngestConfig;
-
 use backend_lib::camera::stream::cli::StreamFromCamerasArgs;
+
 use clap::Parser;
 use eframe::egui;
 
@@ -33,15 +33,13 @@ fn main() -> eframe::Result<()> {
     let camera_settings = Arc::new(Mutex::new(camera_ingest_config));
     let camera_settings_clone = Arc::clone(&camera_settings);
 
-    // Create shared latest frame to be shared between the UI thread (this one)
-    // and the capture thread.
-    let latest_frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
-    let latest_frame_clone = Arc::clone(&latest_frame);
-
+    // Use crossbeam channel to send the latest frame from the capture thread (sender)
+    // to the UI thread (receiver).
+    let (frame_tx, frame_rx) = crossbeam::channel::bounded::<FrameData>(100);
 
     // Spawn capture thread on new thread.
     thread::spawn(move || {
-        run_capture_thread(camera_settings_clone, latest_frame_clone);
+        run_capture_thread(camera_settings_clone, frame_tx);
     });
 
     // Set up eframe.
@@ -56,6 +54,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Mjölnir Live Stream",
         options,
-        Box::new(|_cc| Ok(Box::new(LiveViewApp::new(latest_frame, camera_settings)))),
+        Box::new(|_cc| Ok(Box::new(LiveViewApp::new(frame_rx, camera_settings)))),
     )
 }

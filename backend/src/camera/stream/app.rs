@@ -10,8 +10,8 @@ use std::{
 };
 
 pub struct LiveViewApp {
-    // Latest frame from the capture thread.
-    pub latest_frame: Arc<Mutex<Option<FrameData>>>,
+    // Receiver for the latest frame from the capture thread.
+    pub frame_rx: crossbeam::channel::Receiver<FrameData>,
     // Measured frames per second, to show to user.
     pub actual_frame_rate: f32,
     // When latest frame was received, for FPS calculation.
@@ -27,11 +27,11 @@ pub struct LiveViewApp {
 
 impl LiveViewApp {
     pub fn new(
-        latest_frame: Arc<Mutex<Option<FrameData>>>,
+        frame_rx: crossbeam::channel::Receiver<FrameData>,
         camera_settings: Arc<Mutex<CameraIngestConfig>>,
     ) -> Self {
         Self {
-            latest_frame,
+            frame_rx,
             actual_frame_rate: 0.0,
             last_frame_time: None,
             texture: None,
@@ -43,17 +43,8 @@ impl LiveViewApp {
 // See https://docs.rs/eframe/latest/eframe/trait.App.html.
 impl eframe::App for LiveViewApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Check for a new frame from the capture thread.
-        // Try to lock the mutex. If successful, take the frame out and leave none.
-        // Otherwise, return none.
-        let new_frame = self
-            .latest_frame
-            .lock()
-            .ok()
-            .and_then(|mut lock| lock.take());
-
         // If new_frame exists, update the state and UI.
-        if let Some(frame) = new_frame {
+        if let Ok(frame) = self.frame_rx.try_recv() {
             // Update the frames per second.
             let now = Instant::now();
             if let Some(last_time) = self.last_frame_time {

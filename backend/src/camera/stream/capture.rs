@@ -7,11 +7,12 @@ use crate::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
 use crate::camera::CameraIngestConfig;
+
 use aravis::{BufferStatus, CameraExt, StreamExt};
 
 pub fn run_capture_thread(
     config: Arc<Mutex<CameraIngestConfig>>,
-    latest_frame: Arc<Mutex<Option<FrameData>>>,
+    frame_tx: crossbeam::channel::Sender<FrameData>,
 ) {
     let settings = config.lock().expect("Error: Failed to unlock camera settings");
     
@@ -59,13 +60,8 @@ pub fn run_capture_thread(
                         received_at_ns: buffer.timestamp(),
                     };
 
-                    // If successfully acquired mutex's lock, update the latest frame safely
-                    // through the mutex.
-                    if let Ok(mut lock) = latest_frame.lock() {
-                        *lock = Some(frame);
-                    } else {
-                        eprintln!("ERROR: Lock not acquired.");
-                    }
+                    // Send this captured frame to the UI thread.
+                    frame_tx.send(frame).expect("Error: Failed to send frame from streaming capture thread to UI thread.");
                 }
             },
             _ => {
