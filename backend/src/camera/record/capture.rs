@@ -16,6 +16,8 @@ pub fn record_from_one_camera(
     max_frames: Option<usize>,
     max_duration: Option<f64>,
 ) {
+    println!("Beginning recording for camera {}.",config.camera_id);
+
     // Ensures that output directory for this specific camera exists.
     let output_camera_dir = output_base_dir.join(sanitize_path_name(&config.camera_id));
     ensure_dir(&output_camera_dir);
@@ -31,17 +33,8 @@ pub fn record_from_one_camera(
     configure_camera(&camera, &config);
     let stream = create_stream_and_allocate_buffers(&camera, config.num_buffers);
 
-    // Print to user that camera has been configured.
-    let (_, _, width, height) = camera
-        .region()
-        .expect("Failed to read camera region after configuration.");
-    let payload = camera
-        .payload()
-        .expect("failed to read payload after configuration");
-    println!(
-        "Configured camera {}: width={} height={} payload={} exposure_us={} frame_rate_hz={}",
-        config.camera_id, width, height, payload, config.exposure_time_us, config.frame_rate_hz
-    );
+    // For frame metadata.
+    let (width, height) = config.resolution.dimensions();
 
     // Start Aravis camera aquisition.
     camera

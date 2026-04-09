@@ -105,8 +105,17 @@ rust_binary(
 )
 
 rust_binary(
+    name = "record-from-one",
+    srcs = ["src/bin/record_from_one_camera.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:clap",
+    ]
+)
+
+rust_binary(
     name = "record",
-    srcs = ["src/bin/record_from_cameras.rs"],
+    srcs = ["src/bin/record_from_both_cameras.rs"],
     deps = [
         ":backend_lib",
         "@crates//:clap",

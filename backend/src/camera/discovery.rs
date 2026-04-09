@@ -29,6 +29,15 @@ pub fn discover_cameras(aravis: &Aravis) -> Vec<DiscoveredCamera> {
         .collect()
 }
 
+/// Print all camera IDs on the LAN.
+pub fn get_camera_ids(aravis: &Aravis) -> Vec<String> {
+    aravis
+        .get_device_list()
+        .into_iter()
+        .map(|device| device.id.to_string_lossy().into_owned())
+        .collect()
+}
+
 /// Print discovered cameras in a single-line CLI-friendly format.
 pub fn print_discovered_cameras(cameras: &[DiscoveredCamera]) {
     if cameras.is_empty() {

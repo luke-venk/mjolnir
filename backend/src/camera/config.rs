@@ -1,7 +1,8 @@
 /// Code for handling configurations for recording with Aravis.
 use clap::ValueEnum;
 
-use crate::camera::record::cli::RecordFromCamerasArgs;
+use crate::camera::record::cli::RecordWithBothCamerasArgs;
+use crate::camera::record::cli::RecordWithOneCameraArgs;
 use crate::camera::stream::cli::StreamFromCamerasArgs;
 
 /// Configuration for what specs we want to use while recording.
@@ -27,16 +28,30 @@ pub struct CameraIngestConfig {
 }
 
 impl CameraIngestConfig {
-    pub fn from_record_args(args: RecordFromCamerasArgs) -> Self {
+    pub fn from_record_one_args(args: RecordWithOneCameraArgs) -> Self {
         Self {
             camera_id: args.camera_id,
-            exposure_time_us: args.exposure_time_us,
-            frame_rate_hz: args.frame_rate_hz,
-            resolution: args.resolution,
-            aperture: args.aperture,
-            enable_ptp: args.enable_ptp,
-            num_buffers: args.num_buffers,
-            timeout_ms: args.timeout_ms,
+            exposure_time_us: args.common_args.exposure_time_us,
+            frame_rate_hz: args.common_args.frame_rate_hz,
+            resolution: args.common_args.resolution,
+            aperture: args.common_args.aperture,
+            enable_ptp: args.common_args.enable_ptp,
+            num_buffers: args.common_args.num_buffers,
+            timeout_ms: args.common_args.timeout_ms,
+            restart_requested: false,
+        }
+    }
+
+    pub fn from_record_both_args(camera_id: String, args: RecordWithBothCamerasArgs) -> Self {
+        Self {
+            camera_id,
+            exposure_time_us: args.common_args.exposure_time_us,
+            frame_rate_hz: args.common_args.frame_rate_hz,
+            resolution: args.common_args.resolution,
+            aperture: args.common_args.aperture,
+            enable_ptp: args.common_args.enable_ptp,
+            num_buffers: args.common_args.num_buffers,
+            timeout_ms: args.common_args.timeout_ms,
             restart_requested: false,
         }
     }
@@ -54,7 +69,7 @@ impl CameraIngestConfig {
             restart_requested: false,
         }
     }
-    
+
     pub fn validate(&self) -> Result<(), String> {
         if self.camera_id.is_empty() {
             return Err("camera_id cannot be empty".to_string());
