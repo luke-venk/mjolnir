@@ -11,14 +11,12 @@
 /// like the egui UI.
 use std::sync::{Arc, Mutex};
 use std::thread;
-
+use clap::Parser;
+use eframe::egui;
 use backend_lib::camera::stream::{FrameData, LiveViewApp};
 use backend_lib::camera::stream::capture::run_capture_thread;
 use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::stream::cli::StreamFromCamerasArgs;
-
-use clap::Parser;
-use eframe::egui;
 
 fn main() -> eframe::Result<()> {
     println!("------------------------");
@@ -37,7 +35,7 @@ fn main() -> eframe::Result<()> {
     // to the UI thread (receiver).
     let (frame_tx, frame_rx) = crossbeam::channel::bounded::<FrameData>(100);
 
-    // Spawn capture thread on new thread.
+    // Spawn capture thread.
     thread::spawn(move || {
         run_capture_thread(camera_settings_clone, frame_tx);
     });

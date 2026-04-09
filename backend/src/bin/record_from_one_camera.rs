@@ -1,11 +1,12 @@
 /// Tool for users to record footage from one camera using Aravis and
 /// store the frames to disk using the command-line.
+use std::path::PathBuf;
+use std::thread;
+use clap::Parser;
 use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::record::cli::RecordWithOneCameraArgs;
-use backend_lib::camera::record::record_from_one_camera;
-use backend_lib::camera::record::writer::{ensure_dir, string_to_pathbuf};
-
-use clap::Parser;
+use backend_lib::camera::record::run_capture_thread;
+use backend_lib::camera::record::writer::{Frame, ensure_dir, write_to_disk};
 
 pub fn main() {
     println!("------------------------");
@@ -17,7 +18,7 @@ pub fn main() {
     args.common_args.validate().unwrap_or_else(|err| panic!("{err}"));
 
     // Create output directory based on command-line argument.
-    let output_base_dir = string_to_pathbuf(&args.common_args.output_dir);
+    let output_base_dir = PathBuf::from(&args.common_args.output_dir);
     ensure_dir(&output_base_dir);
 
     // Parse command line arguments into camera ingest config.
@@ -25,12 +26,34 @@ pub fn main() {
     camera_ingest_config
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
+    
+    // Create crossbeam channel so capture thread can send frames to
+    // write thread.
+    let (frame_tx, frame_rx) = crossbeam::channel::bounded::<Frame>(100);
 
-    // Begin recording.
-    record_from_one_camera(
-        &camera_ingest_config,
-        &output_base_dir,
-        args.common_args.max_frames,
-        args.common_args.max_duration,
-    );
+    // Spawn capture thread.
+    let record_handle = thread::spawn(move || {
+        run_capture_thread(
+            output_base_dir,
+            &camera_ingest_config,
+            frame_tx,
+            args.common_args.max_frames,
+            args.common_args.max_duration,
+        );
+    });
+
+    // Spawn write thread.
+    let writer_handle = thread::spawn(move || {
+        // Write incoming frames.
+        for frame in frame_rx {
+            write_to_disk(&frame.output_camera_dir, frame.frame_index, &frame.bytes, &frame.metadata);
+        }
+    });
+
+    // Prevent main thread from exiting before recording thread finishes.
+    record_handle.join().expect("Error: Recorder thread panicked.");
+
+    // Prevent main thread from exiting before writing thread finishes.
+    writer_handle.join().expect("Error: Writer thread panicked.");
+
 }

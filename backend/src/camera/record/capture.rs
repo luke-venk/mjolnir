@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-
 use crate::camera::CameraIngestConfig;
-use super::writer::{FrameMetadata, ensure_dir, sanitize_path_name, write_frame_files};
+use super::writer::{Frame, Metadata, ensure_dir, sanitize_path_name};
 use crate::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
@@ -10,15 +9,16 @@ use crate::camera::aravis_utils::{
 use aravis::{BufferStatus, CameraExt, StreamExt};
 
 /// Records stream from a single camera.
-pub fn record_from_one_camera(
+pub fn run_capture_thread(
+    output_base_dir: PathBuf,
     config: &CameraIngestConfig,
-    output_base_dir: &PathBuf,
+    frame_tx: crossbeam::channel::Sender<Frame>,
     max_frames: Option<usize>,
     max_duration: Option<f64>,
 ) {
     println!("Beginning recording for camera {}.",config.camera_id);
-
-    // Ensures that output directory for this specific camera exists.
+    
+    // Ensure output directory exists.
     let output_camera_dir = output_base_dir.join(sanitize_path_name(&config.camera_id));
     ensure_dir(&output_camera_dir);
 
@@ -101,36 +101,41 @@ pub fn record_from_one_camera(
                     elapsed_since_start.as_secs_f64()
                 );
 
+                // Take the buffer from the stream and store its information, and then
+                // immediately push the buffer back to the stream, so it doesn't
+                // starve.
                 let data = copy_buffer_bytes(&buffer);
+                let system_timestamp_ns = buffer.system_timestamp();
+                let buffer_timestamp_ns = buffer.timestamp();
+                let frame_id = buffer.frame_id();
+                stream.push_buffer(buffer);
 
                 if data.is_empty() {
                     eprintln!("Empty buffer from camera {}.", config.camera_id);
-                    stream.push_buffer(buffer);
                     continue;
                 }
 
                 // Store metadata.
-                let metadata = FrameMetadata {
+                let metadata = Metadata {
                     camera_id: config.camera_id.clone(),
                     frame_index: frames_saved,
                     width,
                     height,
                     payload_bytes: data.len(),
-                    system_timestamp_ns: buffer.system_timestamp(),
-                    buffer_timestamp_ns: buffer.timestamp(),
-                    frame_id: buffer.frame_id(),
-                    exposure_time_us: config.exposure_time_us,
-                    frame_rate_hz: config.frame_rate_hz,
+                    system_timestamp_ns,
+                    buffer_timestamp_ns,
+                    frame_id,
                 };
 
-                // Write the frame's raw bytes and metadata to file.
-                write_frame_files(
-                    &output_camera_dir,
-                    &config.camera_id,
-                    frames_saved,
-                    &data,
-                    &metadata,
-                );
+                // Package bytes and metadata into Frame struct and pass
+                // over crossbeam-channel to write thread.
+                let frame = Frame {
+                    output_camera_dir: output_camera_dir.clone(),
+                    frame_index: frames_saved,
+                    bytes: data,
+                    metadata: metadata,
+                };
+                frame_tx.send(frame).expect("Error: Failed to send frame from recording capture thread to write thread.");
 
                 frames_saved += 1;
             }
@@ -141,8 +146,6 @@ pub fn record_from_one_camera(
                 );
             }
         }
-
-        stream.push_buffer(buffer);
     }
 
     let _ = camera.stop_acquisition();

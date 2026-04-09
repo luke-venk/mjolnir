@@ -1,6 +1,5 @@
 /// Code for handling configurations for recording with Aravis.
 use clap::ValueEnum;
-
 use crate::camera::record::cli::RecordWithBothCamerasArgs;
 use crate::camera::record::cli::RecordWithOneCameraArgs;
 use crate::camera::stream::cli::StreamFromCamerasArgs;
@@ -14,9 +13,6 @@ pub struct CameraIngestConfig {
     pub exposure_time_us: f64,
     pub frame_rate_hz: f64,
     pub resolution: Resolution,
-
-    // Optional / hardware-dependent.
-    pub aperture: Option<f64>,
 
     // System-level config.
     pub enable_ptp: bool,
@@ -34,7 +30,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
-            aperture: args.common_args.aperture,
             enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
@@ -48,7 +43,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
-            aperture: args.common_args.aperture,
             enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
@@ -62,7 +56,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,
-            aperture: None,
             enable_ptp: false,
             num_buffers: 8,
             timeout_ms: 5000,

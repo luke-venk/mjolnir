@@ -1,10 +1,9 @@
-/// Shared code for interacting with Aravis library, used by both
-/// discovery and recording tools.
-use std::slice;
-
 use crate::camera::CameraIngestConfig;
 use aravis::prelude::*;
 use aravis::{Aravis, Buffer, Camera, Stream};
+/// Shared code for interacting with Aravis library, used by both
+/// discovery and recording tools.
+use std::slice;
 
 /// Retrieves token to access global state of the Aravis library.
 pub fn initialize_aravis() -> Aravis {
@@ -26,27 +25,30 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
         .expect("Failed to set exposure time in camera configuration.");
 
     // Frame rate enable.
-    camera.set_frame_rate_enable(true).expect("Failed to enable frame rate in camera configuration.");
+    camera
+        .set_frame_rate_enable(true)
+        .expect("Failed to enable frame rate in camera configuration.");
 
     // Frame rate.
     camera
         .set_frame_rate(config.frame_rate_hz)
         .expect("Failed to set frame rate in camera configuration.");
 
-    // Resolution.
-    // Use binning to downsample (if necessary) from full resolution
-    // to smaller resolution.
+    // Set region of interest to the entire camera's sensor dimensions.
     camera
         .set_region(0, 0, 4096, 3000)
         .expect("Failed to set resolution in camera configuration.");
-    if camera.is_binning_available().expect("Error: Binning is not available for this camera.") {
-        camera.set_binning(config.resolution.binning(), config.resolution.binning()).expect("Error: Failed to set binning for camera.");
-    }
 
-    // Aperture.
-    // if let Some(aperture) = config.aperture {
-    //     camera.set_float("Iris", aperture).expect("Failed to set iris to aperture value");
-    // }
+    // Resolution. Use binning to downsample from full resolution
+    // to smaller resolution.
+    if camera
+        .is_binning_available()
+        .expect("Error: Binning is not available for this camera.")
+    {
+        camera
+            .set_binning(config.resolution.binning(), config.resolution.binning())
+            .expect("Error: Failed to set binning for camera.");
+    }
 
     // PTP enabling.
     if config.enable_ptp {
@@ -56,25 +58,6 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
     }
 
     // Packet size.
-    // GigE Vision streams camera data over UDP. Automatically setting the packet
-    // size works by sending test packets of decreasing sizes until one gets through
-    // without fragmentation, discovering the Maximum Transmission Unit (MTU), the
-    // largest payload that can travel end-to-end without being split.
-    // Standard Ethernet MTU is about 1500 bytes, but for jumob packets we need
-    // around 8064 bytes. For some reason, automatic packet size negotation isn't
-    // detecting an MTU of higher than 1508, so we configure it manually here.
-
-    // camera
-    //     .gv_auto_packet_size()
-    //     .expect("Failed to automatically set the packet size in camera configuration");
-
-    // println!(
-    //     "Negotiated packet size: {}",
-    //     camera
-    //         .gv_get_packet_size()
-    //         .expect("Failed to read packet size.")
-    // );
-
     camera
         .gv_set_packet_size(8064)
         .expect("Failed to manually set the packet size in camera configuration.");
@@ -90,7 +73,9 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
         .expect("Failed to set the pixel format in camera configuration.");
 
     // Camera gains.
-    camera.set_gain(0.0).expect("Failed to set the gains in camera configuration.");
+    camera
+        .set_gain(0.0)
+        .expect("Failed to set the gains in camera configuration.");
 }
 
 /// Creates Aravis camera stream and allocates frame buffers.

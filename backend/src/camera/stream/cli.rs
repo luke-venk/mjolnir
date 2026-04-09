@@ -1,5 +1,5 @@
-use crate::camera::Resolution;
 use clap::Parser;
+use crate::camera::Resolution;
 
 /// The command line arguments we'd expect for the cameras to live stream.
 #[derive(Parser, Debug, Clone)]

@@ -4,7 +4,6 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-
 use serde::Serialize;
 use serde_json::to_string_pretty;
 
@@ -12,11 +11,6 @@ use serde_json::to_string_pretty;
 pub fn ensure_dir(path: &PathBuf) {
     fs::create_dir_all(path)
         .unwrap_or_else(|e| panic!("Failed to create directory {}: {e}", path.display()));
-}
-
-/// Helper function to create output directory.
-pub fn string_to_pathbuf(path: &String) -> PathBuf {
-    PathBuf::from(path)
 }
 
 /// Helper function to format timestamp string.
@@ -41,23 +35,45 @@ pub fn sanitize_path_name(value: &str) -> String {
         .collect()
 }
 
+/// Metadata for each frame to be recorded as a JSON file,
+/// in addition to raw bytes for the frame.
+#[derive(Debug, Clone, Serialize)]
+pub struct Metadata {
+    pub camera_id: String,
+    pub frame_index: usize,
+    pub width: i32,
+    pub height: i32,
+    pub payload_bytes: usize,
+    pub system_timestamp_ns: u64,
+    pub buffer_timestamp_ns: u64,
+    pub frame_id: u64,
+}
+
+/// Payload that the recording capture thread(s) will send over 
+/// crossbeam channel to writer thread.
+#[derive(Debug, Clone)]
+pub struct Frame {
+    pub output_camera_dir: PathBuf,
+    pub frame_index: usize,
+    pub bytes: Vec<u8>,
+    pub metadata: Metadata,
+}
+
 /// Writes the captured frame and metadata to disk.
-pub fn write_frame_files(
-    output_dir: &PathBuf,
-    camera_id: &str,
+pub fn write_to_disk(
+    output_camera_dir: &PathBuf,
     frame_index: usize,
     data: &[u8],
-    metadata: &FrameMetadata,
+    metadata: &Metadata,
 ) {
-    let basename = format!(
-        "{}_frame_{:06}_{}",
-        sanitize_path_name(camera_id),
+    // Determine file name based on frame index and timestamp.
+    let file_name = format!(
+        "frame_{:06}_{}",
         frame_index,
         timestamp_string()
     );
-
-    let raw_path = output_dir.join(format!("{basename}.raw"));
-    let json_path = output_dir.join(format!("{basename}.json"));
+    let raw_path = output_camera_dir.join(format!("{file_name}.raw"));
+    let json_path = output_camera_dir.join(format!("{file_name}.json"));
 
     let mut raw_file = File::create(&raw_path)
         .unwrap_or_else(|e| panic!("failed to create {}: {e}", raw_path.display()));
@@ -71,19 +87,4 @@ pub fn write_frame_files(
     json_file
         .write_all(json.as_bytes())
         .unwrap_or_else(|e| panic!("failed to write {}: {e}", json_path.display()));
-}
-
-/// Metadata for each frame to be recorded in addition to raw files.
-#[derive(Debug, Serialize)]
-pub struct FrameMetadata {
-    pub camera_id: String,
-    pub frame_index: usize,
-    pub width: i32,
-    pub height: i32,
-    pub payload_bytes: usize,
-    pub system_timestamp_ns: u64,
-    pub buffer_timestamp_ns: u64,
-    pub frame_id: u64,
-    pub exposure_time_us: f64,
-    pub frame_rate_hz: f64,
 }

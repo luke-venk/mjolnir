@@ -57,7 +57,7 @@ bazel run //backend:record-from-one -- --camera <camera> --resolution <resolutio
 
 Example:  
 ```
-bazel run //backend:record-from-one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 100 --frame-rate-hz 5 --output-dir ~/Downloads/camera_out --max-frames 10
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 100 --frame-rate-hz 5 --output-dir ~/Downloads/camera_out --max-frames 10
 ```
 
 ## Record from Both Cameras

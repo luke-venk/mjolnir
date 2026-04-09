@@ -1,6 +1,5 @@
-use crate::camera::Resolution;
-
 use clap::Parser;
+use crate::camera::Resolution;
 
 /// The command line arguments we'd expect for recording, regardless of whether
 /// the user wishes to record with one, or record with both.
@@ -16,12 +15,9 @@ pub struct CommonRecordArgs {
     #[arg(long = "exposure-us", default_value_t = 10000.0)]
     pub exposure_time_us: f64,
 
+    /// Desired frames per second.
     #[arg(long = "frame-rate-hz", default_value_t = 30.0)]
     pub frame_rate_hz: f64,
-
-    /// Optional lens iris feature value. Only applied if the device exposes an Iris feature.
-    #[arg(long)]
-    pub aperture: Option<f64>,
 
     /// The number of buffers the cameras can push frames to, enabling asynchrony.
     #[arg(long, default_value_t = 8)]

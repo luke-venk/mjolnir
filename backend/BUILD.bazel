@@ -105,11 +105,12 @@ rust_binary(
 )
 
 rust_binary(
-    name = "record-from-one",
+    name = "record_from_one",
     srcs = ["src/bin/record_from_one_camera.rs"],
     deps = [
         ":backend_lib",
         "@crates//:clap",
+        "@crates//:crossbeam",
     ]
 )
 
@@ -119,6 +120,7 @@ rust_binary(
     deps = [
         ":backend_lib",
         "@crates//:clap",
+        "@crates//:crossbeam",
     ]
 )
 

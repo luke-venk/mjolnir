@@ -1,13 +1,13 @@
 /// LiveViewApp implementation required for eframe to handle window creation
 /// for our egui to render live streaming.
-use super::FrameData;
-use crate::camera::{CameraIngestConfig, Resolution};
-use eframe::egui;
-use eframe::egui::TextureHandle;
 use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
+use eframe::egui;
+use eframe::egui::TextureHandle;
+use crate::camera::{CameraIngestConfig, Resolution};
+use super::FrameData;
 
 pub struct LiveViewApp {
     // Receiver for the latest frame from the capture thread.
@@ -203,12 +203,11 @@ impl eframe::App for LiveViewApp {
         println!("  - Frame rate (Hz): {}", settings.frame_rate_hz);
         println!();
         println!(
-            "Run the following command to begin recording with the camera with your specs during streaming:"
+            "Run the following command to begin recording with the cameras with your specs during streaming:"
         );
         println!();
         println!(
-            "bazel run //backend:record -- --camera \"{}\" --resolution {} --exposure-us {} --frame-rate-hz {} --output-dir <output-dir> <stop condition>",
-            settings.camera_id,
+            "bazel run //backend:record -- --resolution {} --exposure-us {} --frame-rate-hz {} --output-dir <output-dir> <stop condition>",
             settings.resolution.to_string(),
             settings.exposure_time_us,
             settings.frame_rate_hz,

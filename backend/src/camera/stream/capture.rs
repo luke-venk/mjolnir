@@ -1,15 +1,14 @@
 /// Capture thread that runs alongside UI thread that pulls frames from
 /// Aravis and places them into shared buffer for the UI thread to read.
 use std::sync::{Arc, Mutex};
-
+use aravis::{BufferStatus, CameraExt, StreamExt};
 use super::FrameData;
 use crate::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
 use crate::camera::CameraIngestConfig;
 
-use aravis::{BufferStatus, CameraExt, StreamExt};
-
+/// Live stream from the camera.
 pub fn run_capture_thread(
     config: Arc<Mutex<CameraIngestConfig>>,
     frame_tx: crossbeam::channel::Sender<FrameData>,
@@ -91,12 +90,15 @@ pub fn run_capture_thread(
         match buffer.status() {
             BufferStatus::Success => {
                 let data = copy_buffer_bytes(&buffer);
+                let received_at_ns = buffer.timestamp();
+                stream.push_buffer(buffer);
+                
                 if !data.is_empty() {
                     let frame = FrameData {
                         pixels: data,
                         width: resolution.dimensions().0 as u32,
                         height: resolution.dimensions().1 as u32,
-                        received_at_ns: buffer.timestamp(),
+                        received_at_ns,
                     };
 
                     // Send this captured frame to the UI thread.
@@ -107,8 +109,6 @@ pub fn run_capture_thread(
                 eprintln!("Error: BufferStatus was not a success in streaming.");
             },
         }
-
-        stream.push_buffer(buffer);
     }
 
     // TODO: clean shutdown stop acquisition
