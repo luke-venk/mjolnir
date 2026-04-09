@@ -33,8 +33,12 @@ pub struct RecordFromCamerasArgs {
     pub timeout_ms: u64,
 
     /// Output directory where frames will be written to.
-    #[arg(long)]
+    #[arg(long, visible_alias = "save-recordings-dir")]
     pub output_dir: String,
+
+    /// Optional directory where the recorded H.265 stream will be recovered into PNG frames.
+    #[arg(long)]
+    pub recover_to_png_dir: Option<String>,
 
     /// Stop recording after this many frames per camera.
     #[arg(long)]

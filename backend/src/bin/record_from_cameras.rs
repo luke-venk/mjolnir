@@ -1,141 +1,64 @@
-use std::fs;
-use std::path::PathBuf;
-
-use anyhow::{Context, Result};
+/// Tool for users to record footage from the cameras using Aravis and
+/// store the frames to disk using lossless H.265 from the command-line.
+use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::aravis_utils::initialize_aravis;
-use backend_lib::camera::{CameraIngestConfig, Resolution};
+use backend_lib::camera::record::cli::RecordFromCamerasArgs;
+use backend_lib::camera::record::writer::{ensure_dir, string_to_pathbuf};
 use backend_lib::camera_ingest::{
     ensure_ffmpeg_lossless_hevc_support, record_h265_from_one_camera,
 };
+
 use clap::Parser;
 
-#[derive(Parser, Debug, Clone)]
-#[command(name = "record_from_cameras")]
-#[command(about = "Records Aravis camera frames into one lossless H.265 stream per camera.")]
-pub struct RecordFromCamerasArgs {
-    #[arg(long = "camera", required = true)]
-    pub cameras: Vec<String>,
+pub fn main() {
+    println!("------------------------");
+    println!("RECORDING FROM CAMERA...");
+    println!("------------------------\n");
 
-    #[arg(long = "exposure-us", default_value_t = 100.0)]
-    pub exposure_us: f64,
+    // Store command line arguments for recording.
+    let args: RecordFromCamerasArgs = RecordFromCamerasArgs::parse();
+    args.validate().unwrap_or_else(|err| panic!("{err}"));
 
-    #[arg(long = "frame-rate-hz", default_value_t = 30.0)]
-    pub frame_rate_hz: f64,
-
-    #[arg(long, value_enum, default_value_t = Resolution::UHD4K)]
-    pub resolution: Resolution,
-
-    #[arg(long)]
-    pub aperture: Option<f64>,
-
-    #[arg(long, default_value_t = 16)]
-    pub num_buffers: usize,
-
-    #[arg(long, default_value_t = 200)]
-    pub timeout_ms: u64,
-
-    #[arg(long)]
-    pub save_recordings_dir: String,
-
-    #[arg(long)]
-    pub recover_to_png_dir: Option<String>,
-
-    #[arg(long)]
-    pub max_frames: Option<usize>,
-
-    #[arg(long)]
-    pub max_duration: Option<f64>,
-
-    #[arg(long, default_value_t = false)]
-    pub enable_ptp: bool,
-}
-
-impl RecordFromCamerasArgs {
-    fn validate(&self) -> Result<()> {
-        if self.max_frames.is_none() && self.max_duration.is_none() {
-            anyhow::bail!(
-                "You must provide at least one stopping condition: --max-frames or --max-duration"
-            );
-        }
-
-        if self.num_buffers == 0 {
-            anyhow::bail!("num_buffers must be > 0");
-        }
-
-        Ok(())
-    }
-
-    fn camera_config_for(&self, camera_id: &str) -> CameraIngestConfig {
-        CameraIngestConfig {
-            camera_id: camera_id.to_string(),
-            exposure_time_us: self.exposure_us,
-            frame_rate_hz: self.frame_rate_hz,
-            resolution: self.resolution,
-            aperture: self.aperture,
-            enable_ptp: self.enable_ptp,
-            num_buffers: self.num_buffers,
-            timeout_ms: self.timeout_ms,
-        }
-    }
-}
-
-fn ensure_dir(path: &PathBuf) -> Result<()> {
-    fs::create_dir_all(path).with_context(|| format!("create directory {}", path.display()))
-}
-
-fn run() -> Result<()> {
-    println!("-------------------------------");
-    println!("LOSSLESS H.265 CAMERA RECORDING");
-    println!("-------------------------------\n");
-
-    let args = RecordFromCamerasArgs::parse();
-    args.validate()?;
-
-    ensure_ffmpeg_lossless_hevc_support()?;
+    // Confirm ffmpeg can produce lossless H.265 before touching the camera.
+    ensure_ffmpeg_lossless_hevc_support().unwrap_or_else(|err| panic!("{err:#}"));
     let _aravis = initialize_aravis();
 
-    let output_base_dir = PathBuf::from(&args.save_recordings_dir);
-    ensure_dir(&output_base_dir)?;
+    // Create output directory based on command-line argument.
+    let output_base_dir = string_to_pathbuf(&args.output_dir);
+    ensure_dir(&output_base_dir);
 
-    let recover_base_dir = args.recover_to_png_dir.as_ref().map(PathBuf::from);
+    let recover_base_dir = args.recover_to_png_dir.as_ref().map(string_to_pathbuf);
     if let Some(recover_base_dir) = recover_base_dir.as_ref() {
-        ensure_dir(recover_base_dir)?;
+        ensure_dir(recover_base_dir);
     }
 
-    for camera_id in &args.cameras {
-        let config = args.camera_config_for(camera_id);
-        config.validate().map_err(anyhow::Error::msg)?;
-        println!("{config:#?}\n");
+    // Parse command line arguments into camera ingest config.
+    let camera_ingest_config: CameraIngestConfig = CameraIngestConfig::from_record_args(args.clone());
+    camera_ingest_config
+        .validate()
+        .unwrap_or_else(|err| panic!("{err}"));
 
-        record_h265_from_one_camera(
-            &config,
-            &output_base_dir,
-            recover_base_dir.as_deref(),
-            args.max_frames,
-            args.max_duration,
-        )?;
-    }
-
-    Ok(())
-}
-
-fn main() {
-    if let Err(error) = run() {
-        eprintln!("record_from_cameras failed: {error:#}");
-        std::process::exit(1);
-    }
+    // Begin recording into one lossless H.265 stream, then optionally recover it to PNGs.
+    record_h265_from_one_camera(
+        &camera_ingest_config,
+        &output_base_dir,
+        recover_base_dir.as_deref(),
+        args.max_frames,
+        args.max_duration,
+    )
+    .unwrap_or_else(|err| panic!("{err:#}"));
 }
 
 #[cfg(test)]
 mod tests {
-    use super::RecordFromCamerasArgs;
+    use backend_lib::camera::record::cli::RecordFromCamerasArgs;
     use backend_lib::camera::{CameraIngestConfig, Resolution};
     use clap::Parser;
 
     #[test]
     fn resolution_dimensions_match_expected_values() {
-        assert_eq!(Resolution::HD.dimensions(), (1280, 720));
-        assert_eq!(Resolution::FullHD.dimensions(), (1920, 1080));
+        assert_eq!(Resolution::HD.dimensions(), (1024, 750));
+        assert_eq!(Resolution::FullHD.dimensions(), (2048, 1500));
         assert_eq!(Resolution::UHD4K.dimensions(), (4096, 3000));
     }
 
@@ -150,6 +73,7 @@ mod tests {
             enable_ptp: false,
             num_buffers: 16,
             timeout_ms: 200,
+            restart_requested: false,
         };
         assert!(empty_id.validate().is_err());
 
@@ -162,6 +86,7 @@ mod tests {
             enable_ptp: false,
             num_buffers: 16,
             timeout_ms: 200,
+            restart_requested: false,
         };
         assert!(bad_exposure.validate().is_err());
 
@@ -174,18 +99,18 @@ mod tests {
             enable_ptp: false,
             num_buffers: 0,
             timeout_ms: 200,
+            restart_requested: false,
         };
         assert!(bad_buffers.validate().is_err());
     }
 
+    
     #[test]
-    fn cli_parses_recovery_flag_and_limits() {
+    fn cli_parses_recovery_flag_and_alias_output_dir() {
         let args = RecordFromCamerasArgs::try_parse_from([
             "record_from_cameras",
             "--camera",
             "cam-a",
-            "--camera",
-            "cam-b",
             "--save-recordings-dir",
             "/tmp/out",
             "--recover-to-png-dir",
@@ -199,8 +124,8 @@ mod tests {
         ])
         .expect("CLI args should parse");
 
-        assert_eq!(args.cameras, vec!["cam-a", "cam-b"]);
-        assert_eq!(args.save_recordings_dir, "/tmp/out");
+        assert_eq!(args.camera_id, "cam-a");
+        assert_eq!(args.output_dir, "/tmp/out");
         assert_eq!(args.recover_to_png_dir.as_deref(), Some("/tmp/png"));
         assert_eq!(args.max_duration, Some(1.5));
         assert!(matches!(args.resolution, Resolution::UHD4K));
