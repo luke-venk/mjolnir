@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use crate::camera::CameraIngestConfig;
 use super::writer::{Frame, Metadata, ensure_dir, sanitize_path_name};
@@ -15,6 +17,7 @@ pub fn run_capture_thread(
     frame_tx: crossbeam::channel::Sender<Frame>,
     max_frames: Option<usize>,
     max_duration: Option<f64>,
+    shutdown: Arc<AtomicBool>,
 ) {
     println!("Beginning recording for camera {}.",config.camera_id);
     
@@ -51,6 +54,12 @@ pub fn run_capture_thread(
 
     // Main recording loop.
     loop {
+        // Check shutdown flag.
+        if shutdown.load(Ordering::SeqCst) {
+            println!("Shutting down capture for camera {}.", camera_id);
+            break;
+        }
+
         // Stop streaming if a maximum number of frames was configured and
         // the camera has recorded that many frames.
         if let Some(limit) = max_frames {

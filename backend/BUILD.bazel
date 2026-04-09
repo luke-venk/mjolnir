@@ -111,6 +111,7 @@ rust_binary(
         ":backend_lib",
         "@crates//:clap",
         "@crates//:crossbeam",
+        "@crates//:ctrlc",
     ]
 )
 
@@ -121,6 +122,7 @@ rust_binary(
         ":backend_lib",
         "@crates//:clap",
         "@crates//:crossbeam",
+        "@crates//:ctrlc",
     ]
 )
 
@@ -131,6 +133,7 @@ rust_binary(
         ":backend_lib",
         "@crates//:clap",
         "@crates//:crossbeam",
+        "@crates//:ctrlc",
         "@crates//:eframe",
         "@crates//:egui",
     ]

@@ -10,6 +10,7 @@
 /// requires a main thread, not a background thread, for windowing systems
 /// like the egui UI.
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use clap::Parser;
 use eframe::egui;
@@ -35,9 +36,17 @@ fn main() -> eframe::Result<()> {
     // to the UI thread (receiver).
     let (frame_tx, frame_rx) = crossbeam::channel::bounded::<FrameData>(100);
 
+    // Shared shutdown flag set by Ctrl+C handler.
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_clone = Arc::clone(&shutdown);
+    ctrlc::set_handler(move || {
+        println!("\nShutdown signal received, stopping recording...");
+        shutdown_clone.store(true, Ordering::SeqCst);
+    }).expect("Error setting Ctrl+C handler.");
+
     // Spawn capture thread.
     thread::spawn(move || {
-        run_capture_thread(camera_settings_clone, frame_tx);
+        run_capture_thread(camera_settings_clone, frame_tx, Arc::clone(&shutdown));
     });
 
     // Set up eframe.

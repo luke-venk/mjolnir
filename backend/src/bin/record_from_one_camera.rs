@@ -1,6 +1,8 @@
 /// Tool for users to record footage from one camera using Aravis and
 /// store the frames to disk using the command-line.
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use clap::Parser;
 use backend_lib::camera::CameraIngestConfig;
@@ -31,6 +33,14 @@ pub fn main() {
     // write thread.
     let (frame_tx, frame_rx) = crossbeam::channel::bounded::<Frame>(100);
 
+    // Shared shutdown flag set by Ctrl+C handler.
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_clone = Arc::clone(&shutdown);
+    ctrlc::set_handler(move || {
+        println!("\nShutdown signal received, stopping recording...");
+        shutdown_clone.store(true, Ordering::SeqCst);
+    }).expect("Error setting Ctrl+C handler.");
+
     // Spawn capture thread.
     let record_handle = thread::spawn(move || {
         run_capture_thread(
@@ -39,6 +49,7 @@ pub fn main() {
             frame_tx,
             args.common_args.max_frames,
             args.common_args.max_duration,
+            Arc::clone(&shutdown),
         );
     });
 

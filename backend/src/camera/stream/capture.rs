@@ -1,6 +1,7 @@
 /// Capture thread that runs alongside UI thread that pulls frames from
 /// Aravis and places them into shared buffer for the UI thread to read.
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use aravis::{BufferStatus, CameraExt, StreamExt};
 use super::FrameData;
 use crate::camera::aravis_utils::{
@@ -12,6 +13,7 @@ use crate::camera::CameraIngestConfig;
 pub fn run_capture_thread(
     config: Arc<Mutex<CameraIngestConfig>>,
     frame_tx: crossbeam::channel::Sender<FrameData>,
+    shutdown: Arc<AtomicBool>,
 ) {
     // Lock settings mutex briefly to read values.
     let (camera_id, num_buffers, timeout_ms, resolution) = match config.lock() {
@@ -50,6 +52,12 @@ pub fn run_capture_thread(
 
     // Live streaming loop.
     loop {
+        // Check shutdown flag.
+        if shutdown.load(Ordering::SeqCst) {
+            println!("Shutting down capture for camera {}.", camera_id);
+            break;
+        }
+
         // Briefly lock camera settings mutex to check whether a restart was requested or not.
         let restart =  {
             let mut settings = config.lock().expect("Error: Failed to lock camera settings mutex.");
