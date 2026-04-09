@@ -3,7 +3,6 @@
 use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::aravis_utils::initialize_aravis;
 use backend_lib::camera::record::cli::RecordWithOneCameraArgs;
-use backend_lib::camera::record::compression::ensure_ffmpeg_lossless_hevc_support;
 use backend_lib::camera::record::record_from_one_camera;
 use backend_lib::camera::record::writer::{ensure_dir, string_to_pathbuf};
 
@@ -19,10 +18,6 @@ pub fn main() {
     args.common_args
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
-
-    if args.common_args.compress {
-        ensure_ffmpeg_lossless_hevc_support().unwrap_or_else(|err| panic!("{err:#}"));
-    }
 
     // Create output directory based on command-line argument.
     let output_base_dir = string_to_pathbuf(&args.common_args.output_dir);
@@ -45,7 +40,7 @@ pub fn main() {
 
     let _aravis = initialize_aravis();
 
-    // Begin recording, optionally routing through the lossless H.265 helper.
+    // Begin recording, optionally writing compressed per-frame output.
     record_from_one_camera(
         &camera_ingest_config,
         &output_base_dir,

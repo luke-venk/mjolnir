@@ -97,16 +97,16 @@ crate.spec(
     version = "0.1",
 )
 crate.spec(
+    package = "png",
+    version = "0.18.0",
+)
+crate.spec(
     package = "rust-embed",
     version = "8.11.0",
     features = [
         "debug-embed",
         "interpolate-folder-path",
     ],
-)
-crate.spec(
-    package = "scuffle-h265",
-    version = "0.2.2",
 )
 crate.spec(
     package = "serde",
@@ -130,6 +130,10 @@ crate.spec(
     package = "tower-http",
     version = "0.6.8",
     features = ["cors"],
+)
+crate.spec(
+    package = "zstd",
+    version = "0.13.3",
 )
 
 crate.from_specs(

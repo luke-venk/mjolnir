@@ -6,9 +6,9 @@ use clap::{ArgAction, Parser};
 /// the user wishes to record with one, or record with both.
 #[derive(Parser, Debug, Clone)]
 #[command(name = "common_record_args")]
-#[command(about = "Records Aravis camera frames into an output directory, optionally via lossless H.265.")]
+#[command(about = "Records Aravis camera frames into an output directory, optionally via per-frame lossless compression.")]
 pub struct CommonRecordArgs {
-    /// Whether to stream frames into a lossless H.265 file instead of raw per-frame dumps.
+    /// Whether to write losslessly compressed per-frame files instead of raw per-frame dumps.
     #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub compress: bool,
 
@@ -39,7 +39,7 @@ pub struct CommonRecordArgs {
     #[arg(long, visible_alias = "save-recordings-dir")]
     pub output_dir: String,
 
-    /// Optional directory where the recorded H.265 stream will be recovered into PNG frames.
+    /// Optional directory where compressed recordings will be recovered into PNG frames.
     #[arg(long)]
     pub recover_to_png_dir: Option<String>,
 

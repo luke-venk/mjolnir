@@ -2,11 +2,13 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::camera::CameraIngestConfig;
+use super::compression::{
+    COMPRESSED_FRAME_EXTENSION, compress_mono8_frame, recover_compressed_dir_to_pngs,
+};
 use super::writer::{FrameMetadata, ensure_dir, sanitize_path_name, write_frame_files};
 use crate::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
-use super::compression::record_h265_from_one_camera;
 
 use aravis::{BufferStatus, CameraExt, StreamExt};
 
@@ -18,24 +20,15 @@ pub fn record_from_one_camera(
     max_frames: Option<usize>,
     max_duration: Option<f64>,
 ) {
-    if config.compress {
-        // When compression is on, route frames into one long-lived lossless H.265 stream.
-        record_h265_from_one_camera(
-            config,
-            output_base_dir,
-            recover_base_dir.map(|path| path.as_path()),
-            max_frames,
-            max_duration,
-        )
-        .unwrap_or_else(|err| panic!("{err:#}"));
-        return;
-    }
-
     println!("Beginning recording for camera {}.",config.camera_id);
 
     // Ensures that output directory for this specific camera exists.
     let output_camera_dir = output_base_dir.join(sanitize_path_name(&config.camera_id));
     ensure_dir(&output_camera_dir);
+    let recover_camera_dir = recover_base_dir.map(|base| base.join(sanitize_path_name(&config.camera_id)));
+    if let Some(recover_camera_dir) = recover_camera_dir.as_ref() {
+        ensure_dir(recover_camera_dir);
+    }
 
     // Create Aravis camera, apply configuration, start stream, and queue buffers.
     let camera = match create_camera(&config.camera_id) {
@@ -109,13 +102,6 @@ pub fn record_from_one_camera(
         // If loading the buffer worked, copy the frame buffer into raw bytes.
         match buffer.status() {
             BufferStatus::Success => {
-                let elapsed_since_start = start_time.elapsed();
-                println!(
-                    "Frame {} received at {:.2}s",
-                    frames_saved,
-                    elapsed_since_start.as_secs_f64()
-                );
-
                 let data = copy_buffer_bytes(&buffer);
 
                 if data.is_empty() {
@@ -138,17 +124,37 @@ pub fn record_from_one_camera(
                     frame_rate_hz: config.frame_rate_hz,
                 };
 
-                // Write the frame's raw bytes and metadata to file.
-                let _written = write_frame_files(
-                    &output_camera_dir,
-                    &config.camera_id,
-                    frames_saved,
-                    &data,
-                    &metadata,
-                    "raw",
-                );
+                // Write either the raw frame bytes or their compressed form to disk.
+                if config.compress {
+                    let compressed = compress_mono8_frame(&data)
+                        .unwrap_or_else(|err| panic!("failed to compress frame {}: {err:#}", frames_saved));
+                    let _written = write_frame_files(
+                        &output_camera_dir,
+                        &config.camera_id,
+                        frames_saved,
+                        &compressed,
+                        &metadata,
+                        COMPRESSED_FRAME_EXTENSION,
+                    );
+                } else {
+                    let _written = write_frame_files(
+                        &output_camera_dir,
+                        &config.camera_id,
+                        frames_saved,
+                        &data,
+                        &metadata,
+                        "raw",
+                    );
+                }
 
                 frames_saved += 1;
+
+                if frames_saved % 10 == 0 {
+                    println!(
+                        "Camera {}: saved {} frame(s)",
+                        config.camera_id, frames_saved
+                    );
+                }
             }
             status => {
                 eprintln!(
@@ -162,6 +168,18 @@ pub fn record_from_one_camera(
     }
 
     let _ = camera.stop_acquisition();
+    if config.compress {
+        if let Some(recover_camera_dir) = recover_camera_dir.as_ref() {
+            let recovered = recover_compressed_dir_to_pngs(&output_camera_dir, recover_camera_dir)
+                .unwrap_or_else(|err| panic!("{err:#}"));
+            println!(
+                "Recovered {} PNG frame(s) for camera {} into {}",
+                recovered,
+                config.camera_id,
+                recover_camera_dir.display()
+            );
+        }
+    }
     println!(
         "Finished recording from camera {}. Saved {} frame(s) into {}",
         config.camera_id,

@@ -21,11 +21,12 @@ rust_library(
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:eframe",
-        "@crates//:scuffle-h265",
+        "@crates//:png",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
         "@crates//:tower-http",
+        "@crates//:zstd",
     ],
 )
 

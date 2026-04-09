@@ -5,7 +5,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::to_writer;
 
 /// Helper function to ensure output directory exists.
@@ -103,7 +103,7 @@ pub fn write_frame_files(
 }
 
 /// Metadata for each frame to be recorded in addition to raw files.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FrameMetadata {
     pub camera_id: String,
     pub frame_index: usize,
