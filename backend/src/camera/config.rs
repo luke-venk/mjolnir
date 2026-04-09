@@ -74,6 +74,7 @@ pub enum Resolution {
     HD,
     #[value(name = "1080p")]
     FullHD,
+    // Atlas capture uses the full 12.3 MP mono frame even though the CLI flag stays `4k`.
     #[value(name = "4k")]
     UHD4K,
 }
@@ -83,7 +84,7 @@ impl Resolution {
         match self {
             Resolution::HD => (1280, 720),
             Resolution::FullHD => (1920, 1080),
-            Resolution::UHD4K => (3840, 2160),
+            Resolution::UHD4K => (4096, 3000),
         }
     }
 }
