@@ -6,6 +6,7 @@ use super::writer::{FrameMetadata, ensure_dir, sanitize_path_name, write_frame_f
 use crate::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
+use super::compression::record_h265_from_one_camera;
 
 use aravis::{BufferStatus, CameraExt, StreamExt};
 
@@ -13,9 +14,23 @@ use aravis::{BufferStatus, CameraExt, StreamExt};
 pub fn record_from_one_camera(
     config: &CameraIngestConfig,
     output_base_dir: &PathBuf,
+    recover_base_dir: Option<&PathBuf>,
     max_frames: Option<usize>,
     max_duration: Option<f64>,
 ) {
+    if config.compress {
+        // When compression is on, route frames into one long-lived lossless H.265 stream.
+        record_h265_from_one_camera(
+            config,
+            output_base_dir,
+            recover_base_dir.map(|path| path.as_path()),
+            max_frames,
+            max_duration,
+        )
+        .unwrap_or_else(|err| panic!("{err:#}"));
+        return;
+    }
+
     println!("Beginning recording for camera {}.",config.camera_id);
 
     // Ensures that output directory for this specific camera exists.
@@ -124,12 +139,13 @@ pub fn record_from_one_camera(
                 };
 
                 // Write the frame's raw bytes and metadata to file.
-                write_frame_files(
+                let _written = write_frame_files(
                     &output_camera_dir,
                     &config.camera_id,
                     frames_saved,
                     &data,
                     &metadata,
+                    "raw",
                 );
 
                 frames_saved += 1;

@@ -15,11 +15,13 @@ rust_library(
         "//conditions:default": [],
     }),
     deps = [
+        "@crates//:anyhow",
         "@crates//:aravis",
         "@crates//:axum",
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:eframe",
+        "@crates//:scuffle-h265",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
@@ -118,6 +120,16 @@ rust_binary(
     srcs = ["src/bin/record_from_both_cameras.rs"],
     deps = [
         ":backend_lib",
+        "@crates//:clap",
+    ]
+)
+
+rust_binary(
+    name = "recover_h265_to_png",
+    srcs = ["src/bin/recover_h265_to_png.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:anyhow",
         "@crates//:clap",
     ]
 )
