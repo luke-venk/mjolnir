@@ -1,6 +1,6 @@
 /// Shared code for interacting with Aravis library, used by both
 /// discovery and recording tools.
-use std::{i32, slice};
+use std::slice;
 
 use crate::camera::CameraIngestConfig;
 use aravis::prelude::*;

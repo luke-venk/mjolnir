@@ -9,16 +9,10 @@
 /// which blocks the capture thread, and two, because macOS specifically
 /// requires a main thread, not a background thread, for windowing systems
 /// like the egui UI.
-/// 
-/// Also note, there are a bunch of different configs now. It could be argued
-/// that having both CameraIngestConfig and CameraSettings is redundant, but
-/// I think it works for separating what is needed for what (CameraIngestConfig
-/// needed for streaming, CameraSettings just needed for user to control 
-/// sliders).
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use backend_lib::camera::stream::{CameraSettings, FrameData, LiveViewApp};
+use backend_lib::camera::stream::{FrameData, LiveViewApp};
 use backend_lib::camera::stream::capture::run_capture_thread;
 use backend_lib::camera::CameraIngestConfig;
 
@@ -34,23 +28,20 @@ fn main() -> eframe::Result<()> {
     // Parse command-line arguments and create camera configuration.
     let args: StreamFromCamerasArgs = StreamFromCamerasArgs::parse();
     let camera_ingest_config: CameraIngestConfig = CameraIngestConfig::from_stream_args(args.clone());
-    let camera_ingest_config_clone: CameraIngestConfig = camera_ingest_config.clone();
+
+    // Create shared camera ingest config object to be shared between the 2 threads.
+    let camera_settings = Arc::new(Mutex::new(camera_ingest_config));
+    let camera_settings_clone = Arc::clone(&camera_settings);
 
     // Create shared latest frame to be shared between the UI thread (this one)
     // and the capture thread.
     let latest_frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
     let latest_frame_clone = Arc::clone(&latest_frame);
 
-    // Create shared camera settings to be shared between the 2 threads.
-    let camera_settings = Arc::new(Mutex::new(CameraSettings::new(
-        camera_ingest_config.exposure_time_us,
-        camera_ingest_config.frame_rate_hz,
-    )));
-    let camera_settings_clone = camera_settings.clone();
 
     // Spawn capture thread on new thread.
     thread::spawn(move || {
-        run_capture_thread(camera_ingest_config_clone, latest_frame_clone, camera_settings_clone);
+        run_capture_thread(camera_settings_clone, latest_frame_clone);
     });
 
     // Set up eframe.

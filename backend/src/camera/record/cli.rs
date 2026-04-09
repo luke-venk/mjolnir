@@ -11,8 +11,8 @@ pub struct RecordFromCamerasArgs {
     pub camera_id: String,
 
     /// Exposure time in microseconds.
-    #[arg(long = "exposure-us", default_value_t = 100.0)]
-    pub exposure_us: f64,
+    #[arg(long = "exposure-us", default_value_t = 10000.0)]
+    pub exposure_time_us: f64,
 
     #[arg(long = "frame-rate-hz", default_value_t = 30.0)]
     pub frame_rate_hz: f64,
@@ -45,7 +45,7 @@ pub struct RecordFromCamerasArgs {
     pub max_duration: Option<f64>,
 
     /// Whether to enable Precision Time Protocol if supported by the device.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = true)]
     pub enable_ptp: bool,
 }
 

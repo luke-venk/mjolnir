@@ -27,7 +27,7 @@ impl CameraIngestConfig {
     pub fn from_record_args(args: RecordFromCamerasArgs) -> Self {
         Self {
             camera_id: args.camera_id,
-            exposure_time_us: args.exposure_us,
+            exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,
             aperture: args.aperture,
@@ -40,7 +40,7 @@ impl CameraIngestConfig {
     pub fn from_stream_args(args: StreamFromCamerasArgs) -> Self {
         Self {
             camera_id: args.camera_id,
-            exposure_time_us: args.exposure_us,
+            exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,
             aperture: None,
@@ -68,7 +68,7 @@ impl CameraIngestConfig {
 }
 
 /// Different resolutions we might want to record with.
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 pub enum Resolution {
     #[value(name = "720p")]
     HD,
@@ -93,6 +93,14 @@ impl Resolution {
             Resolution::HD => 4,
             Resolution::FullHD => 2,
             Resolution::UHD4K => 1,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            Resolution::HD => "720p".to_string(),
+            Resolution::FullHD => "1080p".to_string(),
+            Resolution::UHD4K => "4k".to_string(),
         }
     }
 }

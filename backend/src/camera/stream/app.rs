@@ -1,8 +1,9 @@
-use super::{CameraSettings, FrameData};
-use eframe::egui;
-use eframe::egui::TextureHandle;
 /// LiveViewApp implementation required for eframe to handle window creation
 /// for our egui to render live streaming.
+use super::FrameData;
+use crate::camera::{CameraIngestConfig, Resolution};
+use eframe::egui;
+use eframe::egui::TextureHandle;
 use std::{
     sync::{Arc, Mutex},
     time::Instant,
@@ -20,32 +21,21 @@ pub struct LiveViewApp {
 
     // Camera settings to be shared with this UI thread and background
     // capture thread. Stores settings that can be controlled
-    // by the user.
-    pub camera_settings: Arc<Mutex<CameraSettings>>,
-    // Camera shutter speed, controlled via slider.
-    pub shutter_speed: f64,
-    // Desired frames per second, controlled via slider.
-    pub desired_frame_rate: f64,
+    // by the user, like camera name, shutter speed, and desired frame rate.
+    pub camera_settings: Arc<Mutex<CameraIngestConfig>>,
 }
 
 impl LiveViewApp {
     pub fn new(
         latest_frame: Arc<Mutex<Option<FrameData>>>,
-        camera_settings: Arc<Mutex<CameraSettings>>,
+        camera_settings: Arc<Mutex<CameraIngestConfig>>,
     ) -> Self {
-        let settings = camera_settings.lock().unwrap();
-        let shutter_speed = settings.exposure_us;
-        let desired_frame_rate = settings.frame_rate_hz;
-        drop(settings);
-
         Self {
             latest_frame,
             actual_frame_rate: 0.0,
             last_frame_time: None,
             texture: None,
             camera_settings,
-            shutter_speed,
-            desired_frame_rate,
         }
     }
 }
@@ -104,25 +94,25 @@ impl eframe::App for LiveViewApp {
             });
             ui.add_space(8.0);
 
-            // Show sliders for user control of camera intrinsics.
+            // Show elements for user control of camera intrinsics.
             ui.horizontal(|ui| {
+                let mut settings = self.camera_settings.lock().expect("Error: Failed to unlock camera settings mutex.");
+
+                // Slider for exposure time.
                 ui.label("Exposure time (µs):");
-                let shutter_speed_slider = ui.add(egui::Slider::new(&mut self.shutter_speed, 25.4..=20000.0));
+                ui.add(egui::Slider::new(&mut settings.exposure_time_us, 25.4..=20000.0));
 
                 ui.add_space(16.0);
-                ui.label("Desired frame rate (Hz):");
-                let frame_rate_slider = ui.add(egui::Slider::new(&mut self.desired_frame_rate, 1.0..=42.5));
 
-                // If either the sliders for exposure time or FPS were changed, update the shared camera settings
-                // so capture thread can update the stream.
-                if shutter_speed_slider.changed() || frame_rate_slider.changed() {
-                    if let Ok(mut lock) = self.camera_settings.lock() {
-                        *lock = CameraSettings::new(
-                            self.shutter_speed,
-                            self.desired_frame_rate,
-                        );
-                    }
-                }
+                // Slider for desired frame rate.
+                ui.label("Desired frame rate (Hz):");
+                ui.add(egui::Slider::new(&mut settings.frame_rate_hz, 1.0..=42.5));
+
+                // Button for resolution.
+                ui.label("Resolution:");
+                ui.selectable_value(&mut settings.resolution, Resolution::HD, "720p");
+                ui.selectable_value(&mut settings.resolution, Resolution::FullHD, "1080p");
+                ui.selectable_value(&mut settings.resolution, Resolution::UHD4K, "4k");
             });
             ui.add_space(8.0);
 
@@ -140,11 +130,43 @@ impl eframe::App for LiveViewApp {
             ui.add_space(4.0);
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new(format!("Actual FPS: {:.1}", self.actual_frame_rate)).size(14.0));
+                ui.label(
+                    egui::RichText::new(format!("Actual FPS: {:.1}", self.actual_frame_rate))
+                        .size(14.0),
+                );
             });
         });
 
         // Update the UI.
         ui.ctx().request_repaint();
+
+        // If user clicks Cmd + W, close window.
+        if ui
+            .ctx()
+            .input(|i| i.modifiers.command && i.key_pressed(egui::Key::W))
+        {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    }
+
+    /// When the user closes the window, spit out the command that would begin recording
+    /// with the camera intrinsics they currently had selected.
+    fn on_exit(&mut self) {
+        let settings = self.camera_settings.lock().expect("Error: Failed to unlock camera settings mutex.");
+        println!();
+        println!(
+            "Streaming stopped. See below the specs you had configured when closing:"
+        );
+        println!("  - Exposure time (nanoseconds): {}", settings.exposure_time_us);
+        println!("  - Frame rate (Hz): {}", settings.frame_rate_hz);
+        println!();
+        println!("Run the following command to begin recording with the camera with your specs during streaming:");
+        println!();
+        println!("bazel run //backend:record -- --camera \"{}\" --resolution {} --exposure-us {} --frame-rate-hz {} --output-dir <output-dir> <stop condition>", 
+            settings.camera_id,
+            settings.resolution.to_string(),
+            settings.exposure_time_us,
+            settings.frame_rate_hz,
+        );
     }
 }

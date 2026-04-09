@@ -7,26 +7,26 @@ use crate::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
 use crate::camera::CameraIngestConfig;
-use crate::camera::stream::CameraSettings;
 use aravis::{BufferStatus, CameraExt, StreamExt};
 
 pub fn run_capture_thread(
-    config: CameraIngestConfig,
+    config: Arc<Mutex<CameraIngestConfig>>,
     latest_frame: Arc<Mutex<Option<FrameData>>>,
-    camera_settings: Arc<Mutex<CameraSettings>>,
 ) {
-    println!("Capture thread started for camera: {}", config.camera_id);
+    let settings = config.lock().expect("Error: Failed to unlock camera settings");
+    
+    println!("Capture thread started for camera: {}", settings.camera_id);
 
     // Create Aravis camera, apply configuration, start stream, and queue buffers.
-    let camera = match create_camera(&config.camera_id) {
+    let camera = match create_camera(&settings.camera_id) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{e}");
             return;
         },
     };
-    configure_camera(&camera, &config);
-    let stream = create_stream_and_allocate_buffers(&camera, config.num_buffers);
+    configure_camera(&camera, &settings.clone());
+    let stream = create_stream_and_allocate_buffers(&camera, settings.num_buffers);
 
     // Start Aravis camera aquisition.
     camera
@@ -37,13 +37,9 @@ pub fn run_capture_thread(
 
     // Live streaming loop.
     loop {
-        // Debug statement to check if slider changed values here.
-        println!("Exposure time (µs): {}", camera_settings.lock().unwrap().exposure_us);
-        println!("Frame rate (Hz): {}", camera_settings.lock().unwrap().frame_rate_hz);
-
         // Load camera buffer.
         // Block current thread until frame buffer delivered or the timeout elapses.
-        let buffer = match stream.timeout_pop_buffer(config.timeout_ms * 1000) {
+        let buffer = match stream.timeout_pop_buffer(settings.timeout_ms * 1000) {
             Some(b) => b,
             None => {
                 eprintln!("Error: timeout_pop_buffer() timed out during streaming!");
@@ -58,8 +54,8 @@ pub fn run_capture_thread(
                 if !data.is_empty() {
                     let frame = FrameData {
                         pixels: data,
-                        width: config.resolution.dimensions().0 as u32,
-                        height: config.resolution.dimensions().1 as u32,
+                        width: settings.resolution.dimensions().0 as u32,
+                        height: settings.resolution.dimensions().1 as u32,
                         received_at_ns: buffer.timestamp(),
                     };
 
@@ -79,4 +75,6 @@ pub fn run_capture_thread(
 
         stream.push_buffer(buffer);
     }
+
+    // TODO: clean shutdown stop acquisition
 }

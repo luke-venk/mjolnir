@@ -18,6 +18,8 @@ We have 2 binaries related to using the cameras.
 3. Attach the lenses to the cameras
 4. Connect the laptop to the switch using the USB-Ethernet Network Adapter
 
+Note that we had to configure the switch to... TODO
+
 ## Discover Cameras
 This program is uses to discover cameras on the local area network (LAN).
 
@@ -33,10 +35,6 @@ Note that it takes up to a few minutes for the laptop, once plugged in, to be ab
 
 ## Record from Cameras
 To run the auxiliary binary for recording from the discovered cameras on the LAN, run the following command:
-```
-bazel run //backend:record -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 25.4 --frame-rate-hz 30 --save-recordings-dir ~/Downloads/camera_out --max-frames 100
-```
-
 ```
 bazel run //backend:record -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 100 --frame-rate-hz 5 --output-dir ~/Downloads/camera_out --max-frames 10
 ```

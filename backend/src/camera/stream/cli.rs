@@ -15,7 +15,7 @@ pub struct StreamFromCamerasArgs {
     
     // Exposure time to start with (microseconds).
     #[arg(long = "exposure-us", default_value_t = 10000.0)]
-    pub exposure_us: f64,
+    pub exposure_time_us: f64,
 
     // Frame rate to start with.
     #[arg(long = "frame-rate-hz", default_value_t = 15.0)]
