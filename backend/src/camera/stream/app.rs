@@ -87,11 +87,17 @@ impl eframe::App for LiveViewApp {
 
             // Show elements for user control of camera intrinsics.
             ui.horizontal(|ui| {
-                let mut settings = self.camera_settings.lock().expect("Error: Failed to unlock camera settings mutex.");
+                let mut settings = self
+                    .camera_settings
+                    .lock()
+                    .expect("Error: Failed to lock camera settings mutex.");
 
                 // Slider for exposure time.
                 ui.label("Exposure time (µs):");
-                ui.add(egui::Slider::new(&mut settings.exposure_time_us, 25.4..=20000.0));
+                ui.add(egui::Slider::new(
+                    &mut settings.exposure_time_us,
+                    25.4..=20000.0,
+                ));
 
                 ui.add_space(16.0);
 
@@ -104,6 +110,47 @@ impl eframe::App for LiveViewApp {
                 ui.selectable_value(&mut settings.resolution, Resolution::HD, "720p");
                 ui.selectable_value(&mut settings.resolution, Resolution::FullHD, "1080p");
                 ui.selectable_value(&mut settings.resolution, Resolution::UHD4K, "4k");
+            });
+            ui.add_space(8.0);
+
+            // Buttons to restart stream and quit the app.
+            ui.horizontal(|ui| {
+                // Button to restart stream and apply new specifications.
+                {
+                    let mut settings = self
+                        .camera_settings
+                        .lock()
+                        .expect("Error: Failed to lock camera settings mutex.");
+
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("Apply Changes").color(egui::Color32::BLACK),
+                            )
+                            .fill(egui::Color32::from_rgb(46, 196, 29))
+                            .stroke(egui::Stroke::new(2.0, egui::Color32::BLACK))
+                            .min_size(egui::vec2(120.0, 40.0)),
+                        )
+                        .clicked()
+                    {
+                        settings.restart_requested = true;
+                    }
+                }
+
+                // Button to quit app.
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("Quit Stream").color(egui::Color32::BLACK),
+                        )
+                        .fill(egui::Color32::from_rgb(237, 33, 33))
+                        .stroke(egui::Stroke::new(2.0, egui::Color32::BLACK))
+                        .min_size(egui::vec2(120.0, 40.0)),
+                    )
+                    .clicked()
+                {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
             });
             ui.add_space(8.0);
 
@@ -143,17 +190,24 @@ impl eframe::App for LiveViewApp {
     /// When the user closes the window, spit out the command that would begin recording
     /// with the camera intrinsics they currently had selected.
     fn on_exit(&mut self) {
-        let settings = self.camera_settings.lock().expect("Error: Failed to unlock camera settings mutex.");
+        let settings = self
+            .camera_settings
+            .lock()
+            .expect("Error: Failed to lock camera settings mutex.");
         println!();
+        println!("Streaming stopped. See below the specs you had configured when closing:");
         println!(
-            "Streaming stopped. See below the specs you had configured when closing:"
+            "  - Exposure time (nanoseconds): {}",
+            settings.exposure_time_us
         );
-        println!("  - Exposure time (nanoseconds): {}", settings.exposure_time_us);
         println!("  - Frame rate (Hz): {}", settings.frame_rate_hz);
         println!();
-        println!("Run the following command to begin recording with the camera with your specs during streaming:");
+        println!(
+            "Run the following command to begin recording with the camera with your specs during streaming:"
+        );
         println!();
-        println!("bazel run //backend:record -- --camera \"{}\" --resolution {} --exposure-us {} --frame-rate-hz {} --output-dir <output-dir> <stop condition>", 
+        println!(
+            "bazel run //backend:record -- --camera \"{}\" --resolution {} --exposure-us {} --frame-rate-hz {} --output-dir <output-dir> <stop condition>",
             settings.camera_id,
             settings.resolution.to_string(),
             settings.exposure_time_us,

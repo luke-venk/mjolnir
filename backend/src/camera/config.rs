@@ -21,6 +21,9 @@ pub struct CameraIngestConfig {
     pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
+
+    // Tool to request streaming restart if specifications are changed.
+    pub restart_requested: bool,
 }
 
 impl CameraIngestConfig {
@@ -34,6 +37,7 @@ impl CameraIngestConfig {
             enable_ptp: args.enable_ptp,
             num_buffers: args.num_buffers,
             timeout_ms: args.timeout_ms,
+            restart_requested: false,
         }
     }
 
@@ -47,6 +51,7 @@ impl CameraIngestConfig {
             enable_ptp: false,
             num_buffers: 8,
             timeout_ms: 5000,
+            restart_requested: false,
         }
     }
     
