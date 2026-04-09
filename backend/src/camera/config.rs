@@ -19,6 +19,7 @@ pub struct CameraIngestConfig {
     pub aperture: Option<f64>,
 
     // System-level config.
+    pub compress: bool,
     pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
@@ -31,6 +32,7 @@ impl CameraIngestConfig {
     pub fn from_record_one_args(args: RecordWithOneCameraArgs) -> Self {
         Self {
             camera_id: args.camera_id,
+            compress: args.common_args.compress,
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
@@ -45,6 +47,7 @@ impl CameraIngestConfig {
     pub fn from_record_both_args(camera_id: String, args: RecordWithBothCamerasArgs) -> Self {
         Self {
             camera_id,
+            compress: args.common_args.compress,
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
@@ -59,6 +62,7 @@ impl CameraIngestConfig {
     pub fn from_stream_args(args: StreamFromCamerasArgs) -> Self {
         Self {
             camera_id: args.camera_id,
+            compress: false,
             exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,

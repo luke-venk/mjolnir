@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use backend_lib::camera_ingest::recover_h265_to_png;
+use backend_lib::camera::record::compression::{recover_h265_dir_to_pngs, recover_h265_to_png};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -17,10 +17,13 @@ struct RecoverH265Args {
 
 fn run() -> Result<()> {
     let args = RecoverH265Args::parse();
-    let summary = recover_h265_to_png(
-        &PathBuf::from(&args.h265_path),
-        &PathBuf::from(&args.output_dir),
-    )?;
+    let h265_path = PathBuf::from(&args.h265_path);
+    let output_dir = PathBuf::from(&args.output_dir);
+    let summary = if h265_path.is_dir() {
+        recover_h265_dir_to_pngs(&h265_path, &output_dir)?
+    } else {
+        recover_h265_to_png(&h265_path, &output_dir)?
+    };
 
     match (summary.width, summary.height) {
         (Some(width), Some(height)) => println!(
