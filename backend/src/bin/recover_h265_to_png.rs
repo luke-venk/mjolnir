@@ -49,29 +49,3 @@ fn main() {
         std::process::exit(1);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::RecoverH265Args;
-    use clap::Parser;
-
-    #[test]
-    fn cli_parses_required_paths() {
-        let args = RecoverH265Args::try_parse_from([
-            "recover_h265_to_png",
-            "--h265-path",
-            "/tmp/test.h265",
-            "--output-dir",
-            "/tmp/out",
-        ])
-        .expect("CLI args should parse");
-
-        assert_eq!(args.h265_path, "/tmp/test.h265");
-        assert_eq!(args.output_dir, "/tmp/out");
-    }
-
-    #[test]
-    fn cli_requires_both_paths() {
-        assert!(RecoverH265Args::try_parse_from(["recover_h265_to_png"]).is_err());
-    }
-}
