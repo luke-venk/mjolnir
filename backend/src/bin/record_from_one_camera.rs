@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::thread;
 use clap::Parser;
 use backend_lib::camera::CameraIngestConfig;
@@ -19,8 +20,13 @@ pub fn main() {
     let args: RecordWithOneCameraArgs = RecordWithOneCameraArgs::parse();
     args.common_args.validate().unwrap_or_else(|err| panic!("{err}"));
 
-    // Create output directory based on command-line argument.
-    let output_base_dir = PathBuf::from(&args.common_args.output_dir);
+    // Create output directory based on command-line argument, with timestamp
+    // so each recording session is stored in its own directory.
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Error: Failed to get system time.")
+        .as_secs();
+    let output_base_dir = PathBuf::from(&args.common_args.output_dir).join(timestamp.to_string());
     ensure_dir(&output_base_dir);
 
     // Parse command line arguments into camera ingest config.

@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::thread;
 use clap::Parser;
 use backend_lib::camera::CameraIngestConfig;
@@ -23,10 +24,13 @@ pub fn main() {
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
 
-    // Create output directory based on command-line argument.
-    // TODO: should have output directory include timestamp for beginning
-    // of recording, so frames associated with a given throw are stored together.
-    let output_base_dir = PathBuf::from(&args.common_args.output_dir);
+    // Create output directory based on command-line argument, with timestamp
+    // so each recording session is stored in its own directory.
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Error: Failed to get system time.")
+        .as_secs();
+    let output_base_dir = PathBuf::from(&args.common_args.output_dir).join(timestamp.to_string());
     let output_base_dir_clone = output_base_dir.clone();
     ensure_dir(&output_base_dir);
 

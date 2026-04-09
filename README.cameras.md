@@ -68,5 +68,5 @@ bazel run //backend:record -- --resolution <resolution> --exposure-us <exposure>
 
 Example:
 ```
-bazel run //backend:record -- --resolution 4k --exposure-us 10000 --frame-rate-hz 30.0 --output-dir ~/Downloads/camera_out --max-duration 60
+bazel run //backend:record -- --resolution 4k --exposure-us 10000 --frame-rate-hz 30.0 --output-dir ~/Downloads/camera_out --max-duration 20
 ```
