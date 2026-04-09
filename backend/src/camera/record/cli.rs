@@ -2,23 +2,22 @@ use crate::camera::Resolution;
 
 use clap::Parser;
 
-/// The command line arguments we'd expect for the cameras to record.
+/// The command line arguments we'd expect for recording, regardless of whether
+/// the user wishes to record with one, or record with both.
 #[derive(Parser, Debug, Clone)]
-#[command(name = "record_from_cameras")]
+#[command(name = "common_record_args")]
 #[command(about = "Records raw frames from Aravis camera(s) into an output directory.")]
-pub struct RecordFromCamerasArgs {
-    #[arg(long = "camera", required = true)]
-    pub camera_id: String,
-
+pub struct CommonRecordArgs {
+    /// Resolution of the footage.
+    #[arg(long, value_enum, default_value_t = Resolution::UHD4K)]
+    pub resolution: Resolution,
+    
     /// Exposure time in microseconds.
     #[arg(long = "exposure-us", default_value_t = 10000.0)]
     pub exposure_time_us: f64,
 
     #[arg(long = "frame-rate-hz", default_value_t = 30.0)]
     pub frame_rate_hz: f64,
-
-    #[arg(long, value_enum, default_value_t = Resolution::UHD4K)]
-    pub resolution: Resolution,
 
     /// Optional lens iris feature value. Only applied if the device exposes an Iris feature.
     #[arg(long)]
@@ -53,9 +52,9 @@ pub struct RecordFromCamerasArgs {
     pub enable_ptp: bool,
 }
 
-impl RecordFromCamerasArgs {
+impl CommonRecordArgs {
+    /// Ensure that at least one stop condition was provided.
     pub fn validate(&self) -> Result<(), String> {
-        // Ensure that at least one stop condition was provided.
         if self.max_frames.is_none() && self.max_duration.is_none() {
             Err(
                 "You must provide at least one stopping condition: --max-frames or --max-duration"
@@ -65,4 +64,29 @@ impl RecordFromCamerasArgs {
             Ok(())
         }
     }
+}
+
+/// The args for recording with one camera should include exactly
+/// which camera to record with.
+#[derive(Parser, Debug, Clone)]
+#[command(name = "record_from_one_camera_args")]
+#[command(about = "Records raw frames from 1 Aravis camera into an output directory.")]
+pub struct RecordWithOneCameraArgs {
+    // Camera identifer. Aravis accepts device name, IP address, etc.
+    #[arg(long = "camera", required = true)]
+    pub camera_id: String,
+
+    // Common record args.
+    #[command(flatten)]
+    pub common_args: CommonRecordArgs,
+}
+
+/// The args for recording with both cameras have no extra args.
+#[derive(Parser, Debug, Clone)]
+#[command(name = "record_from_both_camera_args")]
+#[command(about = "Records raw frames from both Aravis cameras into an output directory.")]
+pub struct RecordWithBothCamerasArgs {
+    // Common record args.
+    #[command(flatten)]
+    pub common_args: CommonRecordArgs,
 }

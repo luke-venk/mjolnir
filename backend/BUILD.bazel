@@ -112,8 +112,17 @@ alias(
 )
 
 rust_binary(
-    name = "record_from_cameras_raw",
-    srcs = ["src/bin/record_from_cameras_original.rs"],
+    name = "record-from-one",
+    srcs = ["src/bin/record_from_one_camera.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:clap",
+    ]
+)
+
+rust_binary(
+    name = "record",
+    srcs = ["src/bin/record_from_both_cameras.rs"],
     deps = [
         ":backend_lib",
         "@crates//:clap",
