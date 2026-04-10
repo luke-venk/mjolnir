@@ -15,10 +15,13 @@ rust_library(
         "//conditions:default": [],
     }),
     deps = [
+        "@crates//:aravis",
         "@crates//:axum",
         "@crates//:chrono",
+        "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:rand",
+        "@crates//:eframe",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
@@ -33,6 +36,10 @@ rust_library(
 # using `--config=release` (see .bazelrc).
 
 # TODO: add documentation for fake vs. real.
+
+# -----------------------------------------------------------------------------
+# MAIN BINARY
+# -----------------------------------------------------------------------------
 
 # Dev mode for the backend doesn't have to be optimized. In this mode,
 # the backend can serve the API via command line and it runs alongside
@@ -135,4 +142,51 @@ rust_test(
         "@crates//:http-body-util",
         "@crates//:tower",
     ],
+)
+
+# -----------------------------------------------------------------------------
+# AUXILIARY BINARIES
+# -----------------------------------------------------------------------------
+
+rust_binary(
+    name = "discover",
+    srcs = ["src/bin/discover_cameras.rs"],
+    deps = [
+        ":backend_lib",
+    ]
+)
+
+rust_binary(
+    name = "record_from_one",
+    srcs = ["src/bin/record_from_one_camera.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:clap",
+        "@crates//:crossbeam",
+        "@crates//:ctrlc",
+    ]
+)
+
+rust_binary(
+    name = "record",
+    srcs = ["src/bin/record_from_both_cameras.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:clap",
+        "@crates//:crossbeam",
+        "@crates//:ctrlc",
+    ]
+)
+
+rust_binary(
+    name = "stream",
+    srcs = ["src/bin/live_stream.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:clap",
+        "@crates//:crossbeam",
+        "@crates//:ctrlc",
+        "@crates//:eframe",
+        "@crates//:egui",
+    ]
 )
