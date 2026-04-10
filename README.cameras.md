@@ -46,6 +46,10 @@ Example:
 bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
 ```
 
+```
+bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
+```
+
 ## Record from One Camera
 This program just records footage from one camera and writes to disk.
 
@@ -57,8 +61,13 @@ bazel run //backend:record-from-one -- --camera <camera> --resolution <resolutio
 
 Example:  
 ```
-bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 100 --frame-rate-hz 5 --output-dir ~/Downloads/camera_out --max-frames 10
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out --max-frames 10
 ```
+
+```
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 4k --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out --max-frames 10
+```
+
 
 ## Record from Both Cameras
 To run this program, run the following command:  
