@@ -118,6 +118,4 @@ pub fn run_capture_thread(
             },
         }
     }
-
-    // TODO: clean shutdown stop acquisition
 }

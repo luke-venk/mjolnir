@@ -122,8 +122,6 @@ pub fn main() {
     // Prevent main thread from exiting before writing thread finishes.
     writer_handle.join().expect("Error: Writer thread panicked.");
 
-    // TODO: add feature to just kill both streams cleanly when user wants to quit,
-    // that way won't need to guess max duration or max frames.
     println!("------------------------");
     println!("RECORDING COMPLETE!");
     println!("------------------------\n");

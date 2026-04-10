@@ -8,28 +8,29 @@ This project uses 2 [LUCID Vision Labs™ Atlas ATP124S](https://www.edmundoptic
 - Precise Time Synchronization (PTP): required for accurate calculations of where the object implemented
 - Monochrome
 
-We have 2 binaries related to using the cameras.
-1. Discovery: Finding the cameras on the LAN
-2. Recording: Recording usines the cameras on the LAN and writing the frames to disk
+We have 4 binaries related to using the cameras.
+1. Discovery: Finding the cameras on the LAN and their IDs.
+3. Stream: Live stream the footage from one of the cameras straight to your laptop, so you can tune intrinsics more quickly.
+3. Record with one camera: Recording using one of the cameras on your LAN and write to disk.
+4. Record with both cameras: Record simultaneously using both of the cameras on your LAN and write to disk.
 
-## Hardware Setup
+## (IMPORTANT) Hardware Setup
 1. Connect the switch to power (outlet if indoors, Jackery if outdoors). It will flash a green LED.
 2. Connect the RJ45 to M12 connector cables to the switch (RJ45) and cameras (M12). They will flash red then eventually green LEDs.
 3. Attach the lenses to the cameras
 4. Connect the laptop to the switch using the USB-Ethernet Network Adapter
+5. Run the following commands to enable receiving jumbo frames from the switch to your PC
+    - `ifconfig`: Check which network interface is connected to the adapter, likely `en<number>`
+    - `sudo networksetup -setMTU en<number> 9000`: Set the maximum transmission unit (MTU) to support jumbo packets.
+    - `ifconfig en<number>`: Check that the MTU indeed is now 9000
 
-Note that we had to configure the switch by connecting to <what IP?> and setting the Maximum Transmission Unit (MTU) to ...? TODO
+TODO: Note that we had to configure the switch by connecting to <192.?????> and setting the MTU to 9000. However, this only has to be configured once per switch, so this does not need to be repeated.
 
 ## Discover Cameras
 This program is used to discover cameras on the local area network (LAN). This is necessary to get camera related information necessary to record or stream using Aravis.  
 
 To run this program, run the following command:  
 `bazel run //backend:discover`  
-
-An example output looks like the following:
-```
-TODO
-```
 
 Note that it takes up to a few minutes for the laptop, once plugged in, to be able to discover the cameras.
 
@@ -54,7 +55,6 @@ bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" -
 This program just records footage from one camera and writes to disk.
 
 To run this program, run the following command:  
-TODO: format better so user knows they can also use max_duration
 ```
 bazel run //backend:record-from-one -- --camera <camera> --resolution <resolution> --exposure-us <exposure> --frame-rate-hz <frame rate> --output-dir <output_dir> --max-frames <max_frames>
 ```
@@ -64,6 +64,7 @@ Example:
 bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out --max-frames 10
 ```
 
+Example:  
 ```
 bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 4k --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out --max-frames 10
 ```
