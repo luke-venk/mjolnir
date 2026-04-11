@@ -15,6 +15,8 @@ pub enum CircleInfractionDetectionState {
 const STALE_THRESHOLD: f64 = 5.0; // Hz
 const CROSSBEAM_CHANNEL_CAPACITY: usize = 10;
 
+// No unit tests for this because I'm not mocking the serialport library
+// And because it is quite basic
 fn find_arduino_port() -> String {
     let ports = serialport::available_ports().expect("Failed to list serial ports");
     let arduino_ports: Vec<_> = ports
