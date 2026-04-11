@@ -1,5 +1,6 @@
 pub mod camera;
 pub mod camera_ingest;
+pub mod circle_infractions_ingest;
 pub mod computer_vision;
 pub mod pipeline;
 pub mod schemas;

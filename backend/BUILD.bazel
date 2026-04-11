@@ -5,11 +5,11 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 # line arguments.
 rust_library(
     name = "backend_lib",
-    crate_name = "backend_lib",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.*.rs"]
+        exclude = ["src/main.*.rs"],
     ),
+    crate_name = "backend_lib",
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
@@ -22,6 +22,7 @@ rust_library(
         "@crates//:eframe",
         "@crates//:serde",
         "@crates//:serde_json",
+        "@crates//:serialport",
         "@crates//:tokio",
         "@crates//:tower-http",
     ],
@@ -51,20 +52,13 @@ rust_binary(
     ],
 )
 
-# Prod mode for the backend should be optimized. In this mode, the 
+# Prod mode for the backend should be optimized. In this mode, the
 # backend will serve the API but instead of serving the Next.js server,
-# it will embed the frontend's static exports using rust-embed and 
+# it will embed the frontend's static exports using rust-embed and
 # serve using axum_embed.
 rust_binary(
     name = "prod",
     srcs = ["src/main.prod.rs"],
-    deps = [
-        ":backend_lib",
-        "@crates//:axum",
-        "@crates//:axum-embed",
-        "@crates//:tokio",
-        "@crates//:rust-embed",
-    ],
     compile_data = ["//frontend:static_exports"],
     # At compile-time, this env var tells our source code exactly where
     # Bazel placed the frontend outputs, so rust-embed can embed it
@@ -80,6 +74,13 @@ rust_binary(
         ],
         "//conditions:default": [],
     }),
+    deps = [
+        ":backend_lib",
+        "@crates//:axum",
+        "@crates//:axum-embed",
+        "@crates//:rust-embed",
+        "@crates//:tokio",
+    ],
 )
 
 # Unit tests to test the backend library.
@@ -88,6 +89,7 @@ rust_test(
     crate = ":backend_lib",
     deps = [
         "@crates//:http-body-util",
+        "@crates//:rstest",
         "@crates//:tower",
     ],
 )
@@ -101,7 +103,7 @@ rust_binary(
     srcs = ["src/bin/discover_cameras.rs"],
     deps = [
         ":backend_lib",
-    ]
+    ],
 )
 
 rust_binary(
@@ -112,7 +114,7 @@ rust_binary(
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:ctrlc",
-    ]
+    ],
 )
 
 rust_binary(
@@ -123,7 +125,7 @@ rust_binary(
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:ctrlc",
-    ]
+    ],
 )
 
 rust_binary(
@@ -136,5 +138,5 @@ rust_binary(
         "@crates//:ctrlc",
         "@crates//:eframe",
         "@crates//:egui",
-    ]
+    ],
 )

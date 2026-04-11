@@ -1,4 +1,6 @@
 use crate::{schemas::ThrowType, server::app_state::AppState};
+use crate::circle_infractions_ingest::CircleInfractionDetectionState;
+use crossbeam::channel::Receiver;
 use axum::{
     Json, Router,
     extract::State,
@@ -60,9 +62,26 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
 
 // In both dev and prod mode, the router will require the HTTP routes
 // and the thread-safe shared app state.
-pub fn create_api_router() -> Router {
+pub fn create_api_router(circle_rx: Receiver<CircleInfractionDetectionState>) -> Router {
     // Thread-safe shared app state for current throw event.
     let state = AppState::new();
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        loop {
+            let state = state_clone.clone();
+            match tokio::task::spawn_blocking({
+                let rx = circle_rx.clone(); // crossbeam Receiver is Clone
+                move || rx.recv()
+            }).await {
+                Ok(Ok(CircleInfractionDetectionState::DetectedInfraction(ts))) => {
+                    state.record_infraction(ts).await;
+                }
+                Ok(Ok(CircleInfractionDetectionState::KeepAlive)) => {}
+                Ok(Ok(CircleInfractionDetectionState::Stale)) => {}
+                Ok(Err(_)) | Err(_) => break, // sender dropped or task panicked
+            }
+        }
+    });
 
     // Define HTTP routes.
     let http_routes = Router::new()
