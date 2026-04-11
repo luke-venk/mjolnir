@@ -63,10 +63,10 @@ export const throwEventSchema = z
       message: "Invalid timestamp",
     }),
     throwType: z.enum(ThrowType),
-    distance: z.number().nonnegative(),
+    distanceM: z.number().nonnegative(),
     infractions: z.array(infractionSchema),
     images: z.array(z.url()),
-    landingPoint: z.tuple([z.number(), z.number()]).optional(),
+    landingPointXY: z.tuple([z.number(), z.number()]).optional(),
   })
   .strict();
 

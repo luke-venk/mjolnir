@@ -44,7 +44,7 @@ js_run_devserver(
     ],
     # Run from frontend package directory to resolve files correctly.
     chdir = package_name(),
-    # Environment variable so frontend knows to make requests to same-origin
+    # Environment variables so frontend knows to make requests to same-origin
     # Next.js server and not Axum server like in integration testing.
     # Since this is in dev mode, don't static export the frontend.
     # Note that environment variables must be prefixed with NEXT_PUBLIC_ to
@@ -52,7 +52,7 @@ js_run_devserver(
     # https://nextjs.org/docs/pages/guides/environment-variables#bundling-environment-variables-for-the-browser
     env = {
         "NEXT_PUBLIC_API_BASE_URL": "",
-        "NEXT_PUBLIC_FETCH_FROM_AXUM": "false",
+        "NEXT_PUBLIC_USE_EXTERNAL_API": "false",
         "NEXT_PUBLIC_STATIC_EXPORT": "false",
     }
 )
@@ -87,7 +87,7 @@ js_run_devserver(
     # Since this is in dev mode, don't static export the frontend.
     env = {
         "NEXT_PUBLIC_API_BASE_URL": "http://localhost:5001",
-        "NEXT_PUBLIC_FETCH_FROM_AXUM": "true",
+        "NEXT_PUBLIC_USE_EXTERNAL_API": "true",
         "NEXT_PUBLIC_STATIC_EXPORT": "false",
     }
 )
@@ -122,7 +122,7 @@ js_run_binary(
     # Since this is the final product, static export the frontend.
     env = {
         "NEXT_PUBLIC_API_BASE_URL": "",
-        "NEXT_PUBLIC_FETCH_FROM_AXUM": "true",
+        "NEXT_PUBLIC_USE_EXTERNAL_API": "true",
         "NEXT_PUBLIC_STATIC_EXPORT": "true",
     },
     visibility = ["//visibility:public"],

@@ -1,8 +1,13 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
+# -----------------------------------------------------------------------------
+# BACKEND LIBRARY
+# -----------------------------------------------------------------------------
+
 # Define a library that compiles the source code and can be used by
-# both the dev and prod binaries. Can be optimized using command
-# line arguments.
+# both the dev/prod and fake/real binaries. Can be optimized using
+# command line arguments.
+
 rust_library(
     name = "backend_lib",
     crate_name = "backend_lib",
@@ -10,6 +15,7 @@ rust_library(
         ["src/**/*.rs"],
         exclude = ["src/main.*.rs"]
     ),
+    crate_features = ["fake"],
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
@@ -35,7 +41,10 @@ rust_library(
 # the frontend. Optimization can technically occur for either target
 # using `--config=release` (see .bazelrc).
 
-# TODO: add documentation for fake vs. real.
+# Note: The reason for splitting into fake and real binaries is to have
+# the fake backend use simulated throw data, while the real backend
+# actually starts up the CV pipelines per camera. The `analyze-throw`
+# route will also call different functions based on this configuration.
 
 # -----------------------------------------------------------------------------
 # MAIN BINARY
@@ -44,7 +53,7 @@ rust_library(
 # Dev mode for the backend doesn't have to be optimized. In this mode,
 # the backend can serve the API via command line and it runs alongside
 # the Next.js server. Since the Next.js requests come from a different
-# origin, so CORS is needed. It will not have any embedded assets.
+# origin, CORS is needed. It will not have any embedded assets.
 
 rust_binary(
     name = "dev-fake",

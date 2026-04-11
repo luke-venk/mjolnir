@@ -43,7 +43,7 @@ To run the frontend alone with simulated data, run:
 In this scenario, we would only have the Axum server and Rust running the backend. No frontend would be used for this. You can interact with the backend through the command line using curl, instructions for which are found in the [backend README](/backend/README.md#usage).  
 
 To build/run the backend, run:  
-`bazel run //backend:dev`  
+`bazel run //backend:dev-fake`  or  `bazel run //backend:dev-real`  
 
 To run unit tests, run:  
 `bazel test //backend:tests`  
@@ -52,14 +52,14 @@ To run unit tests, run:
 In this scenario, we would run both Next.js for frontend and Axum for backend. We would run Next.js on port 3000 and Axum on port 5001. You can interact with the frontend in your browser at `localhost:3000` and confirm the throw events are updated in the backend through the command line.  
 
 To run the integration dev servers, run both commands in separate terminals:  
-`bazel run //backend:dev`  
+`bazel run //backend:dev-fake`  or  `bazel run //backend:dev-real`  
 `bazel run //frontend:integration`  
 
 ### (4) Production
 The final production build uses the prod target with the release Bazel config (found in .bazelrc) to optimize the backend build and serve the embedded frontend assets. When running this, you can open your browser to `localhost:5001` and interact with the application.  
 
 To build or run the final product, run:  
-`bazel build --config=release //backend:prod`  
-`bazel run --config=release //backend:prod`  
+`bazel build --config=release //backend:prod-fake`  or  `bazel build --config=release //backend:prod-real`  
+`bazel run --config=release //backend:prod-fake`  or  `bazel run --config=release //backend:prod-real`  
 
-The final product would be the binary found in `bazel-bin/backend/prod`.
+The final product would be the binary found in `bazel-bin/backend/prod-fake` or `bazel-bin/backend/prod-real`.

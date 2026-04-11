@@ -30,17 +30,17 @@ export async function getThrowEvent(throwType: ThrowType): Promise<ThrowEvent> {
   // If in fake-data mode, whether or not the simulated throw data is generated
   // by Next.js or Axum depends on if it's in frontend-only dev mode (Next.js
   // generates it) or integration/prod mode (Axum generates it).
-  const fetchFromAxum = process.env.NEXT_PUBLIC_FETCH_FROM_AXUM === "true";
+  const useExternalApi = process.env.NEXT_PUBLIC_USE_EXTERNAL_API === "true";
 
   // URL varies based on whether or not the request is same origin (frontend-only
   // dev, production, etc.) or if request is across servers (integration-dev).
   // If in fake-data mode, call this HTTP route to get the simulated throw from
   // the backend.
-  const urlGetSimulateThrow =
-    process.env.NEXT_PUBLIC_API_BASE_URL + "/api/simulate-throw";
+  const urlGetAnalyzeThrow =
+    process.env.NEXT_PUBLIC_API_BASE_URL + "/api/analyze-throw";
 
-  if (fetchFromAxum) {
-    const res = await fetch(urlGetSimulateThrow);
+  if (useExternalApi) {
+    const res = await fetch(urlGetAnalyzeThrow);
     if (!res.ok) {
       console.error("Failed to fetch simluated throw from backend.");
     } else {
@@ -70,13 +70,13 @@ export async function getThrowEvent(throwType: ThrowType): Promise<ThrowEvent> {
     throwId: uuidv4(),
     timestamp: new Date().toISOString(),
     throwType,
-    distance: randDistance,
+    distanceM: randDistance,
     infractions,
     images: [
       "https://placeholdpicsum.dev/photo/800/450",
       "https://placeholdpicsum.dev/photo/1600/900",
       "https://placeholdpicsum.dev/photo/1200/675",
     ].sort(() => Math.random() - 0.5),
-    landingPoint: infractions.length ? undefined : [randomX, randomY],
+    landingPointXY: infractions.length ? undefined : [randomX, randomY],
   };
 }
