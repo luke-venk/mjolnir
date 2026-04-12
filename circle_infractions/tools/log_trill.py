@@ -1,7 +1,12 @@
 import time
 import csv
 import serial
-import msvcrt
+import msvcrt  # Windows-only (used for non-blocking keypress labels)
+
+# NOTE: This script is Windows-only because it uses msvcrt for keypress handling.
+# macOS/Linux users can either:
+#  - run tools/read_serial.py, or
+#  - replace msvcrt usage with a different input method.
 
 PORT = "COM5"
 BAUD = 115200
@@ -24,9 +29,12 @@ with open(OUT, "w", newline="") as f:
             k = msvcrt.getch().decode(errors="ignore").lower()
             if k == "q":
                 break
-            if k == "n": label = "no_touch"
-            if k == "t": label = "top_touch"
-            if k == "s": label = "side_touch"
+            if k == "n":
+                label = "no_touch"
+            if k == "t":
+                label = "top_touch"
+            if k == "s":
+                label = "side_touch"
             print("label =", label)
 
         line = ser.readline().decode("utf-8", errors="ignore").strip()
