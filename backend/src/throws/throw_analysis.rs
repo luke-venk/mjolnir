@@ -8,15 +8,27 @@ use uuid::Uuid;
 #[serde(rename_all = "camelCase")]
 pub struct ThrowAnalysisResponse {
     pub throw_id: Uuid,
-    pub timestamp: String,
+
+    // The time since Unix epoch, in nanoseconds, at the time the last
+    // frame of impact was captured.
+    pub timestamp_final_frame_ns: String,
+
+    // Whether the throw is shot put, discus, hammer, or javelin.
     pub throw_type: ThrowType,
+
+    // The distance from where the implement landed to the inside edge of 
+    // the stop board, in meters.
     pub distance_m: f32,
+
+    // Can possibly have circle infractions, sector violations, both,
+    // or no infractions.
     pub infractions: Vec<Infraction>,
+
+    // The URLs associated with the images of the object's landing point.
     pub images: Vec<String>,
 
-    // Note: Currently frontend doesn't return a landing point if there is
-    // an infraction, but shouldn't it still return a landing point if
-    // there is a circle infraction and not a sector violation?
+    // The landing point in X/Y coordinates. This is None if there is
+    // a sector violation, in which case there is no valid landing point.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub landing_point_x_y: Option<(f32, f32)>,
 }

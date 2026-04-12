@@ -68,7 +68,7 @@ export async function getThrowEvent(throwType: ThrowType): Promise<ThrowEvent> {
 
   return {
     throwId: uuidv4(),
-    timestamp: new Date().toISOString(),
+    timestampFinalFrameNs: new Date().toISOString(),
     throwType,
     distanceM: randDistance,
     infractions,

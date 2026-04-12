@@ -19,7 +19,6 @@ pub fn get_field_dimensions(throw_type: ThrowType) -> (f32, f32, f32) {
         ThrowType::Shotput => (2.135, 30.0, 34.92),
         ThrowType::Discus => (2.50, 80.0, 34.92),
         ThrowType::Hammer => (2.135, 90.0, 34.92),
-        // TODO: should 16.0 be 30.0?
         ThrowType::Javelin => (16.0, 100.0, 28.96),
     }
 }
@@ -78,7 +77,12 @@ pub fn simulate_throw_event(throw_type: ThrowType) -> ThrowAnalysisResponse {
         Vec::new()
     };
 
-    let landing_point_x_y: Option<(f32, f32)> = if infractions.is_empty() {
+    // Show landing point as long as there is no sector violation. It is still
+    // useful to show the landing point even if there is a circle infraction.
+    let has_sector_violation = infractions.iter().any(|infraction| {
+        matches!(infraction.infraction_type, InfractionType::LeftSector | InfractionType::RightSector)
+    });
+    let landing_point_x_y: Option<(f32, f32)> = if !has_sector_violation {
         Some((random_x, random_y))
     } else {
         None
@@ -86,7 +90,7 @@ pub fn simulate_throw_event(throw_type: ThrowType) -> ThrowAnalysisResponse {
 
     return ThrowAnalysisResponse {
         throw_id: Uuid::new_v4(),
-        timestamp: Utc::now().to_rfc3339(),
+        timestamp_final_frame_ns: Utc::now().to_rfc3339(),
         throw_type,
         distance_m: rand_distance,
         infractions,
