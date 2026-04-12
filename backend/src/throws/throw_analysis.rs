@@ -9,9 +9,9 @@ use uuid::Uuid;
 pub struct ThrowAnalysisResponse {
     pub throw_id: Uuid,
 
-    // The time since Unix epoch, in nanoseconds, at the time the last
+    // The buffer camera timestamp, in microseconds, at the time the last
     // frame of impact was captured.
-    pub timestamp_final_frame_ns: String,
+    pub frame_timestamp_from_camera_microseconds: String,
 
     // Whether the throw is shot put, discus, hammer, or javelin.
     pub throw_type: ThrowType,

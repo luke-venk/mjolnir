@@ -59,7 +59,7 @@ export const infractionSchema = z
 export const throwEventSchema = z
   .object({
     throwId: z.uuid(),
-    timestampFinalFrameNs: z.string().refine((val) => !isNaN(Date.parse(val)), {
+    frameTimestampFromCameraMicroseconds: z.string().refine((val) => !isNaN(Date.parse(val)), {
       message: "Invalid timestamp",
     }),
     throwType: z.enum(ThrowType),

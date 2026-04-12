@@ -90,7 +90,7 @@ pub fn simulate_throw_event(throw_type: ThrowType) -> ThrowAnalysisResponse {
 
     return ThrowAnalysisResponse {
         throw_id: Uuid::new_v4(),
-        timestamp_final_frame_ns: Utc::now().to_rfc3339(),
+        frame_timestamp_from_camera_microseconds: Utc::now().to_rfc3339(),
         throw_type,
         distance_m: rand_distance,
         infractions,
