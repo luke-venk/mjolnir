@@ -1,4 +1,5 @@
-use crate::{schemas::ThrowType, server::app_state::AppState};
+use crate::{server::app_state::AppState, throws::{simulate_throw::simulate_throw_event, *}};
+use super::ThrowSource;
 use axum::{
     Json, Router,
     extract::State,
@@ -6,7 +7,6 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 // Informs us that server is up and running.
@@ -15,19 +15,6 @@ async fn health_check() -> impl IntoResponse {
         "status": "ok",
         "message": "Server is running.",
     }))
-}
-
-// Request and response bodies for specifying the type of throwing event.
-#[derive(Deserialize)]
-struct PostThrowTypeRequest {
-    // Allow camelCase in frontend and snake_case in backend.
-    #[serde(alias = "throwType")]
-    throw_type: String,
-}
-
-#[derive(Serialize)]
-struct GetThrowTypeResponse {
-    throw_type: ThrowType,
 }
 
 // Allows user input of what type of event the next throw will be.
@@ -58,16 +45,34 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
     Json(GetThrowTypeResponse { throw_type })
 }
 
+// The `analyze-throw` endpoint uses simulated data if the throw
+// source is `Simulated`, but calls the CV pipeline if the throw
+// source is `Camera`.
+async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisResponse> {
+    let throw_type: ThrowType = *state.throw_type.read().await;
+    match state.throw_source {
+        ThrowSource::Simulated => Json(simulate_throw_event(throw_type)),
+        ThrowSource::Camera => {
+            // TODO(#28)
+            // NOTE: I'm having these 2 do the same thing for now, but how would this actually work?
+            // Would it like continually listen for our final output function (that relies on the math scripts)
+            // to return a ThrowAnalysisResponse?
+            Json(simulate_throw_event(throw_type))
+        }
+    }
+}
+
 // In both dev and prod mode, the router will require the HTTP routes
 // and the thread-safe shared app state.
-pub fn create_api_router() -> Router {
+pub fn create_api_router(throw_source: ThrowSource) -> Router {
     // Thread-safe shared app state for current throw event.
-    let state = AppState::new();
+    let state = AppState::new(throw_source);
 
     // Define HTTP routes.
     let http_routes = Router::new()
         .route("/health", get(health_check))
-        .route("/throw-type", post(post_throw_type).get(get_throw_type));
+        .route("/throw-type", post(post_throw_type).get(get_throw_type))
+        .route("/analyze-throw", get(get_throw_results));
 
     // Nest the routes behind the "/api" prefix so no naming collisions
     // with frontend requests.
@@ -97,7 +102,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check() {
-        let app: Router = create_api_router();
+        let app: Router = create_api_router(ThrowSource::Simulated);
 
         let request = Request::builder()
             .uri("/api/health")
@@ -117,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_default_throw_type_is_shotput() {
-        let app: Router = create_api_router();
+        let app: Router = create_api_router(ThrowSource::Simulated);
 
         let request = Request::builder()
             .uri("/api/throw-type")
@@ -133,7 +138,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_valid_throw_type_post_and_get() {
-        let app: Router = create_api_router();
+        let app: Router = create_api_router(ThrowSource::Simulated);
 
         let post_request = Request::builder()
             .method("POST")
@@ -158,7 +163,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_throw_type_post() {
-        let app: Router = create_api_router();
+        let app: Router = create_api_router(ThrowSource::Simulated);
 
         let request = Request::builder()
             .method("POST")

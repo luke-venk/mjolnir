@@ -24,7 +24,7 @@ We have 4 binaries related to using the cameras.
     - `sudo networksetup -setMTU en<number> 9000`: Set the maximum transmission unit (MTU) to support jumbo packets.
     - `ifconfig en<number>`: Check that the MTU indeed is now 9000
 
-TODO: Note that we had to configure the switch by connecting to <192.?????> and setting the MTU to 9000. However, this only has to be configured once per switch, so this does not need to be repeated.
+Note that we had to configure the switch by connecting to its IP address and setting the MTU to 9000. However, this only has to be configured once per switch, so this does not need to be repeated.
 
 ## Discover Cameras
 This program is used to discover cameras on the local area network (LAN). This is necessary to get camera related information necessary to record or stream using Aravis.  

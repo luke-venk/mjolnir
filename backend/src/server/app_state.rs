@@ -6,17 +6,19 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::schemas::ThrowType;
+use crate::{server::ThrowSource, throws::ThrowType};
 
 #[derive(Clone)]
 pub struct AppState {
     pub throw_type: Arc<RwLock<ThrowType>>,
+    pub throw_source: ThrowSource,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(throw_source: ThrowSource) -> Self {
         Self {
             throw_type: Arc::new(RwLock::new(ThrowType::Shotput)),
+            throw_source
         }
     }
 }
