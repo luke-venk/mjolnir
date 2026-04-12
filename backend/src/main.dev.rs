@@ -1,11 +1,13 @@
 use axum::{Router, http::Method};
+use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use tower_http::cors::{Any, CorsLayer};
-
 #[cfg(feature = "real")]
 use backend_lib::pipeline::Pipeline;
 #[cfg(feature = "real")]
 use backend_lib::schemas::CameraId;
+
+const ARDUINO_BAUD_RATE: u32 = 115200;
 
 // In dev mode, the backend can serve the API via command line, and it will
 // also serve the Next.js server, so it will need CORS. It will not have any
@@ -18,7 +20,9 @@ pub fn create_dev_app(throw_source: ThrowSource) -> Router {
         .allow_methods([Method::GET, Method::POST, Method::HEAD])
         .allow_headers(Any);
 
-    create_api_router(throw_source).layer(cors)
+    let infractions_rx = begin_detecting_circle_infractions(ARDUINO_BAUD_RATE);
+
+    create_api_router(throw_source, infractions_rx).layer(cors)
 }
 
 // The "fake" configuration will not start the CV pipelines, and will point the
