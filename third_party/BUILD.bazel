@@ -1,0 +1,39 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "aravis_objects",
+    srcs = glob(
+        [
+            "aravis/src/*.c",
+            "aravis/src/*.h",
+        ],
+    ),
+    hdrs = ["aravis/src/arv.h"],
+    copts = select({
+        "@platforms//os:linux": [
+            "-D_GNU_SOURCE",
+            "-D_REENTRANT",
+            "-D_THREAD_SAFE",
+        ],
+        "@platforms//os:macos": [
+            "-D_DARWIN_C_SOURCE",
+            "-D_REENTRANT",
+            "-D_THREAD_SAFE",
+        ],
+    }),
+    # defines = [
+    #     "ZMQ_BUILD_DRAFT_API=0",
+    #     "ZMQ_STATIC=0",
+    # ],
+    # includes = ["libzmq/include"],
+    linkopts = ["-lpthread"] + select({
+        "@platforms//os:linux": ["-lrt"],
+        "//conditions:default": [],
+    }),
+    # deps = [":gen_libzmq_platform_hpp"],
+)
+
+cc_library(
+    name = "libffi",
+    srcs = glob(["libffi/src/*.c"]),
+)

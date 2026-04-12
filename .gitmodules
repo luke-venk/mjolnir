@@ -1,0 +1,6 @@
+[submodule "third_party/aravis"]
+	path = third_party/aravis
+	url = https://github.com/aravisproject/aravis
+[submodule "third_party/libffi"]
+	path = third_party/libffi
+	url = https://github.com/libffi/libffi
