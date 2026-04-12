@@ -17,10 +17,10 @@ export function displayNameForInfraction(infraction: Infraction) {
 }
 
 export enum ThrowType {
-  DISCUS = "discus",
-  HAMMER = "hammer",
-  JAVELIN = "javelin",
-  SHOTPUT = "shotput",
+  DISCUS = "Discus",
+  HAMMER = "Hammer",
+  JAVELIN = "Javelin",
+  SHOTPUT = "Shotput",
 }
 
 export function displayNameForThrowType(throwType: ThrowType) {
@@ -59,14 +59,14 @@ export const infractionSchema = z
 export const throwEventSchema = z
   .object({
     throwId: z.uuid(),
-    timestamp: z.string().refine((val) => !isNaN(Date.parse(val)), {
+    frameTimestampFromCameraMicroseconds: z.string().refine((val) => !isNaN(Date.parse(val)), {
       message: "Invalid timestamp",
     }),
     throwType: z.enum(ThrowType),
-    distance: z.number().nonnegative(),
+    distanceM: z.number().nonnegative(),
     infractions: z.array(infractionSchema),
     images: z.array(z.url()),
-    landing_point: z.tuple([z.number(), z.number()]).optional(),
+    landingPointXY: z.tuple([z.number(), z.number()]).optional(),
   })
   .strict();
 

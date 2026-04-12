@@ -3,7 +3,7 @@
 // This is necessary since Tokio designed Axum to run across many
 // threads.
 // docs: https://docs.rs/axum/latest/axum/extract/struct.State.html
-use crate::schemas::ThrowType;
+use crate::{server::ThrowSource, throws::ThrowType};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -11,14 +11,16 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct AppState {
     pub throw_type: Arc<RwLock<ThrowType>>,
+    pub throw_source: ThrowSource,
     infraction_history: Arc<RwLock<VecDeque<u64>>>,
     circle_infraction_system_is_stale: Arc<RwLock<bool>>,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(throw_source: ThrowSource) -> Self {
         Self {
             throw_type: Arc::new(RwLock::new(ThrowType::Shotput)),
+            throw_source,
             infraction_history: Arc::new(RwLock::new(VecDeque::new())),
             circle_infraction_system_is_stale: Arc::new(RwLock::new(false)),
         }
