@@ -1,6 +1,6 @@
 use super::infraction_byte_decoder;
 use super::infraction_byte_decoder::InfractionState;
-use crossbeam::channel::{bounded, Receiver, TrySendError};
+use crossbeam::channel::{Receiver, TrySendError, bounded};
 use serialport::SerialPort;
 use std::thread;
 use std::time::Duration;
@@ -12,7 +12,7 @@ pub enum CircleInfractionDetectionState {
     KeepAlive,
 }
 
-const STALE_THRESHOLD: f64 = 5.0; // Hz
+const STALE_THRESHOLD_HZ: f64 = 5.0; // Hz
 const CROSSBEAM_CHANNEL_CAPACITY: usize = 10;
 
 // No unit tests for this because I'm not mocking the serialport library
@@ -59,29 +59,45 @@ fn find_arduino_port() -> String {
 /// Panics if the channel is full, which would indicate that the receiving end is not doing its job
 pub fn begin_detecting_circle_infractions(baud: u32) -> Receiver<CircleInfractionDetectionState> {
     let arduino_port = find_arduino_port();
-    let stale_timeout = Duration::from_secs_f64(1.0 / STALE_THRESHOLD);
+    let stale_timeout = Duration::from_secs_f64(1.0 / STALE_THRESHOLD_HZ);
     let mut port: Box<dyn SerialPort> = serialport::new(&arduino_port, baud)
         .timeout(stale_timeout)
         .open()
         .expect("Failed to open serial port {arduino_port}");
     let (tx, rx) = bounded::<CircleInfractionDetectionState>(CROSSBEAM_CHANNEL_CAPACITY);
-    thread::spawn(move || loop {
-        if let Err(TrySendError::Disconnected(_)) =
-            tx.try_send(CircleInfractionDetectionState::KeepAlive)
-        {
-            return;
-        }
-        let mut buf = [0u8; 1];
-        match port.read(&mut buf) {
-            Ok(1) => match infraction_byte_decoder::decode(buf[0]) {
-                Some(InfractionState::Infraction) => {
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .expect("Time went backwards")
-                        .as_millis() as u64;
-                    match tx.try_send(CircleInfractionDetectionState::DetectedInfraction(
-                        timestamp,
-                    )) {
+    thread::spawn(move || {
+        loop {
+            if let Err(TrySendError::Disconnected(_)) =
+                tx.try_send(CircleInfractionDetectionState::KeepAlive)
+            {
+                return;
+            }
+            let mut buf = [0u8; 1];
+            match port.read(&mut buf) {
+                Ok(1) => match infraction_byte_decoder::decode(buf[0]) {
+                    Some(InfractionState::Infraction) => {
+                        let timestamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .expect("Time went backwards")
+                            .as_millis() as u64;
+                        match tx.try_send(CircleInfractionDetectionState::DetectedInfraction(
+                            timestamp,
+                        )) {
+                            Ok(_) => {}
+                            Err(TrySendError::Full(_)) => {
+                                panic!("[uart] channel full, dropping stale state update");
+                            }
+                            Err(TrySendError::Disconnected(_)) => return,
+                        }
+                    }
+                    Some(InfractionState::Clear) => {}
+                    None => {
+                        eprintln!("Received unrecognized byte: 0x{:02X}", buf[0]);
+                    }
+                },
+                Ok(_) => {} // 0 bytes read, ignore
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    match tx.try_send(CircleInfractionDetectionState::Stale) {
                         Ok(_) => {}
                         Err(TrySendError::Full(_)) => {
                             panic!("[uart] channel full, dropping stale state update");
@@ -89,45 +105,31 @@ pub fn begin_detecting_circle_infractions(baud: u32) -> Receiver<CircleInfractio
                         Err(TrySendError::Disconnected(_)) => return,
                     }
                 }
-                Some(InfractionState::Clear) => {}
-                None => {
-                    eprintln!("Received unrecognized byte: 0x{:02X}", buf[0]);
-                }
-            },
-            Ok(_) => {} // 0 bytes read, ignore
-            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                match tx.try_send(CircleInfractionDetectionState::Stale) {
-                    Ok(_) => {}
-                    Err(TrySendError::Full(_)) => {
-                        panic!("[uart] channel full, dropping stale state update");
-                    }
-                    Err(TrySendError::Disconnected(_)) => return,
-                }
-            }
-            Err(e) => {
-                eprintln!("[uart] read error: {e} — attempting reconnect");
-                loop {
-                    thread::sleep(Duration::from_secs(1));
-                    match serialport::new(&arduino_port, baud)
-                        .timeout(stale_timeout)
-                        .open()
-                    {
-                        Ok(new_port) => {
-                            port = new_port;
-                            eprintln!("[uart] reconnected");
-                            break;
-                        }
-                        Err(_) => match tx.try_send(CircleInfractionDetectionState::Stale) {
-                            Ok(_) => {}
-                            Err(TrySendError::Full(_)) => {
-                                panic!("[uart] channel full, what is the server doing???");
+                Err(e) => {
+                    eprintln!("[uart] read error: {e} — attempting reconnect");
+                    loop {
+                        thread::sleep(Duration::from_secs(1));
+                        match serialport::new(&arduino_port, baud)
+                            .timeout(stale_timeout)
+                            .open()
+                        {
+                            Ok(new_port) => {
+                                port = new_port;
+                                eprintln!("[uart] reconnected");
+                                break;
                             }
-                            Err(TrySendError::Disconnected(_)) => return,
-                        },
+                            Err(_) => match tx.try_send(CircleInfractionDetectionState::Stale) {
+                                Ok(_) => {}
+                                Err(TrySendError::Full(_)) => {
+                                    panic!("[uart] channel full, what is the server doing???");
+                                }
+                                Err(TrySendError::Disconnected(_)) => return,
+                            },
+                        }
                     }
                 }
-            }
-        };
+            };
+        }
     });
     rx
 }

@@ -1,10 +1,10 @@
+use serde::Serialize;
+use serde_json::to_string_pretty;
 /// Code that handles writing our captured frames from RAM to disk (SSD) in
 /// a performant manner so frames aren't dropped.
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
-use serde::Serialize;
-use serde_json::to_string_pretty;
 
 /// Helper function to ensure output directory exists.
 pub fn ensure_dir(path: &PathBuf) {
@@ -40,7 +40,7 @@ pub struct Metadata {
     pub frame_id: u64,
 }
 
-/// Payload that the recording capture thread(s) will send over 
+/// Payload that the recording capture thread(s) will send over
 /// crossbeam channel to writer thread.
 #[derive(Debug, Clone)]
 pub struct Frame {
@@ -58,10 +58,7 @@ pub fn write_to_disk(
     metadata: &Metadata,
 ) {
     // Determine file name based on frame index and timestamp.
-    let file_name = format!(
-        "frame_{:04}",
-        frame_index,
-    );
+    let file_name = format!("frame_{:04}", frame_index,);
     let raw_path = output_camera_dir.join(format!("{file_name}.raw"));
     let json_path = output_camera_dir.join(format!("{file_name}.json"));
 

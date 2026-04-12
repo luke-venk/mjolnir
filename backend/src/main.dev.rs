@@ -1,9 +1,11 @@
-use backend_lib::schemas::CameraId;
-use backend_lib::pipeline::Pipeline;
-use backend_lib::server::{create_api_router, start_server};
-
 use axum::{Router, http::Method};
+use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
+use backend_lib::pipeline::Pipeline;
+use backend_lib::schemas::CameraId;
+use backend_lib::server::{create_api_router, start_server};
 use tower_http::cors::{Any, CorsLayer};
+
+const ARDUINO_BAUD_RATE: u32 = 115200;
 
 // In dev mode, the backend can serve the API via command line, and it will
 // also serve the Next.js server, so it will need CORS. It will not have any
@@ -16,7 +18,9 @@ pub fn create_dev_app() -> Router {
         .allow_methods([Method::GET, Method::POST, Method::HEAD])
         .allow_headers(Any);
 
-    create_api_router().layer(cors)
+    let infractions_rx = begin_detecting_circle_infractions(ARDUINO_BAUD_RATE);
+
+    create_api_router(infractions_rx).layer(cors)
 }
 
 // Start tokio async runtime.

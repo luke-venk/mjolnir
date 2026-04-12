@@ -1,8 +1,8 @@
-/// Code for handling configurations for recording with Aravis.
-use clap::ValueEnum;
 use crate::camera::record::cli::RecordWithBothCamerasArgs;
 use crate::camera::record::cli::RecordWithOneCameraArgs;
 use crate::camera::stream::cli::StreamFromCamerasArgs;
+/// Code for handling configurations for recording with Aravis.
+use clap::ValueEnum;
 
 /// Configuration for what specs we want to use while recording.
 #[derive(Debug, Clone)]

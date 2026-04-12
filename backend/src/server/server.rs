@@ -1,6 +1,6 @@
-use crate::{schemas::ThrowType, server::app_state::AppState};
 use crate::circle_infractions_ingest::CircleInfractionDetectionState;
-use crossbeam::channel::Receiver;
+use crate::schemas::ThrowType;
+use crate::server::app_state::AppState;
 use axum::{
     Json, Router,
     extract::State,
@@ -8,6 +8,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use crossbeam::channel::Receiver;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -72,7 +73,9 @@ pub fn create_api_router(circle_rx: Receiver<CircleInfractionDetectionState>) ->
             match tokio::task::spawn_blocking({
                 let rx = circle_rx.clone(); // crossbeam Receiver is Clone
                 move || rx.recv()
-            }).await {
+            })
+            .await
+            {
                 Ok(Ok(CircleInfractionDetectionState::DetectedInfraction(ts))) => {
                     state.record_infraction(ts).await;
                 }
@@ -90,9 +93,7 @@ pub fn create_api_router(circle_rx: Receiver<CircleInfractionDetectionState>) ->
 
     // Nest the routes behind the "/api" prefix so no naming collisions
     // with frontend requests.
-    Router::new()
-        .nest("/api", http_routes)
-        .with_state(state)
+    Router::new().nest("/api", http_routes).with_state(state)
 }
 
 pub async fn start_server(app: Router, addr: &str) {

@@ -3,10 +3,10 @@
 // This is necessary since Tokio designed Axum to run across many
 // threads.
 // docs: https://docs.rs/axum/latest/axum/extract/struct.State.html
-use std::sync::Arc;
-use std::collections::VecDeque;
-use tokio::sync::RwLock;
 use crate::schemas::ThrowType;
+use std::collections::VecDeque;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct AppState {
