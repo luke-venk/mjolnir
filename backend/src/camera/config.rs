@@ -18,6 +18,9 @@ pub struct CameraIngestConfig {
     pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
+    pub use_fake_interface: bool,
+    pub max_frames: Option<usize>,
+    pub max_duration_s: Option<f64>,
 
     // Tool to request streaming restart if specifications are changed.
     pub restart_requested: bool,
@@ -33,6 +36,9 @@ impl CameraIngestConfig {
             enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
+            use_fake_interface: false,
+            max_frames: args.common_args.max_frames,
+            max_duration_s: args.common_args.max_duration,
             restart_requested: false,
         }
     }
@@ -46,6 +52,9 @@ impl CameraIngestConfig {
             enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
+            use_fake_interface: false,
+            max_frames: args.common_args.max_frames,
+            max_duration_s: args.common_args.max_duration,
             restart_requested: false,
         }
     }
@@ -59,12 +68,15 @@ impl CameraIngestConfig {
             enable_ptp: false,
             num_buffers: 8,
             timeout_ms: 5000,
+            use_fake_interface: false,
+            max_frames: None,
+            max_duration_s: None,
             restart_requested: false,
         }
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.camera_id.is_empty() {
+        if self.camera_id.is_empty() && !self.use_fake_interface {
             return Err("camera_id cannot be empty".to_string());
         }
         if self.exposure_time_us <= 0.0 {
@@ -75,6 +87,16 @@ impl CameraIngestConfig {
         }
         if self.num_buffers == 0 {
             return Err("num_buffers must be > 0".to_string());
+        }
+        if let Some(max_frames) = self.max_frames {
+            if max_frames == 0 {
+                return Err("max_frames must be > 0".to_string());
+            }
+        }
+        if let Some(max_duration_s) = self.max_duration_s {
+            if max_duration_s <= 0.0 {
+                return Err("max_duration must be > 0".to_string());
+            }
         }
         Ok(())
     }

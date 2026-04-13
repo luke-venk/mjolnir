@@ -1,5 +1,5 @@
-/// Tool for users to record footage from both cameras using Aravis and
-/// store the frames to disk using the command-line.
+// Tool for users to record footage from both cameras using Aravis and
+// feed the captured frames through camera ingest into the pipeline.
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,6 +9,7 @@ use clap::Parser;
 use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::aravis_utils::initialize_aravis;
 use backend_lib::camera::discovery::get_camera_ids;
+use backend_lib::camera_ingest::run_recording_ingest;
 use backend_lib::camera::record::cli::RecordWithBothCamerasArgs;
 use backend_lib::camera::record::run_capture_thread;
 use backend_lib::camera::record::writer::{Frame, ensure_dir, write_to_disk};
@@ -55,19 +56,26 @@ pub fn main() {
     let camera_ingest_config1: CameraIngestConfig =
         CameraIngestConfig::from_record_both_args(camera_ids[0].clone(), args.clone());
     camera_ingest_config1
-            .validate()
-            .unwrap_or_else(|err| panic!("{err}"));
+        .validate()
+        .unwrap_or_else(|err| panic!("{err}"));
     let camera_ingest_config2: CameraIngestConfig =
         CameraIngestConfig::from_record_both_args(camera_ids[1].clone(), args.clone());
     camera_ingest_config2
-            .validate()
-            .unwrap_or_else(|err| panic!("{err}"));
+        .validate()
+        .unwrap_or_else(|err| panic!("{err}"));
+    let camera_id1 = camera_ingest_config1.camera_id.clone();
+    let camera_id2 = camera_ingest_config2.camera_id.clone();
 
     // Create crossbeam channel so capture thread can send frames to
-    // write thread. Have a clone of the same sender, as well as the
+    // fan-out thread. Have a clone of the same sender, as well as the
     // original sender, send to the receiver.
     let (frame_tx1, frame_rx) = crossbeam::channel::bounded::<Frame>(100);
     let frame_tx2 = frame_tx1.clone();
+    
+    // The fan-out thread duplicates each captured frame so one copy can
+    // go to camera ingest and another copy can still be written to disk.
+    let (ingest_tx, ingest_rx) = crossbeam::channel::bounded::<Frame>(100);
+    let (writer_tx, writer_rx) = crossbeam::channel::bounded::<Frame>(100);
 
     // Shared shutdown flag set by Ctrl+C handler.
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -103,11 +111,29 @@ pub fn main() {
         );
     });
 
+    // Spawn fan-out thread.
+    let dispatch_handle = thread::spawn(move || {
+        for frame in frame_rx {
+            if writer_tx.send(frame.clone()).is_err() {
+                break;
+            }
+
+            if ingest_tx.send(frame).is_err() {
+                break;
+            }
+        }
+    });
+
+    // Spawn ingest thread.
+    let ingest_handle = thread::spawn(move || {
+        run_recording_ingest(ingest_rx, camera_id1, camera_id2, 100);
+    });
+
     // Spawn write thread.
     let writer_handle = thread::spawn(move || {
-        // Write incoming frames.
-        for frame in frame_rx {
-            write_to_disk(&frame.output_camera_dir, frame.frame_index, &frame.bytes, &frame.metadata);
+        for frame in writer_rx {
+            write_to_disk(&frame.output_camera_dir,frame.frame_index,&frame.bytes,&frame.metadata,
+            );
         }
     });
 
@@ -118,9 +144,15 @@ pub fn main() {
             .join()
             .expect("Error: Recorder thread panicked.");
     }
-
-    // Prevent main thread from exiting before writing thread finishes.
-    writer_handle.join().expect("Error: Writer thread panicked.");
+    dispatch_handle
+        .join()
+        .expect("Error: Dispatch thread panicked.");
+    ingest_handle
+        .join()
+        .expect("Error: Ingest dispatch thread panicked.");
+    writer_handle
+        .join()
+        .expect("Error: Writer thread panicked.");
 
     println!("------------------------");
     println!("RECORDING COMPLETE!");

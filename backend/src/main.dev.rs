@@ -1,5 +1,5 @@
 use backend_lib::schemas::CameraId;
-use backend_lib::pipeline::Pipeline;
+use backend_lib::camera_ingest::start_default_camera_pipeline;
 use backend_lib::server::{create_api_router, start_server};
 
 use axum::{Router, http::Method};
@@ -24,8 +24,8 @@ pub fn create_dev_app() -> Router {
 async fn main() {
     // Start the 2 pipelines (one for each camera).
     let rolling_buffer_size: usize = 10;
-    let _ = Pipeline::new(CameraId::FieldLeft, rolling_buffer_size);
-    let _ = Pipeline::new(CameraId::FieldRight, rolling_buffer_size);
+    let _ = start_default_camera_pipeline(CameraId::FieldLeft, rolling_buffer_size);
+    let _ = start_default_camera_pipeline(CameraId::FieldRight, rolling_buffer_size);
 
     // TODO(#7): Implement Clean Shutdown.
 

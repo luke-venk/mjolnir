@@ -102,7 +102,7 @@ pub fn copy_buffer_bytes(buffer: &Buffer) -> Vec<u8> {
     let (ptr, len) = buffer.data();
 
     if ptr.is_null() || len == 0 {
-        panic!("ERROR: Aravis buffer was empty");
+        return Vec::new();
     }
 
     // `ptr` is non-null and Aravis guarantees the buffer data is valid
