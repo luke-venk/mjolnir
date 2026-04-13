@@ -10,12 +10,11 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 rust_library(
     name = "backend_lib",
-    crate_name = "backend_lib",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.*.rs"]
+        exclude = ["src/main.*.rs"],
     ),
-    crate_features = ["fake"],
+    crate_features = ["real"],
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
@@ -26,12 +25,38 @@ rust_library(
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
-        "@crates//:rand",
         "@crates//:eframe",
+        "@crates//:rand",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:serialport",
+        "@crates//:tokio",
+        "@crates//:uuid",
+    ],
+)
+
+rust_library(
+    name = "backend_lib_fake",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.*.rs"],
+    ),
+    crate_name = "backend_lib",
+    rustc_flags = select({
+        "//:release": ["-Cstrip=debuginfo"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "@crates//:aravis",
+        "@crates//:axum",
+        "@crates//:chrono",
+        "@crates//:clap",
+        "@crates//:crossbeam",
+        "@crates//:eframe",
+        "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:tokio",
-        "@crates//:tower-http",
         "@crates//:uuid",
     ],
 )
@@ -56,11 +81,11 @@ rust_library(
 # origin, CORS is needed. It will not have any embedded assets.
 
 rust_binary(
-    name = "dev-fake",
+    name = "dev_fake",
     srcs = ["src/main.dev.rs"],
     crate_features = ["fake"],
     deps = [
-        ":backend_lib",
+        ":backend_lib_fake",
         "@crates//:axum",
         "@crates//:tokio",
         "@crates//:tower-http",
@@ -68,7 +93,7 @@ rust_binary(
 )
 
 rust_binary(
-    name = "dev-real",
+    name = "dev_real",
     srcs = ["src/main.dev.rs"],
     crate_features = ["real"],
     deps = [
@@ -79,22 +104,15 @@ rust_binary(
     ],
 )
 
-# Prod mode for the backend should be optimized. In this mode, the 
+# Prod mode for the backend should be optimized. In this mode, the
 # backend will serve the API but instead of serving the Next.js server,
-# it will embed the frontend's static exports using rust-embed and 
+# it will embed the frontend's static exports using rust-embed and
 # serve using axum_embed.
 rust_binary(
-    name = "prod-fake",
+    name = "prod_fake",
     srcs = ["src/main.prod.rs"],
-    crate_features = ["fake"],
-    deps = [
-        ":backend_lib",
-        "@crates//:axum",
-        "@crates//:axum-embed",
-        "@crates//:rust-embed",
-        "@crates//:tokio",
-    ],
     compile_data = ["//frontend:static_exports"],
+    crate_features = ["fake"],
     # At compile-time, this env var tells our source code exactly where
     # Bazel placed the frontend outputs, so rust-embed can embed it
     # into the binary directly.
@@ -109,24 +127,24 @@ rust_binary(
         ],
         "//conditions:default": [],
     }),
-)
-
-# Prod mode for the backend should be optimized. In this mode, the 
-# backend will serve the API but instead of serving the Next.js server,
-# it will embed the frontend's static exports using rust-embed and 
-# serve using axum_embed.
-rust_binary(
-    name = "prod-real",
-    srcs = ["src/main.prod.rs"],
-    crate_features = ["real"],
     deps = [
-        ":backend_lib",
+        ":backend_lib_fake",
         "@crates//:axum",
         "@crates//:axum-embed",
-        "@crates//:tokio",
         "@crates//:rust-embed",
+        "@crates//:tokio",
     ],
+)
+
+# Prod mode for the backend should be optimized. In this mode, the
+# backend will serve the API but instead of serving the Next.js server,
+# it will embed the frontend's static exports using rust-embed and
+# serve using axum_embed.
+rust_binary(
+    name = "prod_real",
+    srcs = ["src/main.prod.rs"],
     compile_data = ["//frontend:static_exports"],
+    crate_features = ["real"],
     # At compile-time, this env var tells our source code exactly where
     # Bazel placed the frontend outputs, so rust-embed can embed it
     # into the binary directly.
@@ -141,6 +159,13 @@ rust_binary(
         ],
         "//conditions:default": [],
     }),
+    deps = [
+        ":backend_lib",
+        "@crates//:axum",
+        "@crates//:axum-embed",
+        "@crates//:rust-embed",
+        "@crates//:tokio",
+    ],
 )
 
 # Unit tests to test the backend library.
@@ -149,6 +174,7 @@ rust_test(
     crate = ":backend_lib",
     deps = [
         "@crates//:http-body-util",
+        "@crates//:rstest",
         "@crates//:tower",
     ],
 )
@@ -162,7 +188,7 @@ rust_binary(
     srcs = ["src/bin/discover_cameras.rs"],
     deps = [
         ":backend_lib",
-    ]
+    ],
 )
 
 rust_binary(
@@ -173,7 +199,7 @@ rust_binary(
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:ctrlc",
-    ]
+    ],
 )
 
 rust_binary(
@@ -184,7 +210,7 @@ rust_binary(
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:ctrlc",
-    ]
+    ],
 )
 
 rust_binary(
@@ -197,5 +223,5 @@ rust_binary(
         "@crates//:ctrlc",
         "@crates//:eframe",
         "@crates//:egui",
-    ]
+    ],
 )

@@ -1,13 +1,13 @@
+use super::FrameData;
+use crate::camera::{CameraIngestConfig, Resolution};
+use eframe::egui;
+use eframe::egui::TextureHandle;
 /// LiveViewApp implementation required for eframe to handle window creation
 /// for our egui to render live streaming.
 use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use eframe::egui;
-use eframe::egui::TextureHandle;
-use crate::camera::{CameraIngestConfig, Resolution};
-use super::FrameData;
 
 pub struct LiveViewApp {
     // Receiver for the latest frame from the capture thread.

@@ -11,9 +11,7 @@ pub struct Context {
 
 impl Context {
     pub fn new(timestamp: u64) -> Self {
-        Self {
-            timestamp
-        }
+        Self { timestamp }
     }
 
     pub fn timestamp(&self) -> u64 {
@@ -30,10 +28,7 @@ pub struct Frame {
 #[allow(dead_code)]
 impl Frame {
     pub fn new(data: Vec<u8>, context: Context) -> Self {
-        Self {
-            data,
-            context,
-        }
+        Self { data, context }
     }
 
     pub fn data(&self) -> &[u8] {
@@ -60,7 +55,7 @@ mod tests {
     fn test_frame_constructor_and_getter() {
         let data = vec![1, 2, 3, 4];
         let frame = Frame::new(data, Context::new(34151));
-        
+
         assert_eq!(frame.context().timestamp(), 34151);
     }
 }

@@ -1,17 +1,17 @@
-/// Tool for users to record footage from both cameras using Aravis and
-/// store the frames to disk using the command-line.
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::thread;
-use clap::Parser;
 use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::aravis_utils::initialize_aravis;
 use backend_lib::camera::discovery::get_camera_ids;
 use backend_lib::camera::record::cli::RecordWithBothCamerasArgs;
 use backend_lib::camera::record::run_capture_thread;
 use backend_lib::camera::record::writer::{Frame, ensure_dir, write_to_disk};
+use clap::Parser;
+/// Tool for users to record footage from both cameras using Aravis and
+/// store the frames to disk using the command-line.
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn main() {
     println!("------------------------");
@@ -55,13 +55,13 @@ pub fn main() {
     let camera_ingest_config1: CameraIngestConfig =
         CameraIngestConfig::from_record_both_args(camera_ids[0].clone(), args.clone());
     camera_ingest_config1
-            .validate()
-            .unwrap_or_else(|err| panic!("{err}"));
+        .validate()
+        .unwrap_or_else(|err| panic!("{err}"));
     let camera_ingest_config2: CameraIngestConfig =
         CameraIngestConfig::from_record_both_args(camera_ids[1].clone(), args.clone());
     camera_ingest_config2
-            .validate()
-            .unwrap_or_else(|err| panic!("{err}"));
+        .validate()
+        .unwrap_or_else(|err| panic!("{err}"));
 
     // Create crossbeam channel so capture thread can send frames to
     // write thread. Have a clone of the same sender, as well as the
@@ -73,11 +73,12 @@ pub fn main() {
     let shutdown = Arc::new(AtomicBool::new(false));
     let shutdown_clone1 = Arc::clone(&shutdown);
     let shutdown_clone2 = Arc::clone(&shutdown);
-    
+
     ctrlc::set_handler(move || {
         println!("\nShutdown signal received, stopping recording...");
         shutdown.store(true, Ordering::SeqCst);
-    }).expect("Error setting Ctrl+C handler.");
+    })
+    .expect("Error setting Ctrl+C handler.");
 
     // Spawn 1st recording thread.
     let record_handle_1 = thread::spawn(move || {
@@ -107,20 +108,25 @@ pub fn main() {
     let writer_handle = thread::spawn(move || {
         // Write incoming frames.
         for frame in frame_rx {
-            write_to_disk(&frame.output_camera_dir, frame.frame_index, &frame.bytes, &frame.metadata);
+            write_to_disk(
+                &frame.output_camera_dir,
+                frame.frame_index,
+                &frame.bytes,
+                &frame.metadata,
+            );
         }
     });
 
     // Prevent main thread from exiting until other threads have exited.
     let record_handles = [record_handle_1, record_handle_2];
     for handle in record_handles {
-        handle
-            .join()
-            .expect("Error: Recorder thread panicked.");
+        handle.join().expect("Error: Recorder thread panicked.");
     }
 
     // Prevent main thread from exiting before writing thread finishes.
-    writer_handle.join().expect("Error: Writer thread panicked.");
+    writer_handle
+        .join()
+        .expect("Error: Writer thread panicked.");
 
     println!("------------------------");
     println!("RECORDING COMPLETE!");

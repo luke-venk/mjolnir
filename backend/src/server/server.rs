@@ -1,4 +1,7 @@
-use crate::{server::app_state::AppState, throws::{simulate_throw::simulate_throw_event, *}};
+use crate::circle_infractions_ingest::CircleInfractionDetectionState;
+use crate::throws::ThrowType;
+use crate::server::app_state::AppState;
+use crate::throws::{simulate_throw::simulate_throw_event, *};
 use super::ThrowSource;
 use axum::{
     Json, Router,
@@ -7,6 +10,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use crossbeam::channel::Receiver;
 use serde_json::json;
 
 // Informs us that server is up and running.
@@ -64,9 +68,28 @@ async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisR
 
 // In both dev and prod mode, the router will require the HTTP routes
 // and the thread-safe shared app state.
-pub fn create_api_router(throw_source: ThrowSource) -> Router {
+pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleInfractionDetectionState>) -> Router {
     // Thread-safe shared app state for current throw event.
     let state = AppState::new(throw_source);
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        loop {
+            let state = state_clone.clone();
+            match tokio::task::spawn_blocking({
+                let rx = circle_rx.clone(); // crossbeam Receiver is Clone
+                move || rx.recv()
+            })
+            .await
+            {
+                Ok(Ok(CircleInfractionDetectionState::DetectedInfraction(ts))) => {
+                    state.record_infraction(ts).await;
+                }
+                Ok(Ok(CircleInfractionDetectionState::KeepAlive)) => {}
+                Ok(Ok(CircleInfractionDetectionState::Stale)) => {}
+                Ok(Err(_)) | Err(_) => break, // sender dropped or task panicked
+            }
+        }
+    });
 
     // Define HTTP routes.
     let http_routes = Router::new()
@@ -76,9 +99,7 @@ pub fn create_api_router(throw_source: ThrowSource) -> Router {
 
     // Nest the routes behind the "/api" prefix so no naming collisions
     // with frontend requests.
-    Router::new()
-        .nest("/api", http_routes)
-        .with_state(state)
+    Router::new().nest("/api", http_routes).with_state(state)
 }
 
 pub async fn start_server(app: Router, addr: &str) {
@@ -102,7 +123,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check() {
-        let app: Router = create_api_router(ThrowSource::Simulated);
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .uri("/api/health")
@@ -122,7 +144,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_default_throw_type_is_shotput() {
-        let app: Router = create_api_router(ThrowSource::Simulated);
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .uri("/api/throw-type")
@@ -138,7 +161,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_valid_throw_type_post_and_get() {
-        let app: Router = create_api_router(ThrowSource::Simulated);
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let post_request = Request::builder()
             .method("POST")
@@ -163,7 +187,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_throw_type_post() {
-        let app: Router = create_api_router(ThrowSource::Simulated);
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .method("POST")
