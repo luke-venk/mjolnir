@@ -82,6 +82,10 @@ crate.spec(
     version = "0.1.0",
 )
 crate.spec(
+    package = "chrono",
+    version = "0.4.44",
+)
+crate.spec(
     features = ["derive"],
     package = "clap",
     version = "4.6.0",
@@ -111,6 +115,16 @@ crate.spec(
     version = "0.1",
 )
 crate.spec(
+    package = "rand",
+    version = "0.10.0",
+)
+crate.spec(
+    default_features = False,
+    features = [],
+    package = "rstest",
+    version = "0.26.1",
+)
+crate.spec(
     features = [
         "debug-embed",
         "interpolate-folder-path",
@@ -124,8 +138,17 @@ crate.spec(
     version = "1.0.228",
 )
 crate.spec(
+    features = ["derive"],
+    package = "serde",
+    version = "1.0.228",
+)
+crate.spec(
     package = "serde_json",
     version = "1.0",
+)
+crate.spec(
+    package = "serialport",
+    version = "4.9.0",
 )
 crate.spec(
     features = ["full"],
@@ -140,6 +163,14 @@ crate.spec(
     features = ["cors"],
     package = "tower-http",
     version = "0.6.8",
+)
+crate.spec(
+    features = [
+        "v4",
+        "serde",
+    ],
+    package = "uuid",
+    version = "1.23.0",
 )
 crate.from_specs(
     name = "crates",

@@ -104,7 +104,7 @@ export default function Page() {
 
       {currentThrow && currentThrow.infractions.length === 0 && (
         <h2 className="text-2xl font-bold mb-4 text-center">
-          Distance: {currentThrow.distance.toFixed(2)}m
+          Distance: {currentThrow.distanceM.toFixed(2)}m
         </h2>
       )}
 
@@ -132,13 +132,13 @@ export default function Page() {
           {currentThrow ? (
             selectedThrowType === ThrowType.JAVELIN ? (
                 <JavelinField
-                  landingPoint={currentThrow.landing_point}
+                  landingPoint={currentThrow.landingPointXY}
                   infractions={currentThrow.infractions.map((i) => i.type)}
                 />
               ) : (
                 <CircleField
                   throwType={selectedThrowType}
-                  landingPoint={currentThrow.landing_point}
+                  landingPoint={currentThrow.landingPointXY}
                   infractions={currentThrow.infractions.map((i) => i.type)}
                 />
               )

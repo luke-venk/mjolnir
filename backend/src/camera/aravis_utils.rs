@@ -34,7 +34,6 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
         .set_frame_rate(config.frame_rate_hz)
         .expect("Failed to set frame rate in camera configuration.");
 
-
     // Use binning to downsample from full resolution to lower resolution.
     if camera
         .is_binning_available()

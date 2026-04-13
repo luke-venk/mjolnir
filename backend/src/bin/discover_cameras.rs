@@ -10,6 +10,8 @@ pub fn main() {
     let aravis = initialize_aravis();
     let cameras = discover_cameras(&aravis);
     print_discovered_cameras(&cameras);
-    println!("\nWhen using the recording tool, be sure to use the camera name in the command line argument.");
+    println!(
+        "\nWhen using the recording tool, be sure to use the camera name in the command line argument."
+    );
     println!("Example: --camera \"Lucid Vision Labs-ATP124S-M-224300917\"\n")
 }

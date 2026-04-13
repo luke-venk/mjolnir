@@ -48,11 +48,7 @@ pub fn print_discovered_cameras(cameras: &[DiscoveredCamera]) {
             println!("\n{}", camera.id);
             println!(
                 "  - IP address: {}\n  - MAC address: {}\n  - Vendor: {}\n  - Model: {}\n  - Protocol: {}\n",
-                camera.address,
-                camera.physical_id,
-                camera.vendor,
-                camera.model,
-                camera.protocol,
+                camera.address, camera.physical_id, camera.vendor, camera.model, camera.protocol,
             );
         }
     }
