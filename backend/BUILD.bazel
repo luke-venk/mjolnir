@@ -19,7 +19,9 @@ rust_library(
         "//conditions:default": [],
     }),
     deps = [
+        "@crates//:aravis",
         "@crates//:axum",
+        "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:serde",
         "@crates//:serde_json",
@@ -109,5 +111,15 @@ rust_binary(
         "@crates//:clap",
         "@crates//:serde",
         "@crates//:serde_json",
+    ]
+)
+
+rust_binary(
+    name = "record",
+    srcs = ["src/bin/record_from_both_cameras.rs"],
+    deps = [
+        ":backend_lib",
+        "@crates//:aravis",
+        "@crates//:clap",
     ]
 )
