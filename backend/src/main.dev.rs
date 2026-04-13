@@ -27,7 +27,7 @@ pub fn create_dev_app(throw_source: ThrowSource) -> Router {
 
 // The "fake" configuration will not start the CV pipelines, and will point the
 // `analyze-throw` route to simulated throw data.
-#[cfg(feature = "fake")]
+#[cfg(not(feature = "real"))]
 #[tokio::main]
 async fn main() {
     // Build the Axum router.

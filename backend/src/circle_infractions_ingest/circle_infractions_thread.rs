@@ -1,6 +1,9 @@
+#[cfg(feature = "real")]
 use super::infraction_byte_decoder;
+#[cfg(feature = "real")]
 use super::infraction_byte_decoder::InfractionState;
-use crossbeam::channel::{Receiver, TrySendError, bounded};
+use crossbeam::channel::{bounded, Receiver, TrySendError};
+#[cfg(feature = "real")]
 use serialport::SerialPort;
 use std::thread;
 use std::time::Duration;
@@ -12,11 +15,13 @@ pub enum CircleInfractionDetectionState {
     KeepAlive,
 }
 
+#[cfg(feature = "real")]
 const STALE_THRESHOLD_HZ: f64 = 5.0; // Hz
 const CROSSBEAM_CHANNEL_CAPACITY: usize = 10;
 
 // No unit tests for this because I'm not mocking the serialport library
 // And because it is quite basic
+#[cfg(feature = "real")]
 fn find_arduino_port() -> String {
     let ports = serialport::available_ports().expect("Failed to list serial ports");
     let arduino_ports: Vec<_> = ports
@@ -57,6 +62,7 @@ fn find_arduino_port() -> String {
 /// - DetectedInfraction when we detect an infraction
 /// - KeepAlive so we can detect a dropped channel and exit the thread gracefully
 /// Panics if the channel is full, which would indicate that the receiving end is not doing its job
+#[cfg(feature = "real")]
 pub fn begin_detecting_circle_infractions(baud: u32) -> Receiver<CircleInfractionDetectionState> {
     let arduino_port = find_arduino_port();
     let stale_timeout = Duration::from_secs_f64(1.0 / STALE_THRESHOLD_HZ);
@@ -129,6 +135,38 @@ pub fn begin_detecting_circle_infractions(baud: u32) -> Receiver<CircleInfractio
                     }
                 }
             };
+        }
+    });
+    rx
+}
+
+#[cfg(not(feature = "real"))]
+pub fn begin_detecting_circle_infractions(_baud: u32) -> Receiver<CircleInfractionDetectionState> {
+    let (tx, rx) = bounded::<CircleInfractionDetectionState>(CROSSBEAM_CHANNEL_CAPACITY);
+    thread::spawn(move || {
+        loop {
+            if let Err(TrySendError::Disconnected(_)) =
+                tx.try_send(CircleInfractionDetectionState::KeepAlive)
+            {
+                return;
+            }
+            thread::sleep(Duration::from_millis(5));
+            if rand::random::<f64>() < 1.0 / 1200.0 {
+                // simulate ~1 infraction per minute
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis() as u64;
+                match tx.try_send(CircleInfractionDetectionState::DetectedInfraction(
+                    timestamp,
+                )) {
+                    Ok(_) => {}
+                    Err(TrySendError::Full(_)) => {
+                        panic!("[fake uart] channel full, dropping stale state update");
+                    }
+                    Err(TrySendError::Disconnected(_)) => return,
+                }
+            }
         }
     });
     rx

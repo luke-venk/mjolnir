@@ -123,7 +123,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check() {
-        let app: Router = create_api_router(ThrowSource::Simulated);
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .uri("/api/health")
@@ -143,7 +144,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_default_throw_type_is_shotput() {
-        let app: Router = create_api_router(ThrowSource::Simulated);
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .uri("/api/throw-type")
@@ -159,7 +161,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_valid_throw_type_post_and_get() {
-        let app: Router = create_api_router(ThrowSource::Simulated);
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let post_request = Request::builder()
             .method("POST")
@@ -184,7 +187,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_throw_type_post() {
-        let app: Router = create_api_router(ThrowSource::Simulated);
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .method("POST")

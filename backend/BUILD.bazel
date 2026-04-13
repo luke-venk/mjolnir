@@ -14,7 +14,7 @@ rust_library(
         ["src/**/*.rs"],
         exclude = ["src/main.*.rs"],
     ),
-    crate_features = ["fake"],
+    crate_features = ["real"],
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
@@ -31,7 +31,32 @@ rust_library(
         "@crates//:serde_json",
         "@crates//:serialport",
         "@crates//:tokio",
-        "@crates//:tower-http",
+        "@crates//:uuid",
+    ],
+)
+
+rust_library(
+    name = "backend_lib_fake",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.*.rs"],
+    ),
+    crate_name = "backend_lib",
+    rustc_flags = select({
+        "//:release": ["-Cstrip=debuginfo"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "@crates//:aravis",
+        "@crates//:axum",
+        "@crates//:chrono",
+        "@crates//:clap",
+        "@crates//:crossbeam",
+        "@crates//:eframe",
+        "@crates//:rand",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:tokio",
         "@crates//:uuid",
     ],
 )
@@ -60,7 +85,7 @@ rust_binary(
     srcs = ["src/main.dev.rs"],
     crate_features = ["fake"],
     deps = [
-        ":backend_lib",
+        ":backend_lib_fake",
         "@crates//:axum",
         "@crates//:tokio",
         "@crates//:tower-http",
@@ -103,7 +128,7 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib",
+        ":backend_lib_fake",
         "@crates//:axum",
         "@crates//:axum-embed",
         "@crates//:rust-embed",
