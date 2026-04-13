@@ -62,7 +62,7 @@ const int MX_THRESH = 370;
 const unsigned long DEBOUNCE_MS = 80;
 
 // Output bytes required by integration
-const uint8_t BYTE_CLEAR = 0x00;
+const uint8_t BYTE_CLEAR = 0x01;
 const uint8_t BYTE_INFRACTION = 0xFE;
 
 // State machine for debounce

@@ -4,7 +4,7 @@
 Reads a Bela Trill Flex sensor on an Arduino Uno over I2C and streams a **1-byte state**
 at **20 Hz** for backend ingestion:
 
-- `0x00` = CLEAR
+- `0x01` = CLEAR
 - `0xFE` = INFRACTION
 Hardware validation: run tools/read_serial.py --port COMx and verify output bytes are 00 (clear) and FE (infraction)
 ## Hardware
