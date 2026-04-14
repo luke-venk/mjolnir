@@ -1,16 +1,24 @@
+# log_trill.py
+# Purpose:
+# - Collect labeled Trill Flex sensor readings into a CSV so we can tune thresholds.
+# - Labels: no_touch / top_touch (intended infraction press) / side_touch (edge bump/brush).
+#
+# Why "import time":
+# - time.sleep(2): Arduino often resets when a serial connection opens; we wait for it to reboot.
+# - time.time(): used to store a PC-side timestamp (pc_ms) for each sample in the CSV.
+
 import time
 import csv
 import serial
 import msvcrt  # Windows-only (used for non-blocking keypress labels)
 
-# NOTE: This script is Windows-only because it uses msvcrt for keypress handling.
-# macOS/Linux users can either:
-#  - run tools/read_serial.py, or
-#  - replace msvcrt usage with a different input method.
-
+# NOTE: Windows-only because it uses msvcrt for keypress handling.
+# macOS/Linux users can:
+#  - use tools/read_serial.py to validate the binary byte protocol, or
+#  - rewrite label input using an alternative input method.
 PORT = "COM5"
 BAUD = 115200
-OUT  = "trill_capture.csv"
+OUT = "trill_capture.csv"
 
 label = "no_touch"
 

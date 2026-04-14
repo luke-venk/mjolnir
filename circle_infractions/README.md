@@ -6,7 +6,7 @@ at **20 Hz** for backend ingestion:
 
 - `0x01` = CLEAR
 - `0xFE` = INFRACTION
-Hardware validation: run tools/read_serial.py --port COMx and verify output bytes are 00 (clear) and FE (infraction)
+
 ## Hardware
 - Arduino Uno
 - Bela Trill Flex
@@ -28,7 +28,7 @@ Hardware validation: run tools/read_serial.py --port COMx and verify output byte
    - Tools → Port → the Uno’s COM/tty port
 6. Upload (→ button).
 
-### If setup fails (RET=2)
+### If setup fails (RET != 0 / intermittent init)
 - Re-seat jumpers (SDA/SCL/VCC/GND), confirm VCC is on **5V** (not VIN).
 - Power-cycle the board.
 - Confirm I2C address (our hardware uses `0x48`). If needed, run an I2C scanner and update `I2C_ADDR`.
@@ -37,8 +37,8 @@ Hardware validation: run tools/read_serial.py --port COMx and verify output byte
 These are only for quick local testing. The Rust backend will ingest the binary stream directly.
 
 ### `tools/read_serial.py` (cross-platform)
-Reads bytes and prints them as hex so you can verify:
-- `00` when clear
+Reads bytes and prints them as **2-digit hex** so you can verify:
+- `01` when clear
 - `FE` when infraction
 
 Usage:

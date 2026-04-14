@@ -3,18 +3,15 @@
 
   Purpose
   -------
-  - Read a Bela Trill Flex capacitive sensor over I2C.
-  - Run a simple infraction classifier on-device (threshold + debounce).
-  - Stream a 1-byte "state" over UART/USB-Serial at a fixed rate for backend ingestion.
+  - Read Bela Trill Flex capacitive sensor over I2C.
+  - Compute a simple infraction state (threshold + debounce).
+  - Stream a 1-byte state over UART/USB-Serial at a fixed rate for Rust ingestion.
 
   Output Protocol (binary)
   ------------------------
-  At 20 Hz (SAMPLE_MS = 50), Arduino writes exactly ONE byte:
-    - 0x00 : CLEAR (no infraction)
+  At 20 Hz (SAMPLE_PERIOD_MS = 50), Arduino writes exactly ONE byte:
+    - 0x01 : CLEAR (no infraction)
     - 0xFE : INFRACTION
-
-  This is intended for Rust-side discovery/ingestion. No ASCII/newlines are emitted
-  once running (except a short ASCII boot banner if DEBUG_ASCII is enabled).
 
   Hardware
   --------
@@ -22,20 +19,18 @@
   - Sensor: Bela Trill Flex
   - Wiring: SDA->A4, SCL->A5, VCC->5V, GND->GND
 
-  Notes on "magic numbers"
-  ------------------------
-  - I2C_ADDR = 0x48: this is NOT assumed to be the default; we discovered it via an I2C scan
-    on our hardware. Trill sensors can have configurable addresses (address pads/jumpers).
-    If a different unit is used, re-scan and update I2C_ADDR.
-  - SAMPLE_MS = 50: 20 Hz sampling/stream rate (50 ms per update).
-  - PRESCALER / NOISE_TH: copied from Bela's Trill Flex example defaults. Prescaler increases
-    the Trill's internal acquisition period to handle higher baseline capacitance; noise threshold
-    suppresses small fluctuations.
+  Address note (Owen)
+  -------------------
+  - Trill default I2C address is 0x48.
+  - To use multiple Trill sensors on the same I2C bus, you must assign unique addresses
+    (typically by soldering address/jumper pads on the Trill board).
+  - Long-term: maintain a map of sensor address -> physical location on the circle.
+    (And optionally require agreement across sensors to reduce false positives.)
 
-  Tuning
-  ------
-  - MX_THRESH chosen from our labeled dataset (no_touch / side_touch / top_touch).
-    In our capture, side_touch max <= 360, so we use 370 to reject side touches.
+  Threshold note
+  --------------
+  - MAX_THRESHOLD is in raw Trill units (unitless integer readings returned by Trill).
+    MAX_THRESHOLD=370 means: trigger when the max channel reading >= 370.
 */
 
 #include <Wire.h>
@@ -43,74 +38,75 @@
 
 Trill trill;
 
-// Set to 1 temporarily if you want readable Serial Monitor logs.
-// Keep 0 for production integration (binary-only output).
+// 0 = production (binary-only output). 1 = debug (prints ASCII status + raw max).
 #define DEBUG_ASCII 0
 
-// I2C address discovered on our hardware via I2C scan.
-const int I2C_ADDR = 0x48;
+// Serial settings
+const unsigned long SERIAL_BAUD = 115200; // Using 115200 for fast debug output when enabled
+
+// I2C settings
+const int I2C_ADDR = 0x48;                   // Default Trill address (other addresses require soldering pads)
+const unsigned long I2C_CLOCK_HZ = 100000;   // Standard-mode I2C (stable on jumper wires)
 
 // 20 Hz stream rate: one byte every 50 ms
-const unsigned long SAMPLE_MS = 50;
+const unsigned long SAMPLE_PERIOD_MS = 50;
 
-// Trill sensor settings (from Bela example; see notes above)
+// Trill sensor settings (from Bela Trill Flex examples)
+// - Prescaler increases acquisition time (helps with higher baseline capacitance).
+// - Noise threshold suppresses small fluctuations in raw readings.
 const int PRESCALER = 3;
-const int NOISE_TH  = 200;
+const int NOISE_THRESHOLD = 200;
 
-// Classifier (from our dataset)
-const int MX_THRESH = 370;
+// Classifier threshold (raw Trill units, unitless integer reading).
+// Chosen from a labeled capture (no_touch / side_touch / top_touch).
+const int MAX_THRESHOLD = 200;
+
+// Debounce time (ms): candidate state must be stable for this long before committing.
 const unsigned long DEBOUNCE_MS = 80;
 
 // Output bytes required by integration
 const uint8_t BYTE_CLEAR = 0x01;
 const uint8_t BYTE_INFRACTION = 0xFE;
 
-// State machine for debounce
-bool state = false;     // false=CLEAR, true=INFRACTION
-bool cand  = false;
-unsigned long candSince = 0;
+// Debounce state machine
+bool committedInfraction = false;       // committed output state (what we are currently transmitting)
+bool candidateInfraction = false;       // candidate state (pending debounce)
+unsigned long candidateSinceMs = 0;     // when the candidate last changed (millis)
 
-static void dbgln(const char* s) {
-#if DEBUG_ASCII
-  Serial.println(s);
-#else
-  (void)s;
-#endif
-}
-
-static void dbg_status(const char* key, long val) {
-#if DEBUG_ASCII
-  Serial.print(key);
-  Serial.println(val);
-#else
-  (void)key; (void)val;
-#endif
+// Soft reset helper (Arduino Uno / AVR). Used instead of a permanent hot loop on setup failure.
+static void resetMcu() {
+  void (*resetFunc)(void) = 0;
+  resetFunc();
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(SERIAL_BAUD);
 
   // Uno resets when a serial client connects; give sensor time to settle
   delay(2000);
 
   Wire.begin();
-  Wire.setClock(100000);
+  Wire.setClock(I2C_CLOCK_HZ);
   delay(100);
 
 #if DEBUG_ASCII
+  // "CI" prefix = Circle Infractions subsystem.
+  // We only print these status lines in DEBUG mode; production output is binary-only.
   Serial.println("CI,STATUS,BOOT");
 #endif
 
-  // Retry setup (avoids intermittent ret=2 at boot)
+  // Retry setup to avoid intermittent Trill init failures at boot.
   int ret = -1;
   for (int attempt = 1; attempt <= 10; attempt++) {
     ret = trill.setup(Trill::TRILL_FLEX, I2C_ADDR);
+
 #if DEBUG_ASCII
     Serial.print("CI,STATUS,SETUP_TRY=");
     Serial.print(attempt);
     Serial.print(",RET=");
     Serial.println(ret);
 #endif
+
     if (ret == 0) break;
     delay(200);
   }
@@ -119,12 +115,14 @@ void setup() {
 #if DEBUG_ASCII
     Serial.println("CI,STATUS,SETUP_FAILED");
 #endif
-    while (1) {}
+    // Reset MCU so we can retry setup on next boot (instead of freezing in a hot loop forever).
+    delay(200);
+    resetMcu();
   }
 
   trill.setPrescaler(PRESCALER);
   delay(10);
-  trill.setNoiseThreshold(NOISE_TH);
+  trill.setNoiseThreshold(NOISE_THRESHOLD);
   delay(10);
   trill.updateBaseline();
 
@@ -134,33 +132,37 @@ void setup() {
 }
 
 void loop() {
-  delay(SAMPLE_MS);
+  delay(SAMPLE_PERIOD_MS);
 
-  // Read one frame of raw channel data and compute max channel value (mx)
+  // Read one frame of raw channel data and take the max channel value (raw Trill units).
   trill.requestRawData();
-  int mx = 0;
+
+  int maxRaw = 0;
   while (trill.rawDataAvailable() > 0) {
     int v = trill.rawDataRead();
-    if (v > mx) mx = v;
+    if (v > maxRaw) maxRaw = v;
   }
 
 #if DEBUG_ASCII
-  Serial.print("CI,RAW,mx=");
-  Serial.println(mx);
+  Serial.print("CI,RAW,maxRaw=");
+  Serial.println(maxRaw);
 #endif
 
-  bool shouldTouch = (mx >= MX_THRESH);
+  bool shouldInfraction = (maxRaw >= MAX_THRESHOLD);
 
-  // Debounce logic
-  if (shouldTouch != cand) {
-    cand = shouldTouch;
-    candSince = millis();
+  // Debounce:
+  // If the instantaneous "shouldInfraction" state flips, mark it as a new candidate and start timing.
+  if (shouldInfraction != candidateInfraction) {
+    candidateInfraction = shouldInfraction;
+    candidateSinceMs = millis();
   }
 
-  if ((millis() - candSince) >= DEBOUNCE_MS && state != cand) {
-    state = cand;
+  // If the candidate state has stayed stable long enough, commit it.
+  // (This rejects quick spikes / brief brushes.)
+  if ((millis() - candidateSinceMs) >= DEBOUNCE_MS) {
+    committedInfraction = candidateInfraction;
   }
 
-  // Production integration: one byte every tick
-  Serial.write(state ? BYTE_INFRACTION : BYTE_CLEAR);
+  // Production integration: send one byte every tick (20 Hz).
+  Serial.write(committedInfraction ? BYTE_INFRACTION : BYTE_CLEAR);
 }
