@@ -19,7 +19,7 @@
   - Sensor: Bela Trill Flex
   - Wiring: SDA->A4, SCL->A5, VCC->5V, GND->GND
 
-  Address note (Owen)
+  Hardware Notes
   -------------------
   - Trill default I2C address is 0x48.
   - To use multiple Trill sensors on the same I2C bus, you must assign unique addresses
@@ -27,10 +27,7 @@
   - Long-term: maintain a map of sensor address -> physical location on the circle.
     (And optionally require agreement across sensors to reduce false positives.)
 
-  Threshold note
-  --------------
-  - MAX_THRESHOLD is in raw Trill units (unitless integer readings returned by Trill).
-    MAX_THRESHOLD=370 means: trigger when the max channel reading >= 370.
+
 */
 
 #include <Wire.h>
@@ -59,6 +56,10 @@ const int NOISE_THRESHOLD = 200;
 
 // Classifier threshold (raw Trill units, unitless integer reading).
 // Chosen from a labeled capture (no_touch / side_touch / top_touch).
+// //Threshold note
+//   --------------
+//   - MAX_THRESHOLD is in raw Trill units (unitless integer readings returned by Trill).
+//     MAX_THRESHOLD=370 means: trigger when the max channel reading >= 370.
 const int MAX_THRESHOLD = 200;
 
 // Debounce time (ms): candidate state must be stable for this long before committing.
@@ -166,3 +167,4 @@ void loop() {
   // Production integration: send one byte every tick (20 Hz).
   Serial.write(committedInfraction ? BYTE_INFRACTION : BYTE_CLEAR);
 }
+

@@ -54,3 +54,5 @@ with open(OUT, "w", newline="") as f:
         w.writerow([int(time.time() * 1000), label, line])
         f.flush()
         print(line)
+
+
