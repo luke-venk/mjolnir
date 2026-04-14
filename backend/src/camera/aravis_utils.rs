@@ -1,8 +1,8 @@
+// Shared code for interacting with Aravis library, used by both
+// discovery and recording tools.
 use crate::camera::CameraIngestConfig;
 use aravis::prelude::*;
 use aravis::{Aravis, Buffer, Camera, Stream};
-/// Shared code for interacting with Aravis library, used by both
-/// discovery and recording tools.
 use std::slice;
 
 /// Retrieves token to access global state of the Aravis library.
@@ -33,7 +33,6 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
     camera
         .set_frame_rate(config.frame_rate_hz)
         .expect("Failed to set frame rate in camera configuration.");
-
 
     // Use binning to downsample from full resolution to lower resolution.
     if camera

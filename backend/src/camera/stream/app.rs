@@ -1,13 +1,13 @@
-/// LiveViewApp implementation required for eframe to handle window creation
-/// for our egui to render live streaming.
+// LiveViewApp implementation required for eframe to handle window creation
+// for our egui to render live streaming.
+use super::frame::FrameData;
+use backend_lib::camera::{CameraIngestConfig, Resolution};
+use eframe::egui;
+use eframe::egui::TextureHandle;
 use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use eframe::egui;
-use eframe::egui::TextureHandle;
-use backend_lib::camera::{CameraIngestConfig, Resolution};
-use super::frame::FrameData;
 
 pub struct LiveViewApp {
     // Receiver for the latest frame from the capture thread.
