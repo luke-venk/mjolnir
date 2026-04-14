@@ -3,11 +3,11 @@
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use aravis::{BufferStatus, CameraExt, StreamExt};
-use super::FrameData;
-use crate::camera::aravis_utils::{
+use crate::frame::FrameData;
+use backend_lib::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
-use crate::camera::CameraIngestConfig;
+use backend_lib::camera::CameraIngestConfig;
 
 /// Live stream from the camera.
 pub fn run_capture_thread(

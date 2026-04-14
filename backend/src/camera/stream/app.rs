@@ -6,8 +6,8 @@ use std::{
 };
 use eframe::egui;
 use eframe::egui::TextureHandle;
-use crate::camera::{CameraIngestConfig, Resolution};
-use super::FrameData;
+use backend_lib::camera::{CameraIngestConfig, Resolution};
+use super::frame::FrameData;
 
 pub struct LiveViewApp {
     // Receiver for the latest frame from the capture thread.

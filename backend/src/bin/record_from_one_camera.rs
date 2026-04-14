@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::thread;
 use clap::Parser;
 use backend_lib::camera::CameraIngestConfig;
-use backend_lib::camera::record::cli::RecordWithOneCameraArgs;
+use backend_lib::camera::RecordWithOneCameraArgs;
 use backend_lib::camera::record::run_capture_thread;
 use backend_lib::camera::record::writer::{Frame, ensure_dir, write_to_disk};
 
