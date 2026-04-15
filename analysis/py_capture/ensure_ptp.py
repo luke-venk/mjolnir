@@ -13,6 +13,7 @@ PTP_PATTERNS = [
     re.compile(r"0x88f7", re.IGNORECASE),
     re.compile(r"\bPTP\b", re.IGNORECASE),
 ]
+HEADER = "------------------------------------------------------------------------"
 
 
 def parse_args():
@@ -22,13 +23,12 @@ def parse_args():
     parser.add_argument("interface", help="Network interface to sniff on")
     parser.add_argument(
         "-c", "--count", type=int, default=50,
-        help="Number of packets to capture before stopping"
+        help="Number of matching packets to wait for before stopping"
     )
     parser.add_argument(
         "-t", "--timeout", type=int, default=10,
         help="Seconds to allow tcpdump to run"
     )
-    parser.add_argument("--tcpdump", default="tcpdump", help="Path to tcpdump binary")
     parser.add_argument("--sudo", action="store_true", help="Run tcpdump through sudo")
     return parser.parse_args()
 
@@ -38,7 +38,7 @@ def build_command(args):
     if args.sudo:
         command.append("sudo")
     command.extend([
-        args.tcpdump,
+        "tcpdump",
         "-i", args.interface,
         "-nn",
         "-l",
@@ -66,10 +66,21 @@ def summarize(lines):
     return peers
 
 
+def print_header():
+    print(HEADER)
+    print("CHECKING FOR PTP COMMUNICATION OVER SWITCH...")
+    print(HEADER)
+
+
 def main():
     args = parse_args()
-    if shutil.which(args.tcpdump) is None:
-        print(f"tcpdump not found: {args.tcpdump}", file=sys.stderr)
+    print_header()
+    print(f"Interface: {args.interface}")
+    print(f"Target packet count: {args.count}")
+    print(f"Timeout: {args.timeout}s")
+
+    if shutil.which("tcpdump") is None:
+        print("tcpdump not found in PATH", file=sys.stderr)
         return 2
 
     try:
@@ -96,9 +107,13 @@ def main():
         print("No PTP traffic detected.")
         return 1
 
-    print(f"Detected {len(ptp_lines)} PTP packets.")
-    for (src, sport, dst, dport), count in summarize(ptp_lines).most_common():
-        print(f"{src}:{sport} -> {dst}:{dport} ({count} packets)")
+    peers = summarize(ptp_lines)
+    print("PTP communication detected successfully.")
+    print(f"Matched packets: {len(ptp_lines)}")
+    print(f"Unique flows observed: {len(peers)}")
+    print("Observed peers:")
+    for (src, sport, dst, dport), count in peers.most_common():
+        print(f"  - {src}:{sport} -> {dst}:{dport} ({count} packets)")
     return 0
 
 

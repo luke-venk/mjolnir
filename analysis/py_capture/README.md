@@ -14,6 +14,109 @@ It is **not** a final video recorder.
 
 ---
 
+## Additional Tool: `ensure_ptp.py`
+
+`ensure_ptp.py` is a lightweight network diagnostic helper that checks whether PTP traffic is visible on a selected interface. It is meant for quick validation that cameras and related devices are at least exchanging PTP packets on the wire.
+
+It currently checks for the *presence of PTP traffic*, not full clock synchronization quality.
+
+### What it does
+
+- Runs `tcpdump` on a selected network interface
+- Filters for common PTP traffic:
+  - UDP port 319
+  - UDP port 320
+  - EtherType `0x88f7`
+- Reports whether matching packets were seen
+- Prints a simple peer summary from captured packets
+
+### Requirements
+
+- `tcpdump` installed on the host
+- Permission to capture packets on the selected interface
+  - On macOS, this usually means running with `sudo`
+  - On Linux, this may also require elevated privileges depending on capture permissions
+
+### Basic usage
+
+Run the script directly:
+
+```bash
+python3 ensure_ptp.py <interface>
+```
+
+Examples:
+
+```bash
+python3 ensure_ptp.py en9 -c 5
+sudo python3 ensure_ptp.py en9 -c 5
+python3 ensure_ptp.py eth0 -c 20 -t 10
+```
+
+On success, the script begins output with:
+
+```text
+------------------------------------------------------------------------
+CHECKING FOR PTP COMMUNICATION OVER SWITCH...
+------------------------------------------------------------------------
+```
+
+### Arguments
+
+- `<interface>`
+  - Network interface to capture on
+
+- `-c, --count <N>`
+  - Number of matching packets to wait for before stopping
+  - Default: `50`
+
+- `-t, --timeout <seconds>`
+  - Maximum time the wrapper waits for `tcpdump` to finish
+  - Default: `10`
+
+- `--sudo`
+  - Run `tcpdump` via `sudo`
+  - Note: this is sensitive to local sudo policy and may behave differently than running the whole script under `sudo`
+
+### Recommended invocation
+
+For the most reliable behavior on systems that require elevated packet capture permissions, prefer:
+
+```bash
+sudo python3 ensure_ptp.py <interface> -c 5
+```
+
+instead of relying on the script to invoke `sudo` internally.
+
+### Interpreting results
+
+If the script succeeds, it prints a header, basic capture settings, the number of matched packets, and a simple summary of observed peer flows. That means PTP traffic was observed on the selected interface.
+
+If the script reports:
+
+```text
+No PTP traffic detected.
+```
+
+that means no matching traffic was seen during the capture window. This may mean:
+
+- the interface is wrong
+- PTP is not active
+- packet rate is low relative to the selected `--count` / `--timeout` values
+
+If you see permission errors on macOS such as BPF access failures, rerun with `sudo`.
+
+### Limitations
+
+`ensure_ptp.py` currently verifies that PTP packets are present on the wire. It does *not* yet verify:
+
+- which device is grandmaster
+- whether cameras are successfully synchronized
+- offset, delay, or servo quality
+- whether the observed packets correspond to the exact expected camera pair
+
+Use it as a quick transport-level sanity check, not as a full synchronization validator.
+
 ## Features
 
 - Capture from a selected camera by index
