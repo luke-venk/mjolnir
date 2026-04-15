@@ -1,12 +1,12 @@
+use super::writer::{Frame, Metadata, ensure_dir, sanitize_path_name};
+use crate::camera::CameraIngestConfig;
+use crate::camera::aravis_utils::{
+    configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use crate::camera::CameraIngestConfig;
-use super::writer::{Frame, Metadata, ensure_dir, sanitize_path_name};
-use crate::camera::aravis_utils::{
-    configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
-};
 
 use aravis::{BufferStatus, CameraExt, StreamExt};
 
@@ -19,8 +19,8 @@ pub fn run_capture_thread(
     max_duration: Option<f64>,
     shutdown: Arc<AtomicBool>,
 ) {
-    println!("Beginning recording for camera {}.",config.camera_id);
-    
+    println!("Beginning recording for camera {}.", config.camera_id);
+
     // Ensure output directory exists.
     let camera_id = config.camera_id.clone();
     let output_camera_dir = output_base_dir.join(sanitize_path_name(&camera_id));
@@ -32,7 +32,7 @@ pub fn run_capture_thread(
         Err(e) => {
             eprintln!("{e}");
             return;
-        },
+        }
     };
     configure_camera(&camera, &config);
     let stream = create_stream_and_allocate_buffers(&camera, config.num_buffers);
@@ -146,7 +146,9 @@ pub fn run_capture_thread(
                     bytes: data,
                     metadata: metadata,
                 };
-                frame_tx.send(frame).expect("Error: Failed to send frame from recording capture thread to write thread.");
+                frame_tx.send(frame).expect(
+                    "Error: Failed to send frame from recording capture thread to write thread.",
+                );
 
                 frames_saved += 1;
             }

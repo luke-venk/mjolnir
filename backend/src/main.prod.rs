@@ -1,8 +1,10 @@
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use axum::Router;
 use axum_embed::ServeEmbed;
+use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 use rust_embed::Embed;
 
+const ARDUINO_BAUD_RATE: u32 = 115200;
 #[cfg(feature = "real")]
 use backend_lib::pipeline::Pipeline;
 #[cfg(feature = "real")]
@@ -19,10 +21,12 @@ pub struct Asset;
 // rust-embed and serve using axum_embed.
 pub fn create_prod_app(throw_source: ThrowSource) -> Router {
     let serve_assets = ServeEmbed::<Asset>::new();
-        
+
+    let infractions_rx = begin_detecting_circle_infractions(ARDUINO_BAUD_RATE);
+
     // Use the fallback service so any request that isn't one of the
     // API's routes will be directed to the frontend static exports.
-    create_api_router(throw_source)
+    create_api_router(throw_source, infractions_rx)
         .fallback_service(serve_assets)
 }
 
