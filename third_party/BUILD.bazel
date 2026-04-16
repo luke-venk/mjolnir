@@ -1,4 +1,923 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
+
+filegroup(
+    name = "libffi_platform_headers",
+    srcs = select({
+        "//:darwin_arm64": glob(["libffi_per_platform_build_files/darwin_arm64/*.h"]),
+        "//:linux_arm64": glob(["libffi_per_platform_build_files/linux_arm64/*.h"]),
+        "//:linux_amd64": glob(["libffi_per_platform_build_files/linux_amd64/*.h"]),
+    }),
+)
+
+cc_library(
+    name = "libffi",
+    srcs = glob(
+        ["libffi/src/*.c"],
+        exclude = ["libffi/src/java_raw_api.c"],
+    ) + select({
+        "//:darwin_arm64": glob(
+            [
+                "libffi/src/aarch64/*.S",
+                "libffi/src/aarch64/*.c",
+                "libffi/src/aarch64/*.h",
+            ],
+            exclude = ["libffi/src/aarch64/win64_armasm.S"],
+        ),
+        "//:linux_arm64": glob(
+            [
+                "libffi/src/aarch64/*.S",
+                "libffi/src/aarch64/*.c",
+                "libffi/src/aarch64/*.h",
+            ],
+            exclude = ["libffi/src/aarch64/win64_armasm.S"],
+        ),
+        "//:linux_amd64": glob(
+            [
+                "libffi/src/x86/*.S",
+                "libffi/src/x86/*.c",
+                "libffi/src/x86/*.h",
+            ],
+            exclude = [
+                "libffi/src/x86/win64_intel.S",
+                "libffi/src/x86/win64.S",
+            ],
+        ),
+    }),
+    hdrs = [":libffi_platform_headers"] + [
+        "libffi/include/ffi_cfi.h",
+        "libffi/include/ffi_common.h",
+        "libffi/include/tramp.h",
+    ],
+    copts = [
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+        "-pthread",
+        "-Wno-unknown-pragmas",
+        "-D_REENTRANT",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = ["FFI_BUILDING"],
+    includes = [
+        "libffi/include",
+    ] + select({
+        "//:darwin_arm64": ["libffi_per_platform_build_files/darwin_arm64"],
+        "//:linux_arm64": ["libffi_per_platform_build_files/linux_arm64"],
+        "//:linux_amd64": ["libffi_per_platform_build_files/linux_amd64"],
+    }),
+    linkopts = [
+        "-pthread",
+        "-lm",
+    ],
+)
+
+genrule(
+    name = "copy_pcre2_h",
+    srcs = ["pcre2/src/pcre2.h.generic"],
+    outs = ["pcre2/src/pcre2.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "copy_pcre2_config",
+    srcs = ["pcre2/src/config.h.generic"],
+    outs = ["pcre2/src/config.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "copy_pcre2_chartables",
+    srcs = ["pcre2/src/pcre2_chartables.c.dist"],
+    outs = ["pcre2/src/pcre2_chartables.c"],
+    cmd = "cp $< $@",
+)
+
+cc_library(
+    name = "pcre2",
+    # Have to spec manually because glob doesn't work across bazel submodules :/
+    srcs = [
+        "pcre2/src/config.h",
+        "pcre2/src/pcre2_auto_possess.c",
+        "pcre2/src/pcre2_chartables.c",
+        "pcre2/src/pcre2_chkdint.c",
+        "pcre2/src/pcre2_compile.c",
+        "pcre2/src/pcre2_compile.h",
+        "pcre2/src/pcre2_compile_cgroup.c",
+        "pcre2/src/pcre2_compile_class.c",
+        "pcre2/src/pcre2_config.c",
+        "pcre2/src/pcre2_context.c",
+        "pcre2/src/pcre2_convert.c",
+        "pcre2/src/pcre2_dfa_match.c",
+        "pcre2/src/pcre2_error.c",
+        "pcre2/src/pcre2_extuni.c",
+        "pcre2/src/pcre2_find_bracket.c",
+        "pcre2/src/pcre2_internal.h",
+        "pcre2/src/pcre2_intmodedep.h",
+        "pcre2/src/pcre2_jit_char_inc.h",
+        "pcre2/src/pcre2_jit_compile.c",
+        "pcre2/src/pcre2_jit_match_inc.h",
+        "pcre2/src/pcre2_jit_misc_inc.h",
+        "pcre2/src/pcre2_jit_simd_inc.h",
+        "pcre2/src/pcre2_maketables.c",
+        "pcre2/src/pcre2_match.c",
+        "pcre2/src/pcre2_match_data.c",
+        "pcre2/src/pcre2_match_next.c",
+        "pcre2/src/pcre2_newline.c",
+        "pcre2/src/pcre2_ord2utf.c",
+        "pcre2/src/pcre2_pattern_info.c",
+        "pcre2/src/pcre2_printint_inc.h",
+        "pcre2/src/pcre2_script_run.c",
+        "pcre2/src/pcre2_serialize.c",
+        "pcre2/src/pcre2_string_utils.c",
+        "pcre2/src/pcre2_study.c",
+        "pcre2/src/pcre2_substitute.c",
+        "pcre2/src/pcre2_substring.c",
+        "pcre2/src/pcre2_tables.c",
+        "pcre2/src/pcre2_ucd.c",
+        "pcre2/src/pcre2_ucp.h",
+        "pcre2/src/pcre2_ucptables_inc.h",
+        "pcre2/src/pcre2_util.h",
+        "pcre2/src/pcre2_valid_utf.c",
+        "pcre2/src/pcre2_xclass.c",
+    ],
+    hdrs = ["pcre2/src/pcre2.h"],
+    copts = [
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+        "-pthread",
+        "-Wno-unknown-pragmas",
+        "-D_REENTRANT",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = [
+        "HAVE_CONFIG_H",
+        "PCRE2_CODE_UNIT_WIDTH=8",
+        "SUPPORT_UNICODE",
+        "HAVE_UNISTD_H",
+        "HAVE_STDBOOL_H",
+    ],
+    includes = ["pcre2/src"],
+    linkopts = [
+        "-pthread",
+        "-lm",
+    ],
+)
+
+cc_library(
+    name = "zlib",
+    # Have to spec manually because glob doesn't work across bazel submodules :/
+    srcs = [
+        "zlib/adler32.c",
+        "zlib/compress.c",
+        "zlib/crc32.c",
+        "zlib/crc32.h",
+        "zlib/deflate.c",
+        "zlib/deflate.h",
+        "zlib/gzclose.c",
+        "zlib/gzguts.h",
+        "zlib/gzlib.c",
+        "zlib/gzread.c",
+        "zlib/gzwrite.c",
+        "zlib/infback.c",
+        "zlib/inffast.c",
+        "zlib/inffast.h",
+        "zlib/inffixed.h",
+        "zlib/inflate.c",
+        "zlib/inflate.h",
+        "zlib/inftrees.c",
+        "zlib/inftrees.h",
+        "zlib/trees.c",
+        "zlib/trees.h",
+        "zlib/uncompr.c",
+        "zlib/zutil.c",
+        "zlib/zutil.h",
+    ],
+    hdrs = [
+        "zlib/zconf.h",
+        "zlib/zlib.h",
+    ],
+    copts = [
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+        "-pthread",
+        "-Wno-unknown-pragmas",
+        "-D_REENTRANT",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = ["Z_HAVE_UNISTD_H"],
+    linkopts = [
+        "-pthread",
+        "-lm",
+    ],
+)
+
+genrule(
+    name = "glib_generated_includes",
+    srcs = select({
+        "//:darwin_arm64": glob([
+            "glib_per_platform_build_files/darwin_arm64/*.h",
+            "glib_per_platform_build_files/glib/darwin_arm64/*.h",
+        ]),
+        "//:linux_arm64": glob([
+            "glib_per_platform_build_files/linux_arm64/*.h",
+            "glib_per_platform_build_files/glib/linux_arm64/*.h",
+        ]),
+        "//:linux_amd64": glob([
+            "glib_per_platform_build_files/linux_amd64/*.h",
+            "glib_per_platform_build_files/glib/linux_amd64/*.h",
+        ]),
+    }),
+    outs = [
+        "glib_generated_includes/config.h",
+        "glib_generated_includes/glib/glibconfig.h",
+    ],
+    cmd = select({
+        "//:darwin_arm64": """
+            cp $(location glib_per_platform_build_files/darwin_arm64/config.h) $(location glib_generated_includes/config.h)
+            cp $(location glib_per_platform_build_files/glib/darwin_arm64/glibconfig.h) $(location glib_generated_includes/glib/glibconfig.h)
+        """,
+        "//:linux_arm64": """
+            cp $(location glib_per_platform_build_files/linux_arm64/config.h) $(location glib_generated_includes/config.h)
+            cp $(location glib_per_platform_build_files/glib/linux_arm64/glibconfig.h) $(location glib_generated_includes/glib/glibconfig.h)
+        """,
+        "//:linux_amd64": """
+            cp $(location glib_per_platform_build_files/linux_amd64/config.h) $(location glib_generated_includes/config.h)
+            cp $(location glib_per_platform_build_files/glib/linux_amd64/glibconfig.h) $(location glib_generated_includes/glib/glibconfig.h)
+        """,
+    }),
+)
+
+genrule(
+    name = "generate_gversionmacros_h",
+    srcs = ["glib/glib/gversionmacros.h.in"],
+    outs = ["glib/glib/gversionmacros.h"],
+    cmd = """
+        VERSIONS_BLOCK='\\
+#define GLIB_VERSION_2_26 (G_ENCODE_VERSION(2, 26))\\n\\
+#define GLIB_VERSION_2_28 (G_ENCODE_VERSION(2, 28))\\n\\
+#define GLIB_VERSION_2_30 (G_ENCODE_VERSION(2, 30))\\n\\
+#define GLIB_VERSION_2_32 (G_ENCODE_VERSION(2, 32))\\n\\
+#define GLIB_VERSION_2_34 (G_ENCODE_VERSION(2, 34))\\n\\
+#define GLIB_VERSION_2_36 (G_ENCODE_VERSION(2, 36))\\n\\
+#define GLIB_VERSION_2_38 (G_ENCODE_VERSION(2, 38))\\n\\
+#define GLIB_VERSION_2_40 (G_ENCODE_VERSION(2, 40))\\n\\
+#define GLIB_VERSION_2_42 (G_ENCODE_VERSION(2, 42))\\n\\
+#define GLIB_VERSION_2_44 (G_ENCODE_VERSION(2, 44))\\n\\
+#define GLIB_VERSION_2_46 (G_ENCODE_VERSION(2, 46))\\n\\
+#define GLIB_VERSION_2_48 (G_ENCODE_VERSION(2, 48))\\n\\
+#define GLIB_VERSION_2_50 (G_ENCODE_VERSION(2, 50))\\n\\
+#define GLIB_VERSION_2_52 (G_ENCODE_VERSION(2, 52))\\n\\
+#define GLIB_VERSION_2_54 (G_ENCODE_VERSION(2, 54))\\n\\
+#define GLIB_VERSION_2_56 (G_ENCODE_VERSION(2, 56))\\n\\
+#define GLIB_VERSION_2_58 (G_ENCODE_VERSION(2, 58))\\n\\
+#define GLIB_VERSION_2_60 (G_ENCODE_VERSION(2, 60))\\n\\
+#define GLIB_VERSION_2_62 (G_ENCODE_VERSION(2, 62))\\n\\
+#define GLIB_VERSION_2_64 (G_ENCODE_VERSION(2, 64))\\n\\
+#define GLIB_VERSION_2_66 (G_ENCODE_VERSION(2, 66))\\n\\
+#define GLIB_VERSION_2_68 (G_ENCODE_VERSION(2, 68))\\n\\
+#define GLIB_VERSION_2_70 (G_ENCODE_VERSION(2, 70))\\n\\
+#define GLIB_VERSION_2_72 (G_ENCODE_VERSION(2, 72))\\n\\
+#define GLIB_VERSION_2_74 (G_ENCODE_VERSION(2, 74))\\n\\
+#define GLIB_VERSION_2_76 (G_ENCODE_VERSION(2, 76))\\n\\
+#define GLIB_VERSION_2_78 (G_ENCODE_VERSION(2, 78))\\n\\
+#define GLIB_VERSION_2_80 (G_ENCODE_VERSION(2, 80))\\n\\
+#define GLIB_VERSION_2_82 (G_ENCODE_VERSION(2, 82))\\n\\
+#define GLIB_VERSION_2_84 (G_ENCODE_VERSION(2, 84))\\n\\
+#define GLIB_VERSION_2_86 (G_ENCODE_VERSION(2, 86))\\n\\
+#define GLIB_VERSION_2_88 (G_ENCODE_VERSION(2, 88))' && \\
+        sed "s/@GLIB_VERSIONS@/$$VERSIONS_BLOCK/" $< > $@
+    """,
+)
+
+genrule(
+    name = "generate_glib_visibility_h",
+    outs = ["glib/glib/glib-visibility.h"],
+    cmd = """
+        printf '#ifndef __GLIB_VISIBILITY_H__\\n\
+#define __GLIB_VISIBILITY_H__\\n\
+\\n\
+#define GLIB_VAR extern\\n\
+#define GLIB_DEPRECATED extern\\n\
+#define GLIB_DEPRECATED_FOR(f) extern\\n\
+\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_44\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_46\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_48\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_50\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_50\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_52\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_54\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_56\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_58\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_60\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_62\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_64\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_66\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_68\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_70\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_72\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_74\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_76\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_78\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_80\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_82\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_84\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_86\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_88\\n\
+#define GLIB_AVAILABLE_STATIC_INLINE_IN_2_90\\n\
+\\n\
+#define GLIB_AVAILABLE_IN_ALL extern\\n\
+#define GLIB_AVAILABLE_STATIC_IN_ALL extern\\n\
+#define GLIB_DEPRECATED_IN_ALL extern\\n\
+#define GLIB_DEPRECATED_IN_ALL_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_26 extern\\n\
+#define GLIB_DEPRECATED_IN_2_26_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_28 extern\\n\
+#define GLIB_DEPRECATED_IN_2_28_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_30 extern\\n\
+#define GLIB_DEPRECATED_IN_2_30_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_32 extern\\n\
+#define GLIB_DEPRECATED_IN_2_32_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_34 extern\\n\
+#define GLIB_DEPRECATED_IN_2_34_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_36 extern\\n\
+#define GLIB_DEPRECATED_IN_2_36_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_38 extern\\n\
+#define GLIB_DEPRECATED_IN_2_38_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_40 extern\\n\
+#define GLIB_DEPRECATED_IN_2_40_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_42 extern\\n\
+#define GLIB_DEPRECATED_IN_2_42_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_44 extern\\n\
+#define GLIB_DEPRECATED_IN_2_44_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_46 extern\\n\
+#define GLIB_DEPRECATED_IN_2_46_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_48 extern\\n\
+#define GLIB_DEPRECATED_IN_2_48_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_50 extern\\n\
+#define GLIB_DEPRECATED_IN_2_50_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_52 extern\\n\
+#define GLIB_DEPRECATED_IN_2_52_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_54 extern\\n\
+#define GLIB_DEPRECATED_IN_2_54_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_56 extern\\n\
+#define GLIB_DEPRECATED_IN_2_56_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_58 extern\\n\
+#define GLIB_DEPRECATED_IN_2_58_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_60 extern\\n\
+#define GLIB_DEPRECATED_IN_2_60_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_62 extern\\n\
+#define GLIB_DEPRECATED_IN_2_62_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_64 extern\\n\
+#define GLIB_DEPRECATED_IN_2_64_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_66 extern\\n\
+#define GLIB_DEPRECATED_IN_2_66_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_68 extern\\n\
+#define GLIB_DEPRECATED_IN_2_68_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_70 extern\\n\
+#define GLIB_DEPRECATED_IN_2_70_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_72 extern\\n\
+#define GLIB_DEPRECATED_IN_2_72_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_74 extern\\n\
+#define GLIB_DEPRECATED_IN_2_74_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_76 extern\\n\
+#define GLIB_DEPRECATED_IN_2_76_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_78 extern\\n\
+#define GLIB_DEPRECATED_IN_2_78_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_80 extern\\n\
+#define GLIB_DEPRECATED_IN_2_80_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_82 extern\\n\
+#define GLIB_DEPRECATED_IN_2_82_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_84 extern\\n\
+#define GLIB_DEPRECATED_IN_2_84_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_86 extern\\n\
+#define GLIB_DEPRECATED_IN_2_86_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_88 extern\\n\
+#define GLIB_DEPRECATED_IN_2_88_FOR(f) extern\\n\
+#define GLIB_DEPRECATED_IN_2_90 extern\\n\
+#define GLIB_DEPRECATED_IN_2_90_FOR(f) extern\\n\
+\\n\
+/* Types/Structs/Enums MUST NOT have extern */\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_26\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_26_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_28\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_28_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_30\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_30_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_32\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_32_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_34\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_34_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_36\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_36_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_38\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_38_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_40\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_40_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_42\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_42_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_44\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_44_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_46\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_46_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_48\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_48_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_50\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_50_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_52\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_52_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_54\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_54_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_56\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_56_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_58\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_58_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_60\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_60_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_62\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_62_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_64\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_64_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_66\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_66_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_68\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_68_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_70\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_70_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_72\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_72_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_74\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_74_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_76\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_76_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_78\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_78_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_80\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_80_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_82\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_82_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_84\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_84_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_86\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_86_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_88\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_88_FOR(f)\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_90\\n\
+#define GLIB_DEPRECATED_TYPE_IN_2_90_FOR(f)\\n\
+\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_26\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_26_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_28\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_28_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_30\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_30_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_32\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_32_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_34\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_34_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_36\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_36_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_38\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_38_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_40\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_40_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_42\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_42_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_44\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_44_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_46\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_46_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_48\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_48_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_50\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_50_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_52\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_52_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_54\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_54_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_56\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_56_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_58\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_58_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_60\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_60_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_62\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_62_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_64\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_64_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_66\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_66_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_68\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_68_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_70\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_70_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_72\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_72_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_74\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_74_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_76\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_76_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_78\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_78_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_80\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_80_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_82\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_82_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_84\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_84_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_86\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_86_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_88\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_88_FOR(f)\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_90\\n\
+#define GLIB_DEPRECATED_MACRO_IN_2_90_FOR(f)\\n\
+\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_26\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_26_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_28\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_28_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_30\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_30_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_32\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_32_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_34\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_34_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_36\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_36_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_38\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_38_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_40\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_40_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_42\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_42_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_44\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_44_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_46\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_46_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_48\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_48_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_50\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_50_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_52\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_52_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_54\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_54_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_56\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_56_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_58\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_58_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_60\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_60_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_62\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_62_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_64\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_64_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_66\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_66_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_68\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_68_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_70\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_70_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_72\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_72_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_74\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_74_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_76\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_76_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_78\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_78_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_80\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_80_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_82\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_82_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_84\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_84_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_86\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_86_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_88\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_88_FOR(f)\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_90\\n\
+#define GLIB_AVAILABLE_MACRO_IN_2_90_FOR(f)\\n\
+\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_26\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_28\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_30\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_32\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_34\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_36\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_38\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_40\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_42\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_44\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_46\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_48\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_50\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_52\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_54\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_56\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_58\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_60\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_62\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_64\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_66\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_68\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_70\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_72\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_74\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_76\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_78\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_80\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_82\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_84\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_86\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_88\\n\
+#define GLIB_AVAILABLE_ENUMERATOR_IN_2_90\\n\
+\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_26\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_26_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_28\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_28_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_30\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_30_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_32\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_32_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_34\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_34_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_36\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_36_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_38\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_38_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_40\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_40_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_42\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_42_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_44\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_44_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_46\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_46_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_48\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_48_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_50\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_50_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_52\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_52_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_54\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_54_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_56\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_56_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_58\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_58_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_60\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_60_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_62\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_62_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_64\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_64_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_66\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_66_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_68\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_68_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_70\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_70_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_72\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_72_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_74\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_74_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_76\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_76_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_78\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_78_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_80\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_80_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_82\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_82_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_84\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_84_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_86\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_86_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_88\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_88_FOR(f)\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_90\\n\
+#define GLIB_DEPRECATED_ENUMERATOR_IN_2_90_FOR(f)\\n\
+\\n\
+#include <glib/gversionmacros.h>\\n\
+\\n\
+/* Versioned availability */\\n\
+#define GLIB_AVAILABLE_IN_2_26 extern\\n\
+#define GLIB_AVAILABLE_IN_2_28 extern\\n\
+#define GLIB_AVAILABLE_IN_2_30 extern\\n\
+#define GLIB_AVAILABLE_IN_2_32 extern\\n\
+#define GLIB_AVAILABLE_IN_2_34 extern\\n\
+#define GLIB_AVAILABLE_IN_2_36 extern\\n\
+#define GLIB_AVAILABLE_IN_2_38 extern\\n\
+#define GLIB_AVAILABLE_IN_2_40 extern\\n\
+#define GLIB_AVAILABLE_IN_2_42 extern\\n\
+#define GLIB_AVAILABLE_IN_2_44 extern\\n\
+#define GLIB_AVAILABLE_IN_2_46 extern\\n\
+#define GLIB_AVAILABLE_IN_2_48 extern\\n\
+#define GLIB_AVAILABLE_IN_2_50 extern\\n\
+#define GLIB_AVAILABLE_IN_2_52 extern\\n\
+#define GLIB_AVAILABLE_IN_2_54 extern\\n\
+#define GLIB_AVAILABLE_IN_2_56 extern\\n\
+#define GLIB_AVAILABLE_IN_2_58 extern\\n\
+#define GLIB_AVAILABLE_IN_2_60 extern\\n\
+#define GLIB_AVAILABLE_IN_2_62 extern\\n\
+#define GLIB_AVAILABLE_IN_2_64 extern\\n\
+#define GLIB_AVAILABLE_IN_2_66 extern\\n\
+#define GLIB_AVAILABLE_IN_2_68 extern\\n\
+#define GLIB_AVAILABLE_IN_2_70 extern\\n\
+#define GLIB_AVAILABLE_IN_2_72 extern\\n\
+#define GLIB_AVAILABLE_IN_2_74 extern\\n\
+#define GLIB_AVAILABLE_IN_2_76 extern\\n\
+#define GLIB_AVAILABLE_IN_2_78 extern\\n\
+#define GLIB_AVAILABLE_IN_2_80 extern\\n\
+#define GLIB_AVAILABLE_IN_2_82 extern\\n\
+#define GLIB_AVAILABLE_IN_2_84 extern\\n\
+#define GLIB_AVAILABLE_IN_2_86 extern\\n\
+#define GLIB_AVAILABLE_IN_2_88 extern\\n\
+#define GLIB_AVAILABLE_IN_2_90 extern\\n\
+\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_26\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_28\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_30\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_32\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_34\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_36\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_38\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_40\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_42\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_44\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_46\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_48\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_50\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_52\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_54\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_56\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_58\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_60\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_62\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_64\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_66\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_68\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_70\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_72\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_74\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_76\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_78\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_80\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_82\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_84\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_86\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_88\\n\
+#define GLIB_AVAILABLE_TYPE_IN_2_90\\n\
+\\n\
+#endif' > $@
+    """,
+)
+
+cc_library(
+    name = "glib",
+    srcs = [
+        ":glib_generated_includes",
+    ] + glob(
+        [
+            "glib/glib/*.c",
+            "glib/glib/libcharset/*.c",
+            "glib/glib/deprecated/*.c",
+        ],
+        exclude = [
+            "glib/glib/gdbus-daemon.c",
+            "glib/glib/gstdio-private.c",
+            "glib/glib/giowin32.c",
+            "glib/glib/gspawn-win32.c",
+            "glib/glib/gspawn-win32-helper.c",
+            "glib/glib/gthread-win32.c",
+            "glib/glib/twin32.c",
+            "glib/glib/gwin32.c",
+            "glib/glib/win_iconv.c",
+            "glib/glib/gutils-os2.c",
+        ],
+    ),
+    hdrs = glob([
+        "glib/glib/*.h",
+        "glib/glib/libcharset/*.h",
+        "glib/glib/deprecated/*.h",
+    ]) + [
+        "glib/glib/glib-visibility.h",
+        "glib/glib/gthread-posix.c",
+        "glib/glib/gversionmacros.h",
+    ],
+    copts = [
+        "-DHAVE_LIBMOUNT=0",
+        "-pthread",
+        "-Wno-unknown-pragmas",
+        "-D_REENTRANT",
+        "-I$(GENDIR)/third_party/generated_includes",
+        "-include",
+        "glib/glib/glib.h",
+        "-include",
+        "glib/glib/gutilsprivate.h",
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = [
+        "GLIB_MAJOR_VERSION=2",
+        "LIBDIR=\\\"/usr/local/lib\\\"",
+        "GLIB_CHARSETALIAS_DIR=\\\"/usr/local/lib\\\"",
+        "GLIB_COMPILATION",
+        "G_DISABLE_CAST_CHECKS",
+        "HAVE_CONFIG_H",
+        "G_LOG_DOMAIN=\\\"GLib\\\"",
+    ],
+    includes = [
+        ".",
+        "glib",
+        "glib/glib",
+        "glib_generated_includes",
+        "glib_generated_includes/glib",
+    ],
+    linkopts = [
+        "-pthread",
+        "-lm",
+    ] + select({
+        "//:darwin_arm64": [
+            "-liconv",
+            "-framework CoreFoundation",
+            "-framework Carbon",
+            "-framework Foundation",
+        ],
+        "//:linux_arm64": ["-lrt"],
+        "//:linux_amd64": ["-lrt"],
+    }),
+    deps = [
+        ":pcre2",  # GLib's regex engine
+        ":zlib",  # Used in various utilities
+    ],
+)
+
+cc_library(
+    name = "gmodule",
+    srcs = [
+        "glib/gmodule/gmodule.c",
+        "glib/gmodule/gmodule-ar.c",
+        "glib/gmodule/gmodule-deprecated.c",
+        "glib/gmodule/gmodule-dl.c",
+    ],
+    hdrs = ["glib/gmodule/gmodule.h"],
+    copts = [
+        "-pthread",
+        "-Wno-unknown-pragmas",
+        "-D_REENTRANT",
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    includes = [
+        ".",
+        "glib",
+        "glib/gmodule",
+    ],
+    linkopts = [
+        "-pthread",
+        "-lm",
+    ] + select({
+        "//:darwin_arm64": [
+            "-liconv",
+            "-framework CoreFoundation",
+            "-framework Carbon",
+            "-framework Foundation",
+        ],
+        "//:linux_arm64": ["-lrt"],
+        "//:linux_amd64": ["-lrt"],
+    }),
+    deps = [":glib"],
+)
 
 cc_library(
     name = "aravis_objects",
@@ -31,9 +950,4 @@ cc_library(
         "//conditions:default": [],
     }),
     # deps = [":gen_libzmq_platform_hpp"],
-)
-
-cc_library(
-    name = "libffi",
-    srcs = glob(["libffi/src/*.c"]),
 )

@@ -4,3 +4,12 @@
 [submodule "third_party/libffi"]
 	path = third_party/libffi
 	url = https://github.com/libffi/libffi
+[submodule "third_party/zlib"]
+	path = third_party/zlib
+	url = https://github.com/madler/zlib
+[submodule "third_party/pcre2"]
+	path = third_party/pcre2
+	url = https://github.com/PCRE2Project/pcre2.git
+[submodule "third_party/glib"]
+	path = third_party/glib
+	url = https://gitlab.gnome.org/GNOME/glib.git
