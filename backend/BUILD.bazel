@@ -31,7 +31,6 @@ rust_library(
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
-        "@crates//:eframe",
         "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
@@ -45,7 +44,13 @@ rust_library(
     name = "backend_lib_fake",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.*.rs"],
+        exclude = [
+            "src/bin/",
+            "src/main.*.rs",
+            # Exclude following code that contains egui and eframe.
+            # See ticket #30 for more information.
+            "src/camera/stream/**/*.rs",
+        ]
     ),
     crate_name = "backend_lib",
     rustc_flags = select({
@@ -58,7 +63,6 @@ rust_library(
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
-        "@crates//:eframe",
         "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
@@ -75,8 +79,11 @@ rust_library(
 # See ticket #30 for more information.
 rust_library(
     name = "stream_lib",
-    crate_name = "stream_lib",
     srcs = glob(["src/camera/stream/**/*.rs"]),
+    rustc_flags = select({
+        "//:release": ["-Cstrip=debuginfo"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
         "@crates//:aravis",
@@ -212,6 +219,14 @@ rust_test(
 rust_binary(
     name = "discover",
     srcs = ["src/bin/discover_cameras.rs"],
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Cpanic=abort",
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
     ],
@@ -220,6 +235,13 @@ rust_binary(
 rust_binary(
     name = "record_from_one",
     srcs = ["src/bin/record_from_one_camera.rs"],
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
         "@crates//:clap",
@@ -231,6 +253,13 @@ rust_binary(
 rust_binary(
     name = "record",
     srcs = ["src/bin/record_from_both_cameras.rs"],
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
         "@crates//:clap",
@@ -242,6 +271,13 @@ rust_binary(
 rust_binary(
     name = "stream",
     srcs = ["src/bin/live_stream.rs"],
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
         ":stream_lib",
