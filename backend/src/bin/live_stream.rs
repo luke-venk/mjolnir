@@ -1,7 +1,7 @@
-use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::stream::capture::run_capture_thread;
 use backend_lib::camera::stream::cli::StreamFromCamerasArgs;
 use backend_lib::camera::stream::{FrameData, LiveViewApp};
+use backend_lib::camera::CameraIngestConfig;
 use clap::Parser;
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};

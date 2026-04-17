@@ -20,7 +20,7 @@ pub struct CommonRecordArgs {
     pub frame_rate_hz: f64,
 
     /// The number of buffers the cameras can push frames to, enabling asynchrony.
-    #[arg(long, default_value_t = 8)]
+    #[arg(long, default_value_t = 16)]
     pub num_buffers: usize,
 
     /// Timeout for waiting on a frame buffer, in milliseconds.
@@ -81,4 +81,7 @@ pub struct RecordWithBothCamerasArgs {
     // Common record args.
     #[command(flatten)]
     pub common_args: CommonRecordArgs,
+
+    #[arg(long = "interface", required = true)]
+    pub interface: String,
 }
