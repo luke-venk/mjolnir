@@ -1,8 +1,8 @@
+// Shared code for interacting with Aravis library, used by both
+// discovery and recording tools.
 use crate::camera::CameraIngestConfig;
 use aravis::prelude::*;
 use aravis::{Aravis, Buffer, Camera, Stream};
-/// Shared code for interacting with Aravis library, used by both
-/// discovery and recording tools.
 use std::slice;
 
 /// Retrieves token to access global state of the Aravis library.

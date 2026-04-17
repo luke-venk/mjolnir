@@ -12,7 +12,13 @@ rust_library(
     name = "backend_lib",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.*.rs"],
+        exclude = [
+            "src/bin/",
+            "src/main.*.rs",
+            # Exclude following code that contains egui and eframe.
+            # See ticket #30 for more information.
+            "src/camera/stream/**/*.rs",
+        ]
     ),
     crate_features = ["real"],
     rustc_flags = select({
@@ -25,7 +31,6 @@ rust_library(
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
-        "@crates//:eframe",
         "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
@@ -39,7 +44,13 @@ rust_library(
     name = "backend_lib_fake",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.*.rs"],
+        exclude = [
+            "src/bin/",
+            "src/main.*.rs",
+            # Exclude following code that contains egui and eframe.
+            # See ticket #30 for more information.
+            "src/camera/stream/**/*.rs",
+        ]
     ),
     crate_name = "backend_lib",
     rustc_flags = select({
@@ -52,7 +63,6 @@ rust_library(
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
-        "@crates//:eframe",
         "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
@@ -60,6 +70,32 @@ rust_library(
         "@crates//:uuid",
     ],
 )
+
+# Define a secondary library for streaming, which uses eframe and egui.
+# We do this because optimized release builds will use the `abort` panic
+# strategy to decrease binary size, but eframe and egui require the `unwind`
+# panic strategy. We would like to exclude this library from optimization
+# since it would throw an error and it's not needed in the final binary anyways.
+# See ticket #30 for more information.
+rust_library(
+    name = "stream_lib",
+    srcs = glob(["src/camera/stream/**/*.rs"]),
+    rustc_flags = select({
+        "//:release": ["-Cstrip=debuginfo"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":backend_lib",
+        "@crates//:aravis",
+        "@crates//:crossbeam",
+        "@crates//:eframe",
+        "@crates//:egui",
+    ],
+)
+
+# -----------------------------------------------------------------------------
+# MAIN BINARY
+# -----------------------------------------------------------------------------
 
 # Note, the main reason for splitting into dev and prod
 # binaries is to handle differences in how the applications serve
@@ -71,11 +107,7 @@ rust_library(
 # actually starts up the CV pipelines per camera. The `analyze-throw`
 # route will also call different functions based on this configuration.
 
-# -----------------------------------------------------------------------------
-# MAIN BINARY
-# -----------------------------------------------------------------------------
-
-# Dev mode for the backend doesn't have to be optimized. In this mode,
+# Dev modes for the backend doesn't have to be optimized. In this mode,
 # the backend can serve the API via command line and it runs alongside
 # the Next.js server. Since the Next.js requests come from a different
 # origin, CORS is needed. It will not have any embedded assets.
@@ -104,10 +136,11 @@ rust_binary(
     ],
 )
 
-# Prod mode for the backend should be optimized. In this mode, the
+# Prod modes for the backend should be optimized. In this mode, the 
 # backend will serve the API but instead of serving the Next.js server,
 # it will embed the frontend's static exports using rust-embed and
 # serve using axum_embed.
+
 rust_binary(
     name = "prod_fake",
     srcs = ["src/main.prod.rs"],
@@ -186,6 +219,14 @@ rust_test(
 rust_binary(
     name = "discover",
     srcs = ["src/bin/discover_cameras.rs"],
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Cpanic=abort",
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
     ],
@@ -194,6 +235,13 @@ rust_binary(
 rust_binary(
     name = "record_from_one",
     srcs = ["src/bin/record_from_one_camera.rs"],
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
         "@crates//:clap",
@@ -205,6 +253,13 @@ rust_binary(
 rust_binary(
     name = "record",
     srcs = ["src/bin/record_from_both_cameras.rs"],
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
         "@crates//:clap",
@@ -216,8 +271,16 @@ rust_binary(
 rust_binary(
     name = "stream",
     srcs = ["src/bin/live_stream.rs"],
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":backend_lib",
+        ":stream_lib",
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:ctrlc",

@@ -1,12 +1,12 @@
+// Tool for users to record footage from both cameras using Aravis and
+// store the frames to disk using the command-line.
 use backend_lib::camera::CameraIngestConfig;
+use backend_lib::camera::RecordWithBothCamerasArgs;
 use backend_lib::camera::aravis_utils::initialize_aravis;
 use backend_lib::camera::discovery::get_camera_ids;
-use backend_lib::camera::record::cli::RecordWithBothCamerasArgs;
 use backend_lib::camera::record::run_capture_thread;
 use backend_lib::camera::record::writer::{Frame, ensure_dir, write_to_disk};
 use clap::Parser;
-/// Tool for users to record footage from both cameras using Aravis and
-/// store the frames to disk using the command-line.
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

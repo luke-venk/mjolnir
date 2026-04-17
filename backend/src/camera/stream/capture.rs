@@ -1,12 +1,12 @@
-use super::FrameData;
-use crate::camera::CameraIngestConfig;
-use crate::camera::aravis_utils::{
+// Capture thread that runs alongside UI thread that pulls frames from
+// Aravis and places them into shared buffer for the UI thread to read.
+use crate::frame::FrameData;
+use aravis::{BufferStatus, CameraExt, StreamExt};
+use backend_lib::camera::CameraIngestConfig;
+use backend_lib::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
-use aravis::{BufferStatus, CameraExt, StreamExt};
 use std::sync::atomic::{AtomicBool, Ordering};
-/// Capture thread that runs alongside UI thread that pulls frames from
-/// Aravis and places them into shared buffer for the UI thread to read.
 use std::sync::{Arc, Mutex};
 
 /// Live stream from the camera.
