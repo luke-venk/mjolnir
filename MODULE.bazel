@@ -89,9 +89,6 @@ crate.spec(
     version = "0.8",
 )
 crate.spec(
-    package = "serde",
-    version = "1.0.228",
-    features = ["derive"],
     package = "eframe",
     version = "0.34.1",
 )
@@ -124,12 +121,6 @@ crate.spec(
     version = "0.4.3",
 )
 crate.spec(
-    package = "rust-embed",
-    version = "8.11.0",
-    package = "rand",
-    version = "0.10.0",
-)
-crate.spec(
     default_features = False,
     features = [],
     package = "rstest",
@@ -142,11 +133,6 @@ crate.spec(
     ],
     package = "rust-embed",
     version = "8.11.0",
-)
-crate.spec(
-    features = ["derive"],
-    package = "serde",
-    version = "1.0.228",
 )
 crate.spec(
     features = ["derive"],
