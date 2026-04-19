@@ -1,3 +1,12 @@
+# For building auxiliary binaries that use FFI.
+# Note: `--action_env=PATH` is required because Bazel is hermetic, meaning it
+# doesn't trust the system environment unless we explicitly pass it in. This is
+# required so the system PATH is passed into the Bazel build sandbox, and build
+# uses `pkg-config` to find where Aravis is installed. This all stems from the
+# Aravis Rust crate using FFI bindings to native C/C++ libraries.  
+build --action_env=PATH
+
+# For optimizations.
 # See https://bazel.build/reference/be/general#config_setting_examples
 build:release -c opt
 build:release --@rules_rust//rust/settings:lto=thin
