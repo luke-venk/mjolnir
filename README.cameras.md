@@ -44,11 +44,11 @@ bazel run //backend:stream -- --camera <camera> --resolution <resolution> --expo
 
 Example:  
 ```
-bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
+bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 200 --frame-rate-hz 10
 ```
 
 ```
-bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
+bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 200 --frame-rate-hz 10
 ```
 
 ## Record from One Camera
@@ -61,12 +61,12 @@ bazel run //backend:record-from-one -- --camera <camera> --resolution <resolutio
 
 Example:  
 ```
-bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out --max-frames 10
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 2000 --frame-rate-hz 1 --output-dir ~/Downloads/camera_out/intrinsics --max-frames 100000
 ```
 
 Example:  
 ```
-bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 4k --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out --max-frames 10
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 4k --exposure-us 2000 --frame-rate-hz 1 --output-dir ~/Downloads/camera_out/intrinsics --max-frames 100000
 ```
 
 
@@ -78,5 +78,5 @@ bazel run //backend:record -- --resolution <resolution> --exposure-us <exposure>
 
 Example:
 ```
-bazel run //backend:record -- --resolution 4k --exposure-us 10000 --frame-rate-hz 30.0 --output-dir ~/Downloads/camera_out --max-duration 20
+bazel run //backend:record -- --resolution 4k --exposure-us 10000 --frame-rate-hz 30.0 --output-dir ~/Downloads/camera_out/throw --max-duration 20
 ```

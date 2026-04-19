@@ -162,10 +162,18 @@ pub fn run_capture_thread(
     }
 
     let _ = camera.stop_acquisition();
+
+    let total_duration_s = start_time.elapsed().as_secs_f64();
+    let frame_rate = frames_saved as f64 / total_duration_s;
+
     println!(
-        "Finished recording from camera {}. Saved {} frame(s) into {}",
+        "\nFinished recording from camera {}.",
         config.camera_id,
-        frames_saved,
-        output_camera_dir.display()
     );
+    println!("Saved {} frame(s) in {:.3} seconds, total frame rate was {:.3} frames per second.",
+        frames_saved,
+        total_duration_s,
+        frame_rate,
+    );
+    println!("Wrote files into {}.", output_camera_dir.display());
 }
