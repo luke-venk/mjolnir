@@ -60,6 +60,10 @@ crate.spec(
     version = "0.11.1",
 )
 crate.spec(
+    package = "argmin",
+    version = "0.9.0",
+)
+crate.spec(
     package = "axum",
     version = "0.8.8",
 )
@@ -101,8 +105,20 @@ crate.spec(
     version = "0.1",
 )
 crate.spec(
+    package = "levenberg-marquardt",
+    version = "0.15.0",
+)
+crate.spec(
+    package = "nalgebra",
+    version = "0.34.1",
+)
+crate.spec(
     package = "rand",
-    version = "0.10.0",
+    version = "0.8.5",
+)
+crate.spec(
+    package = "rand_distr",
+    version = "0.4.3",
 )
 crate.spec(
     default_features = False,
@@ -117,11 +133,6 @@ crate.spec(
     ],
     package = "rust-embed",
     version = "8.11.0",
-)
-crate.spec(
-    features = ["derive"],
-    package = "serde",
-    version = "1.0.228",
 )
 crate.spec(
     features = ["derive"],
