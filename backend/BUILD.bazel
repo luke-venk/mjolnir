@@ -18,7 +18,7 @@ rust_library(
             # Exclude following code that contains egui and eframe.
             # See ticket #30 for more information.
             "src/camera/stream/**/*.rs",
-        ]
+        ],
     ),
     crate_features = ["real"],
     rustc_flags = select({
@@ -31,6 +31,7 @@ rust_library(
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
+        "@crates//:opencv",
         "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
@@ -50,7 +51,7 @@ rust_library(
             # Exclude following code that contains egui and eframe.
             # See ticket #30 for more information.
             "src/camera/stream/**/*.rs",
-        ]
+        ],
     ),
     crate_name = "backend_lib",
     rustc_flags = select({
@@ -136,7 +137,7 @@ rust_binary(
     ],
 )
 
-# Prod modes for the backend should be optimized. In this mode, the 
+# Prod modes for the backend should be optimized. In this mode, the
 # backend will serve the API but instead of serving the Next.js server,
 # it will embed the frontend's static exports using rust-embed and
 # serve using axum_embed.
