@@ -1,10 +1,13 @@
-use backend_lib::camera::stream::capture::run_capture_thread;
-use backend_lib::camera::stream::cli::StreamFromCamerasArgs;
-use backend_lib::camera::stream::{FrameData, LiveViewApp};
 use backend_lib::camera::CameraIngestConfig;
+use backend_lib::camera::StreamFromCamerasArgs;
 use clap::Parser;
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use stream_lib::capture::run_capture_thread;
+use stream_lib::{FrameData, LiveViewApp};
+
 /// Tool for users to stream footage from the cameras using Aravis and
 /// tune camera intrinsics quickly, rather than storing raw bytes to
 /// disk and converting to PNG afterhand.
@@ -16,8 +19,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// which blocks the capture thread, and two, because macOS specifically
 /// requires a main thread, not a background thread, for windowing systems
 /// like the egui UI.
-use std::sync::{Arc, Mutex};
-use std::thread;
 
 fn main() -> eframe::Result<()> {
     println!("------------------------");

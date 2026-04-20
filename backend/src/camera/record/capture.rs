@@ -1,20 +1,19 @@
 use super::writer::{ensure_dir, sanitize_path_name, Frame, Metadata};
-use crate::camera::aravis_utils::{
-    configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
-};
-use crate::camera::CameraIngestConfig;
 use aravis::{BufferStatus, Camera, CameraExt, StreamExt};
 use aravis_sys::arv_camera_get_integer;
+use crate::camera::aravis_utils::{
+    configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers, PtpConfig
+};
+use crate::camera::CameraIngestConfig;
+use crate::camera::{BarrierResult, CancelableBarrier};
 use glib::translate::*; // To convert high-level types to raw pointers
 use std::ffi::CString;
 use std::net::{SocketAddr, UdpSocket};
-use crate::camera::aravis_utils::PtpConfig;
 use std::path::PathBuf;
 use std::ptr;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc};
 use std::time::{Duration, Instant};
-use crate::camera::{BarrierResult, CancelableBarrier};
 
 // Need both cams to agree on the next timestamp to start recording at
 // They're on separate threads and this code architecture doesn't make it easy for them to talk to each other

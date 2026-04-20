@@ -13,6 +13,9 @@ use super::{CancelableBarrier, BarrierResult};
 use std::thread::sleep;
 use std::time::Duration;
 
+/// Shared code for interacting with Aravis library, used by both
+/// discovery and recording tools.
+
 /// Retrieves token to access global state of the Aravis library.
 pub fn initialize_aravis() -> Aravis {
     Aravis::initialize().expect("Failed to initialize Aravis.")
@@ -44,7 +47,7 @@ fn unsafe_read_camera_boolean(camera: &Camera, node_name: &str) -> bool {
     unsafe {
         let mut error: *mut glib::ffi::GError = std::ptr::null_mut();
         let camera_ptr: *mut aravis_sys::ArvCamera = camera.to_glib_none().0;
-        let feature_c_str = std::ffi::CString::new(node_name).unwrap();
+        let feature_c_str = CString::new(node_name).unwrap();
         let raw_res = aravis_sys::arv_camera_get_boolean(camera_ptr, feature_c_str.as_ptr(), &mut error);
         if !error.is_null() {
             panic!(
@@ -166,7 +169,7 @@ pub fn configure_camera(
                 sleep(Duration::from_millis(500));
             }
             if !success {
-                panic!("Camera {} failed to enable PtP slave", config.camera_id);
+                panic!("Camera {} failed to enable PTP slave", config.camera_id);
             }
         } else {
             camera
@@ -192,7 +195,7 @@ pub fn configure_camera(
                 sleep(Duration::from_millis(500));
             }
             if !success {
-                panic!("Camera {} failed to enable PtP master", config.camera_id);
+                panic!("Camera {} failed to enable PTP master", config.camera_id);
             }
         };
         if ptp_config.configure_barrier.wait() == BarrierResult::Canceled {
@@ -223,7 +226,7 @@ pub fn configure_camera(
             sleep(Duration::from_millis(500));
         }
         if consecutive_successes < 10 {
-            panic!("Camera {} failed to establish PtP lock", config.camera_id);
+            panic!("Camera {} failed to establish PTP lock", config.camera_id);
         }
         if ptp_config.lock_barrier.wait() == BarrierResult::Canceled {
             return;
