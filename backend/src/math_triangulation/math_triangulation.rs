@@ -160,7 +160,8 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
         }
         Some(DVector::from_vec(residuals))
     }
-
+    
+    //Use built in jacobian function from the LevenbergMarquardt library.
     fn jacobian(&self) -> Option<DMatrix<f64>> {
         None
     }
