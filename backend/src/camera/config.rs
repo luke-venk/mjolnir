@@ -15,7 +15,6 @@ pub struct CameraIngestConfig {
     pub resolution: Resolution,
 
     // System-level config.
-    pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
 
@@ -30,7 +29,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
-            enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
             restart_requested: false,
@@ -43,7 +41,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
-            enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
             restart_requested: false,
@@ -56,7 +53,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,
-            enable_ptp: false,
             num_buffers: 8,
             timeout_ms: 5000,
             restart_requested: false,

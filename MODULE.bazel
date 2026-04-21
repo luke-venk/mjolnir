@@ -113,6 +113,11 @@ crate.spec(
     version = "0.11.1",
 )
 crate.spec(
+    default_features = False,
+    package = "aravis-sys",
+    version = "0.11.1",
+)
+crate.spec(
     package = "axum",
     version = "0.8.8",
 )
@@ -150,8 +155,16 @@ crate.spec(
     version = "0.34.1",
 )
 crate.spec(
+    package = "glib",
+    version = "=0.20.10",
+)
+crate.spec(
     package = "http-body-util",
     version = "0.1",
+)
+crate.spec(
+    package = "if-addrs",
+    version = "0.15.0",
 )
 crate.spec(
     features = ["clang-runtime"],

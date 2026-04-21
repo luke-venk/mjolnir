@@ -1,15 +1,15 @@
-// Tool for users to record footage from one camera using Aravis and
-// store the frames to disk using the command-line.
-use backend_lib::camera::CameraIngestConfig;
-use backend_lib::camera::RecordWithOneCameraArgs;
 use backend_lib::camera::record::run_capture_thread;
-use backend_lib::camera::record::writer::{Frame, ensure_dir, write_to_disk};
+use backend_lib::camera::record::writer::{ensure_dir, write_to_disk, Frame};
+use backend_lib::camera::{CameraIngestConfig, RecordWithOneCameraArgs};
 use clap::Parser;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Tool for users to record footage from one camera using Aravis and
+/// store the frames to disk using the command-line.
 
 pub fn main() {
     println!("------------------------");
@@ -60,6 +60,10 @@ pub fn main() {
             args.common_args.max_frames,
             args.common_args.max_duration,
             Arc::clone(&shutdown),
+            None,
+            None,
+            None,
+            None,
         );
     });
 
