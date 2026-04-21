@@ -1,14 +1,119 @@
-use super::writer::{Frame, Metadata, ensure_dir, sanitize_path_name};
-use crate::camera::CameraIngestConfig;
+use super::writer::{ensure_dir, sanitize_path_name, Frame, Metadata};
+use aravis::{BufferStatus, Camera, CameraExt, StreamExt};
+use aravis_sys::arv_camera_get_integer;
 use crate::camera::aravis_utils::{
-    configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
+    configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers, PtpConfig
 };
+use crate::camera::CameraIngestConfig;
+use crate::camera::{BarrierResult, CancelableBarrier};
+use glib::translate::*; // To convert high-level types to raw pointers
+use std::ffi::CString;
+use std::net::{SocketAddr, UdpSocket};
 use std::path::PathBuf;
+use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use aravis::{BufferStatus, CameraExt, StreamExt};
+// Need both cams to agree on the next timestamp to start recording at
+// They're on separate threads and this code architecture doesn't make it easy for them to talk to each other
+// So we use math to agree
+fn compute_first_frame_ptp_ns(current_ptp_ns: u64) -> u64 {
+    let interval_ns: u64 = 10_000_000_000; // 10 seconds in ns
+    let margin_ns: u64 = 3_000_000_000; //  3 second  in ns
+
+    let next_boundary = (current_ptp_ns / interval_ns + 1) * interval_ns;
+
+    if next_boundary - current_ptp_ns < margin_ns {
+        next_boundary + interval_ns
+    } else {
+        next_boundary
+    }
+}
+
+fn unsafe_read_camera_integer(camera: &Camera, node_name: &str) -> i64 {
+    unsafe {
+        let mut error: *mut glib::ffi::GError = ptr::null_mut();
+        let camera_ptr: *mut aravis_sys::ArvCamera = camera.to_glib_none().0;
+        let feature_c_str = CString::new(node_name).unwrap();
+        let raw_res = arv_camera_get_integer(camera_ptr, feature_c_str.as_ptr(), &mut error);
+        if !error.is_null() {
+            panic!(
+                "Error calling arv_camera_get_integer for node: {}",
+                node_name
+            );
+        }
+        raw_res
+    }
+}
+
+fn read_ptp_time_ns(camera: &Camera) -> u64 {
+    camera
+        .execute_command("PtpDataSetLatch")
+        .expect("Failed to latch PTP dataset.");
+    unsafe_read_camera_integer(camera, "PtpDataSetLatchValue") as u64
+}
+
+/// Broadcasts a GigEV scheduled action command to all cameras on the network.
+/// All values must match what was configured on each camera:
+///   device_key, group_key, group_mask, and the scheduled PTP timestamp.
+pub fn send_action_command(
+    socket: &UdpSocket,
+    fire_at_ptp_ns: u64,
+    device_key: u32,
+    group_key: u32,
+    group_mask: u32,
+) {
+    println!("Sending action command!");
+    // GigEV action command packet: 56 bytes total
+    // Ref: GigE Vision spec section on Action Commands
+    let mut packet = [0u8; 28];
+
+    // GVCP header
+    packet[0] = 0x42; // required first byte
+    packet[1] = 0b10000001; // flag denotes that action time is being sent and we want an ACK
+    packet[2] = 0x01; // command high: ACTION_CMD = 0x0100
+    packet[3] = 0x00; // command low
+    packet[4] = 0x00; // length high
+    packet[5] = 20; // length low (msg beyond header is 20 bytes)
+    // request id - can be any nonzero value maybe? Not according to spec but....
+    packet[6] = 0x00;
+    packet[7] = 0x01;
+
+    // Payload
+    // device key
+    packet[8] = (device_key >> 24) as u8;
+    packet[9] = (device_key >> 16) as u8;
+    packet[10] = (device_key >> 8) as u8;
+    packet[11] = device_key as u8;
+
+    // group key
+    packet[12] = (group_key >> 24) as u8;
+    packet[13] = (group_key >> 16) as u8;
+    packet[14] = (group_key >> 8) as u8;
+    packet[15] = group_key as u8;
+
+    // group mask
+    packet[16] = (group_mask >> 24) as u8;
+    packet[17] = (group_mask >> 16) as u8;
+    packet[18] = (group_mask >> 8) as u8;
+    packet[19] = group_mask as u8;
+
+    // scheduled action time in ns (8 bytes, big-endian)
+    packet[20] = (fire_at_ptp_ns >> 56) as u8;
+    packet[21] = (fire_at_ptp_ns >> 48) as u8;
+    packet[22] = (fire_at_ptp_ns >> 40) as u8;
+    packet[23] = (fire_at_ptp_ns >> 32) as u8;
+    packet[24] = (fire_at_ptp_ns >> 24) as u8;
+    packet[25] = (fire_at_ptp_ns >> 16) as u8;
+    packet[26] = (fire_at_ptp_ns >> 8) as u8;
+    packet[27] = fire_at_ptp_ns as u8;
+
+    // remaining bytes are reserved/zero
+    socket
+        .send_to(&packet, "255.255.255.255:3956")
+        .expect("Failed to send action command.");
+}
 
 /// Records stream from a single camera.
 pub fn run_capture_thread(
@@ -18,6 +123,10 @@ pub fn run_capture_thread(
     max_frames: Option<usize>,
     max_duration: Option<f64>,
     shutdown: Arc<AtomicBool>,
+    host_interface_ip: Option<SocketAddr>,
+    configuration_barrier: Option<CancelableBarrier>,
+    acquisition_barrier: Option<CancelableBarrier>,
+    maybe_ptp_config: Option<PtpConfig>,
 ) {
     println!("Beginning recording for camera {}.", config.camera_id);
 
@@ -34,16 +143,101 @@ pub fn run_capture_thread(
             return;
         }
     };
-    configure_camera(&camera, &config);
+    configure_camera(&camera, &config, Some(shutdown.clone()), maybe_ptp_config.as_ref());
+    println!("Configured camera {}", config.camera_id);
+    if let Some(barrier) = configuration_barrier {
+        if barrier.wait() == BarrierResult::Canceled {
+            return;
+        }
+    }
+
+    println!("Creating stream and allocating buffers on camera {}", config.camera_id);
     let stream = create_stream_and_allocate_buffers(&camera, config.num_buffers);
 
     // For frame metadata.
     let (width, height) = config.resolution.dimensions();
 
+    let first_frame_ptp_ns = if maybe_ptp_config.is_some() {
+        let now = read_ptp_time_ns(&camera);
+        Some(compute_first_frame_ptp_ns(now))
+    } else {
+        None
+    };
+    println!("Camera {} first frame ptp ns will be {:?}", config.camera_id, first_frame_ptp_ns);
+    let frame_interval_ns: Option<u64> = if let Some(ref ptp_config) = maybe_ptp_config && !ptp_config.is_slave {
+        Some((1_000_000_000.0 / config.frame_rate_hz) as u64)
+    } else {
+        None
+    };
+    let maybe_socket = if let Some(ref ptp_config) = maybe_ptp_config && !ptp_config.is_slave {
+        let addr = host_interface_ip.expect("Capture thread was configured to be PTP & Acquisition master but was not provided a host SocketAddr.");
+        let socket =
+            UdpSocket::bind(addr).expect("Failed to bind UDP socket for action command.");
+        socket
+            .set_broadcast(true)
+            .expect("Failed to enable broadcast on action command socket.");
+        Some(socket)
+    } else {
+        None
+    };
+
+    println!("Beginning acquisition on camera {}", config.camera_id);
+
     // Start Aravis camera aquisition.
     camera
         .start_acquisition()
         .expect("Failed to start camera acquisition.");
+    if maybe_ptp_config.is_some() {
+        camera
+            .execute_command("TransferStart")
+            .expect("Failed to start transfer.");
+    }
+
+    if let Some(barrier) = acquisition_barrier {
+        if barrier.wait() == BarrierResult::Canceled {
+            return;
+        }
+    }
+
+    if let Some(ref ptp_config) = maybe_ptp_config {
+        // Only the Master (PC) schedules actions
+        if !ptp_config.is_slave {
+            let socket = maybe_socket.expect("Socket missing for PTP master");
+            let start_ns = first_frame_ptp_ns.expect("Start time missing");
+            let interval_ns = frame_interval_ns.expect("Interval missing");
+            let shutdown_heartbeat = shutdown.clone();
+
+            // Sync System Time to PTP Time once
+            let p0 = read_ptp_time_ns(&camera);
+            let s0 = Instant::now();
+            
+            std::thread::spawn(move || {
+                let mut frames_pushed = 0u64;
+                let lead_time_ns = 150_000_000; // 150ms look-ahead
+
+                loop {
+                    if shutdown_heartbeat.load(Ordering::SeqCst) { break; }
+
+                    // Predict current PTP time based on local Instant
+                    let elapsed = s0.elapsed().as_nanos() as u64;
+                    let estimated_ptp = p0 + elapsed;
+
+                    // Calculate the PTP timestamp for the next frame in the sequence
+                    let scheduled_until = start_ns + (frames_pushed * interval_ns);
+
+                    // Fill the camera pipeline if we are less than 150ms ahead
+                    if scheduled_until < (estimated_ptp + lead_time_ns) {
+                        send_action_command(&socket, scheduled_until, 1, 1, 1);
+                        frames_pushed += 1;
+                    } else {
+                        // Sleep long enough to avoid pegging the CPU, short enough to keep lead
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                }
+                println!("Heartbeat thread exiting.");
+            });
+        }
+    }
 
     // Keep track of start time and the number of saved frames.
     let start_time = Instant::now();
@@ -78,6 +272,7 @@ pub fn run_capture_thread(
 
         // Load camera buffer.
         // Block current thread until frame buffer delivered or the timeout elapses.
+        println!("Camera {} waiting for buffer.....", config.camera_id);
         let buffer = match stream.timeout_pop_buffer(config.timeout_ms * 1000) {
             Some(buffer) => {
                 if !first_buffer_arrived {
@@ -160,6 +355,7 @@ pub fn run_capture_thread(
             }
         }
     }
+    shutdown.store(true, Ordering::SeqCst);
 
     let _ = camera.stop_acquisition();
     println!(

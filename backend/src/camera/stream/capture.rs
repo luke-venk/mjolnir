@@ -1,13 +1,14 @@
-use super::FrameData;
-use crate::camera::CameraIngestConfig;
-use crate::camera::aravis_utils::{
+use crate::frame::FrameData;
+use aravis::{BufferStatus, CameraExt, StreamExt};
+use backend_lib::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
-use aravis::{BufferStatus, CameraExt, StreamExt};
+use backend_lib::camera::CameraIngestConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
 /// Capture thread that runs alongside UI thread that pulls frames from
 /// Aravis and places them into shared buffer for the UI thread to read.
-use std::sync::{Arc, Mutex};
 
 /// Live stream from the camera.
 pub fn run_capture_thread(
@@ -45,7 +46,7 @@ pub fn run_capture_thread(
         let settings = config
             .lock()
             .expect("Error: Failed to lock camera settings mutex.");
-        configure_camera(&camera, &settings);
+        configure_camera(&camera, &settings, None, None);
     }
 
     let mut stream = create_stream_and_allocate_buffers(&camera, num_buffers);
@@ -89,7 +90,7 @@ pub fn run_capture_thread(
                 let settings = config
                     .lock()
                     .expect("Error: Failed to lock camera settings mutex.");
-                configure_camera(&camera, &settings);
+                configure_camera(&camera, &settings, None, None);
             }
             stream = create_stream_and_allocate_buffers(&camera, num_buffers);
             camera

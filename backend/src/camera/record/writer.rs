@@ -1,7 +1,7 @@
+// Code that handles writing our captured frames from RAM to disk (SSD) in
+// a performant manner so frames aren't dropped.
 use serde::Serialize;
 use serde_json::to_string_pretty;
-/// Code that handles writing our captured frames from RAM to disk (SSD) in
-/// a performant manner so frames aren't dropped.
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
