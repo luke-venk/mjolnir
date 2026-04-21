@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust_bindgen//:defs.bzl", "rust_bindgen_library")
 load(":generation.bzl", "generate_visibility_header")
 
 filegroup(
@@ -975,4 +976,15 @@ cc_library(
         ":gmodule",
         ":gobject",
     ],
+)
+
+rust_bindgen_library(
+    name = "aravis_sys",
+    bindgen_flags = [
+        "--allowlist-file=.*aravis.*",
+        "--no-layout-tests",
+    ],
+    cc_lib = ":aravis_objects",
+    header = "third_party/aravis/src/arv.h",
+    visibility = ["//visibility:public"],
 )
