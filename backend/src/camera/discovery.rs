@@ -30,12 +30,16 @@ pub fn discover_cameras(aravis: &Aravis) -> Vec<DiscoveredCamera> {
 }
 
 /// Print all camera IDs on the LAN.
+/// Is sorted so that the first and second cameras are always the same
+/// This keeps the PTP master and slave device always the same
 pub fn get_camera_ids(aravis: &Aravis) -> Vec<String> {
-    aravis
+    let mut ids: Vec<String> = aravis
         .get_device_list()
         .into_iter()
         .map(|device| device.id.to_string_lossy().into_owned())
-        .collect()
+        .collect();
+    ids.sort();
+    ids
 }
 
 /// Print discovered cameras in a single-line CLI-friendly format.
