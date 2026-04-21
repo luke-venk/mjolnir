@@ -1,0 +1,560 @@
+Category    : 'Root'
+    Category    : 'DeviceControl'
+        Enumeration  : [RO] 'DeviceType' = 'Transmitter'
+        Enumeration  : [RO] 'DeviceScanType' = 'Areascan'
+        String       : [RO] 'DeviceVendorName' = 'Lucid Vision Labs'
+        String       : [RO] 'DeviceModelName' = 'ATP124S-M'
+        String       : [RO] 'DeviceFamilyName' = 'AtlasGen2'
+        String       : [RO] 'DeviceManufacturerInfo' = 'Lucid Vision Labs (www.thinklucid.com)'
+        String       : [RO] 'DeviceVersion' = 'S5TGN'
+        String       : [RO] 'DeviceFirmwareVersion' = '1.29.0.0'
+        String       : [RO] 'DeviceSerialNumber' = '242700635'
+        String       : [RW] 'DeviceUserID' = ''
+        Integer      : [RO] 'DeviceSFNCVersionMajor' = 2
+        Integer      : [RO] 'DeviceSFNCVersionMinor' = 3
+        Integer      : [RO] 'DeviceSFNCVersionSubMinor' = 0
+        Integer      : [RW] 'DeviceManifestEntrySelector' = 1
+              * DeviceManifestXMLMajorVersion
+              * DeviceManifestXMLMinorVersion
+              * DeviceManifestXMLSubMinorVersion
+              * DeviceManifestSchemaMajorVersion
+              * DeviceManifestSchemaMinorVersion
+              * DeviceManifestPrimaryURL
+              * DeviceManifestSecondaryURL
+        Integer      : [RO] 'DeviceManifestXMLMajorVersion' = 1
+        Integer      : [RO] 'DeviceManifestXMLMinorVersion' = 0
+        Integer      : [RO] 'DeviceManifestXMLSubMinorVersion' = 0
+        Integer      : [RO] 'DeviceManifestSchemaMajorVersion' = 1
+        Integer      : [RO] 'DeviceManifestSchemaMinorVersion' = 1
+        String       : [RO] 'DeviceManifestPrimaryURL' = 'Local:Lucid_Vision_Labs_ATP124S-M_rev1_0_7d87b645d6a1db0d741c0e0018ad2d3e.zip;8010098c;140d9'
+        String       : [RO] 'DeviceManifestSecondaryURL' = 'http://www.thinklucid.com/gev/Lucid_Vision_Labs_ATP124S-M_rev1_0_7d87b645d6a1db0d741c0e0018ad2d3e.zip'
+        Enumeration  : [RO] 'DeviceTLType' = 'GigEVision'
+        Integer      : [RO] 'DeviceTLVersionMajor' = 2
+        Integer      : [RO] 'DeviceTLVersionMinor' = 0
+        Integer      : [RO] 'DeviceTLVersionSubMinor' = 3
+        Integer      : [RO] 'DeviceMaxThroughput' = 513120000 Bps
+        Integer      : [RW] 'DeviceLinkSelector' = 0
+              * DeviceLinkSpeed
+              * DeviceLinkThroughputLimitMode
+              * DeviceLinkThroughputLimit
+              * DeviceLinkThroughputReserve
+              * DeviceLinkHeartbeatMode
+              * DeviceLinkHeartbeatTimeout
+              * DeviceLinkCommandTimeout
+        Integer      : [RO] 'DeviceLinkSpeed' = 625000000 Bps
+        Enumeration  : [RW] 'DeviceLinkThroughputLimitMode' = 'Off'
+        Integer      : [RW] 'DeviceLinkThroughputLimit' = 562500000 Bps
+        Integer      : [RW] 'DeviceLinkThroughputReserve' = 10 %
+        Enumeration  : [RO] 'DeviceLinkHeartbeatMode' = 'On'
+        Float        : [RW] 'DeviceLinkHeartbeatTimeout' = 6e+06 us
+        Float        : [RO] 'DeviceLinkCommandTimeout' = 5e+06 us
+        Integer      : [RO] 'DeviceStreamChannelCount' = 1
+        Integer      : [RW] 'DeviceStreamChannelSelector' = 0
+              * DeviceStreamChannelType
+              * DeviceStreamChannelEndianness
+              * DeviceStreamChannelPacketSize
+        Enumeration  : [RO] 'DeviceStreamChannelType' = 'Transmitter'
+        Enumeration  : [RO] 'DeviceStreamChannelEndianness' = 'Little'
+        Integer      : [RW] 'DeviceStreamChannelPacketSize' = 1400 B
+        Integer      : [RO] 'DeviceEventChannelCount' = 1
+        Enumeration  : [RO] 'DeviceCharacterSet' = 'UTF8'
+        Command      : [WO] 'DeviceReset'
+        Command      : [WO] 'DeviceFactoryReset'
+        Command      : [WO] 'FirmwareUpdate'
+        Command      : [WO] 'DeviceFeaturePersistenceStart'
+        Command      : [WO] 'DeviceFeaturePersistenceEnd'
+        Command      : [WO] 'DeviceRegistersStreamingStart'
+        Command      : [WO] 'DeviceRegistersStreamingEnd'
+        Enumeration  : [RW] 'DeviceIndicatorMode' = 'Active'
+        Enumeration  : [RW] 'DeviceTemperatureSelector' = 'Sensor'
+              * DeviceTemperature
+        Float        : [RO] 'DeviceTemperature' = 41.75 C
+        Float        : [RO] 'DevicePressure' = 103.248 kPa
+        Float        : [RO] 'DevicePower' = 6.04125 W
+        Enumeration  : [RW] 'DeviceClockSelector' = 'Sensor'
+              * DeviceClockFrequency
+        Float        : [RO] 'DeviceClockFrequency' = 5.43478e+07 Hz
+        Integer      : [RO] 'Timestamp' = 238497347432 ns
+        Command      : [WO] 'TimestampReset'
+        Command      : [WO] 'TimestampLatch'
+        Integer      : [RO] 'TimestampLatchValue' = 0 ns
+        Integer      : [RO] 'DeviceUpTime' = 232 s
+        Integer      : [RO] 'LinkUpTime' = 214 s
+    Category    : 'AcquisitionControl'
+        Enumeration  : [RW] 'AcquisitionMode' = 'Continuous'
+        Enumeration  : [RW] 'AcquisitionStartMode' = 'Normal'
+        Command      : [WO] 'AcquisitionStart'
+        Command      : [WO] 'AcquisitionStop'
+        Integer      : [RW] 'AcquisitionFrameCount' = 1
+        Integer      : [RW] 'AcquisitionBurstFrameCount' = 1
+        Boolean      : [RW] 'AcquisitionFrameRateLinkLimitEnable' = true
+        Float        : [RW] 'AcquisitionFrameRate' = 41.7606 Hz
+        Boolean      : [RW] 'AcquisitionFrameRateEnable' = false
+        Integer      : [RW] 'AcquisitionFrameTime' = 23946 us
+        Float        : [RW] 'AcquisitionLineRate' = 130941 Hz
+        Integer      : [RW] 'AcquisitionLineTime' = 7637 ns
+        Float        : [RW] 'PTPSyncFrameRate' = 1 Hz
+        Enumeration  : [RW] 'ISPClockSpeed' = 'Normal'
+        Enumeration  : [RW] 'TriggerSelector' = 'FrameStart'
+              * TriggerMode
+              * TriggerSoftware
+              * TriggerSource
+              * TriggerRescalerSource
+              * TriggerActivation
+              * TriggerOverlap
+              * TriggerLatency
+              * TriggerDelay
+              * TriggerStopDelay
+              * TriggerArmed
+              * TriggerMultiplier
+              * TriggerDivider
+        Enumeration  : [RW] 'TriggerMode' = 'Off'
+        Command      : [WO] 'TriggerSoftware'
+        Enumeration  : [RW] 'TriggerSource' = 'Line0'
+        Enumeration  : [RW] 'TriggerActivation' = 'RisingEdge'
+        Enumeration  : [RW] 'TriggerOverlap' = 'Off'
+        Enumeration  : [RW] 'TriggerLatency' = 'Off'
+        Float        : [RW] 'TriggerDelay' = 0 us
+        Boolean      : [RO] 'TriggerArmed' = false
+        Enumeration  : [RW] 'ExposureTimeMode' = 'Common'
+        Enumeration  : [RW] 'ExposureTimeSelector' = 'Common'
+              * ExposureTime
+              * ExposureTimeRaw
+              * ExposureInterval
+              * ExposureIntervalRaw
+              * ExposureStartTime
+              * ExposureStartTimeRaw
+              * ExposureEndTime
+              * ExposureEndTimeRaw
+        Float        : [RW] 'ExposureTime' = 437.776 us
+        Integer      : [RW] 'ExposureTimeRaw' = 54722
+        Float        : [RO] 'ExposureInterval' = 23523.7 us
+        Integer      : [RO] 'ExposureIntervalRaw' = 2940467
+        Boolean      : [RW] 'ShortExposureEnable' = false
+        Boolean      : [RW] 'ShortIntervalShutterEnable' = false
+        Enumeration  : [RW] 'ExposureAuto' = 'Continuous'
+        Enumeration  : [RW] 'ExposureAutoLimitAuto' = 'Continuous'
+        Float        : [RW] 'ExposureAutoLowerLimit' = 10.104 us
+        Float        : [RW] 'ExposureAutoUpperLimit' = 23723 us
+        Integer      : [RW] 'TargetBrightness' = 128 8Bit
+        Enumeration  : [RW] 'ExposureAutoAlgorithm' = 'Mean'
+        Float        : [RW] 'ExposureAutoDamping' = 89.8438 %
+        Integer      : [RW] 'ExposureAutoDampingRaw' = 230
+        Integer      : [RO] 'CalculatedMedian' = 104
+        Integer      : [RO] 'CalculatedMean' = 127
+        Category    : 'AutoExposureAOI'
+            Boolean      : [RW] 'AutoExposureAOIEnable' = false
+    Category    : 'EventControl'
+        Enumeration  : [RW] 'EventSelector' = 'ExposureStart'
+              * EventNotification
+        Enumeration  : [RW] 'EventNotification' = 'Off'
+        Integer      : [RO] 'EventDestinationAddress' = 0
+        Category    : 'EventExposureStartData'
+        Category    : 'EventExposureEndData'
+        Category    : 'EventTestData'
+        Category    : 'EventAcquisitionTriggerMissedData'
+        Category    : 'EventFrameTriggerMissedData'
+        Category    : 'EventLineTriggerMissedData'
+    Category    : 'UserSetControl'
+        Enumeration  : [RW] 'UserSetSelector' = 'Default'
+        Command      : [WO] 'UserSetLoad'
+        Command      : [WO] 'UserSetSave'
+        Command      : [WO] 'UserSetReset'
+        Enumeration  : [RW] 'UserSetDefault' = 'Default'
+        Enumeration  : [RW] 'UserSetFeatureSelector' = 'ADCBitDepth'
+              * UserSetFeatureEnable
+        Boolean      : [RO] 'UserSetFeatureEnable' = true
+    Category    : 'TestControl'
+        Command      : [WO] 'TestEventGenerate'
+        Integer      : [RW] 'TestMode' = 0
+        String       : [RW] 'TestString' = ''
+    Category    : 'TransportLayerControl'
+        Integer      : [RO] 'PayloadSize' = 12288000 B
+        Category    : 'GigEVision'
+            Enumeration  : [RW] 'GevPhysicalLinkConfiguration' = 'SingleLink'
+            Enumeration  : [RO] 'GevCurrentPhysicalLinkConfiguration' = 'SingleLink'
+            Enumeration  : [RW] 'GevSupportedOptionSelector' = 'SingleLink'
+                  * GevSupportedOption
+            Boolean      : [RO] 'GevSupportedOption' = true
+            Integer      : [RW] 'GevInterfaceSelector' = 0
+                  * GevMACAddress
+                  * GevPAUSEFrameReception
+                  * GevPAUSEFrameTransmission
+                  * GevCurrentIPConfigurationLLA
+                  * GevCurrentIPConfigurationDHCP
+                  * GevCurrentIPConfigurationPersistentIP
+                  * GevCurrentIPAddress
+                  * GevCurrentSubnetMask
+                  * GevCurrentDefaultGateway
+                  * GevPersistentIPAddress
+                  * GevPersistentSubnetMask
+                  * GevPersistentDefaultGateway
+                  * GevPersistentARPConflictDetectionEnable
+            Integer      : [RO] 'GevMACAddress' = 30853701419679
+            Boolean      : [RO] 'GevCurrentIPConfigurationLLA' = true
+            Boolean      : [RW] 'GevCurrentIPConfigurationDHCP' = true
+            Boolean      : [RW] 'GevCurrentIPConfigurationPersistentIP' = false
+            Integer      : [RO] 'GevCurrentIPAddress' = 2852036802
+            Integer      : [RO] 'GevCurrentSubnetMask' = 4294901760
+            Integer      : [RO] 'GevCurrentDefaultGateway' = 0
+            Enumeration  : [RO] 'GevIPConfigurationStatus' = 'LLA'
+            Integer      : [RW] 'GevPersistentIPAddress' = 0
+            Integer      : [RW] 'GevPersistentSubnetMask' = 0
+            Integer      : [RW] 'GevPersistentDefaultGateway' = 0
+            Boolean      : [RW] 'GevPersistentARPConflictDetectionEnable' = true
+            Integer      : [RW] 'GevDiscoveryAckDelay' = 20 ms
+            Boolean      : [RW] 'GevGVCPPendingAck' = false
+            Enumeration  : [RW] 'GevGVSPExtendedIDMode' = 'Off'
+            Enumeration  : [RO] 'GevCCP' = 'ControlAccess'
+            Integer      : [RO] 'GevPrimaryApplicationSocket' = 51491
+            Integer      : [RO] 'GevPrimaryApplicationIPAddress' = 2852043485
+            Integer      : [RW] 'GevMCPHostPort' = 0
+            Integer      : [RW] 'GevMCDA' = 0
+            Integer      : [RW] 'GevMCTT' = 0 ms
+            Integer      : [RW] 'GevMCRC' = 0
+            Integer      : [RO] 'GevMCSP' = 49153
+            Integer      : [RW] 'GevStreamChannelSelector' = 0
+                  * GevSCPInterfaceIndex
+                  * GevSCPHostPort
+                  * GevSCPSFireTestPacket
+                  * GevSCPSDoNotFragment
+                  * GevSCPSPacketSize
+                  * GevSCPD
+                  * GevSCDA
+                  * GevSCSP
+                  * GevSCFTD
+                  * TCPEnable
+                  * TransportStreamProtocol
+                  * GevSCTCPMTS
+            Integer      : [RO] 'GevSCPInterfaceIndex' = 0
+            Integer      : [RW] 'GevSCPHostPort' = 0
+            Boolean      : [RO] 'GevSCPSFireTestPacket' = false
+            Boolean      : [RW] 'GevSCPSDoNotFragment' = false
+            Integer      : [RW] 'GevSCPSPacketSize' = 1400 B
+            Integer      : [RW] 'GevSCPD' = 80 ns
+            Integer      : [RW] 'GevSCDA' = 0
+            Integer      : [RO] 'GevSCSP' = 49154
+            Integer      : [RW] 'GevSCFTD' = 0 ns
+            Enumeration  : [RW] 'TransportStreamProtocol' = 'UDP'
+        Integer      : [RW] 'PacketResendWindowFrameCount' = 4
+        Integer      : [RO] 'ReceivedPacketResendCount' = 0
+        Integer      : [RO] 'ValidPacketResendCount' = 0
+        Integer      : [RO] 'UnavailablePacketResendCount' = 0
+        Category    : 'PtpControl'
+            Boolean      : [RW] 'PtpEnable' = false
+            Enumeration  : [RO] 'PtpStatus' = 'Disabled'
+            Boolean      : [RW] 'PtpSlaveOnly' = false
+            Enumeration  : [RO] 'PtpClockAccuracy' = 'GreaterThan10s'
+            Enumeration  : [RO] 'PtpServoStatus' = 'Disabled'
+            Integer      : [RO] 'PtpDataSet' = 238926620872 ns
+            Command      : [WO] 'PtpDataSetLatch'
+            Integer      : [RO] 'PtpDataSetLatchValue' = 0 ns
+        Float        : [RW] 'PayloadCompressionRatioMin' = 1 : 1
+    Category    : 'FileAccessControl'
+        Enumeration  : [RW] 'FileSelector' = 'UserSetDefault'
+              * FileOperationSelector
+              * FileOpenMode
+              * FileSize
+        Enumeration  : [RW] 'FileOperationSelector' = 'Open'
+              * FileOperationExecute
+              * FileAccessOffset
+              * FileAccessLength
+              * FileOperationStatus
+              * FileOperationResult
+        Command      : [WO] 'FileOperationExecute'
+        Enumeration  : [RW] 'FileOpenMode' = 'Read'
+        Register     : [RW] 'FileAccessBuffer' = 65536
+        Enumeration  : [RO] 'FileOperationStatus' = 'None'
+        Integer      : [RO] 'FileOperationResult' = 0
+        Integer      : [RO] 'FileSize' = 0 B
+        Integer      : [RO] 'FileStorageSize' = 16580608 B
+        Integer      : [RO] 'FileStorageUsedSize' = 8749056 B
+        Integer      : [RO] 'FileStorageFreeSize' = 7823360 B
+    Category    : 'TransferControl'
+        Enumeration  : [RW] 'TransferSelector' = 'Stream0'
+              * TransferControlMode
+              * TransferOperationMode
+              * TransferBlockCount
+              * TransferQueueMaxBlockCount
+              * TransferQueueCurrentBlockCount
+              * TransferQueueMode
+              * TransferStart
+              * TransferStop
+              * TransferAbort
+              * TransferPause
+              * TransferResume
+              * TransferStatusSelector
+        Enumeration  : [RW] 'TransferControlMode' = 'Basic'
+    Category    : 'ActionControl'
+        Enumeration  : [RW] 'ActionUnconditionalMode' = 'Off'
+        Boolean      : [RW] 'ActionPTPSyncRequired' = true
+        Integer      : [RO] 'ActionQueueSize' = 4
+        Integer      : [RW] 'ActionSelector' = 0
+              * ActionGroupKey
+              * ActionGroupMask
+        Integer      : [RW] 'ActionGroupKey' = 0
+        Integer      : [RW] 'ActionGroupMask' = 0
+    Category    : 'SequencerControl'
+        Enumeration  : [RW] 'SequencerMode' = 'Off'
+        Enumeration  : [RW] 'SequencerConfigurationMode' = 'Off'
+        Enumeration  : [RW] 'SequencerFeatureSelector' = 'BalanceRatio'
+              * SequencerFeatureEnable
+        Boolean      : [RO] 'SequencerFeatureEnable' = true
+        Integer      : [RW] 'SequencerSetSelector' = 0
+              * SequencerSetSave
+              * SequencerSetLoad
+              * SequencerPathSelector
+        Command      : [WO] 'SequencerSetSave'
+        Command      : [WO] 'SequencerSetLoad'
+        Integer      : [RO] 'SequencerSetActive' = 0
+        Integer      : [RW] 'SequencerSetStart' = 0
+        Integer      : [RW] 'SequencerPathSelector' = 0
+              * SequencerSetNext
+              * SequencerTriggerSource
+              * SequencerTriggerActivation
+              * SequencerSetFrameCount
+        Integer      : [RW] 'SequencerSetNext' = 0
+        Enumeration  : [RW] 'SequencerTriggerSource' = 'Off'
+        Enumeration  : [RW] 'SequencerTriggerActivation' = 'RisingEdge'
+        Integer      : [RW] 'SequencerSetFrameCount' = 1
+    Category    : 'CounterAndTimerControl'
+        Enumeration  : [RW] 'CounterSelector' = 'Counter0'
+              * CounterEventSource
+              * CounterEventActivation
+              * CounterTriggerSource
+              * CounterTriggerActivation
+              * CounterResetSource
+              * CounterResetActivation
+              * CounterReset
+              * CounterValue
+              * CounterValueAtReset
+              * CounterDuration
+              * CounterStatus
+        Enumeration  : [RW] 'CounterEventSource' = 'Off'
+        Enumeration  : [RW] 'CounterEventActivation' = 'RisingEdge'
+        Enumeration  : [RW] 'CounterTriggerSource' = 'Off'
+        Enumeration  : [RW] 'CounterTriggerActivation' = 'RisingEdge'
+        Enumeration  : [RW] 'CounterResetSource' = 'Off'
+        Enumeration  : [RW] 'CounterResetActivation' = 'RisingEdge'
+        Command      : [WO] 'CounterReset'
+        Integer      : [RW] 'CounterValue' = 0
+        Integer      : [RO] 'CounterValueAtReset' = 0
+        Integer      : [RW] 'CounterDuration' = 1
+        Enumeration  : [RO] 'CounterStatus' = 'CounterIdle'
+        Enumeration  : [RW] 'TimerSelector' = 'Timer0'
+              * TimerTriggerSource
+              * TimerTriggerActivation
+              * TimerDuration
+              * TimerDelay
+              * TimerReset
+              * TimerValue
+              * TimerStatus
+        Enumeration  : [RW] 'TimerTriggerSource' = 'Off'
+        Enumeration  : [RW] 'TimerTriggerActivation' = 'RisingEdge'
+        Float        : [RW] 'TimerDuration' = 1 us
+        Float        : [RW] 'TimerDelay' = 0 us
+        Command      : [WO] 'TimerReset'
+        Float        : [RW] 'TimerValue' = 0 us
+        Enumeration  : [RO] 'TimerStatus' = 'TimerIdle'
+    Category    : 'SoftwareSignalControl'
+        Enumeration  : [RW] 'SoftwareSignalSelector' = 'SoftwareSignal0'
+        Command      : [WO] 'SoftwareSignalPulse'
+    Category    : 'DigitalIOControl'
+        Enumeration  : [RO] 'LineConfiguration' = 'Standard'
+        Integer      : [RO] 'LineStatusAll' = 12
+        Enumeration  : [RW] 'LineSelector' = 'Line0'
+              * LineMode
+              * LineInverter
+              * LineStatus
+              * LineSource
+              * LineFormat
+              * LinePulseEnable
+              * LinePulseDelay
+              * LinePulseDuration
+              * LineFilterSelector
+              * LineActivationVoltage
+              * VoltageExternalEnable
+              * LineFilterWidth
+        Enumeration  : [RW] 'LineMode' = 'Input'
+        Boolean      : [RW] 'LineInverter' = false
+        Boolean      : [RO] 'LineStatus' = false
+        Enumeration  : [RW] 'LineSource' = 'Off'
+        Enumeration  : [RW] 'LineFormat' = 'OptoCoupled'
+        Enumeration  : [RW] 'LineFilterSelector' = 'Deglitch'
+              * LineFilterWidth
+        Float        : [RW] 'LineFilterWidth' = 0.02 us
+        Enumeration  : [RW] 'LineActivationVoltage' = 'Low'
+        Enumeration  : [RW] 'UserOutputSelector' = 'UserOutput0'
+              * UserOutputValue
+        Boolean      : [RW] 'UserOutputValue' = false
+        Integer      : [RW] 'UserOutputValueAll' = 0
+        Integer      : [RW] 'UserOutputValueAllMask' = 0
+    Category    : 'ImageFormatControl'
+        Enumeration  : [RW] 'PixelFormat' = 'Mono8'
+        Enumeration  : [RO] 'PixelSize' = 'Bpp8'
+        Integer      : [RO] 'PixelDynamicRangeMin' = 0
+        Integer      : [RO] 'PixelDynamicRangeMax' = 255
+        Enumeration  : [RO] 'PixelColorFilter' = 'None'
+        Enumeration  : [RO] 'IspBayerPattern' = 'NONE'
+        Integer      : [RO] 'SensorWidth' = 4096
+        Integer      : [RO] 'SensorHeight' = 3000
+        Enumeration  : [RW] 'SensorShutterMode' = 'Global'
+        Integer      : [RO] 'WidthMax' = 4096
+        Integer      : [RO] 'HeightMax' = 3000
+        Float        : [RO] 'PhysicalPixelSize' = 2.74 um
+        Enumeration  : [RW] 'ADCBitDepth' = 'Bits12'
+        Integer      : [RO] 'ImagerWidth' = 4096
+        Integer      : [RO] 'ImagerHeight' = 3000
+        Integer      : [RO] 'ImagerOffsetX' = 0
+        Integer      : [RO] 'ImagerOffsetY' = 0
+        Integer      : [RO] 'ISPWidth' = 4096
+        Integer      : [RO] 'ISPHeight' = 3000
+        Integer      : [RW] 'Width' = 4096
+        Integer      : [RW] 'Height' = 3000
+        Integer      : [RW] 'OffsetX' = 0
+        Integer      : [RW] 'OffsetY' = 0
+        Boolean      : [RW] 'MultipleROIRowsEnable' = false
+        Boolean      : [RW] 'ReverseX' = false
+        Boolean      : [RW] 'ReverseY' = false
+        Enumeration  : [RW] 'BinningSelector' = 'Digital'
+              * BinningHorizontalMode
+              * BinningVerticalMode
+              * BinningHorizontal
+              * BinningVertical
+        Enumeration  : [RW] 'BinningHorizontalMode' = 'Sum'
+        Enumeration  : [RW] 'BinningVerticalMode' = 'Sum'
+        Integer      : [RW] 'BinningHorizontal' = 1
+        Integer      : [RW] 'BinningVertical' = 1
+        Enumeration  : [RW] 'DecimationSelector' = 'Sensor'
+              * DecimationHorizontalMode
+              * DecimationVerticalMode
+              * DecimationHorizontal
+              * DecimationVertical
+        Enumeration  : [RW] 'DecimationHorizontalMode' = 'Discard'
+        Enumeration  : [RW] 'DecimationVerticalMode' = 'Discard'
+        Integer      : [RW] 'DecimationHorizontal' = 1
+        Integer      : [RW] 'DecimationVertical' = 1
+        Enumeration  : [RW] 'TestPattern' = 'Off'
+        Enumeration  : [RW] 'TestPatternBitDepth' = 'Bits12'
+    Category    : 'AnalogControl'
+        Enumeration  : [RW] 'GainSelector' = 'All'
+              * Gain
+              * GainRaw
+              * GainAuto
+        Float        : [RW] 'Gain' = 0 dB
+        Integer      : [RW] 'GainRaw' = 0
+        Enumeration  : [RW] 'GainAuto' = 'Off'
+        Float        : [RW] 'GainAutoLowerLimit' = 0 dB
+        Float        : [RW] 'GainAutoUpperLimit' = 48 dB
+        Enumeration  : [RW] 'BlackLevelSelector' = 'All'
+              * BlackLevel
+        Float        : [RW] 'BlackLevel' = 0 %
+        Integer      : [RW] 'BlackLevelRaw' = 0
+        Float        : [RW] 'AwbWhiteBalanceGainMin' = 0
+        Float        : [RW] 'AwbWhiteBalanceGainMax' = 15.9998
+        Integer      : [RW] 'AwbWhiteBalanceGainRawMin' = 0
+        Integer      : [RW] 'AwbWhiteBalanceGainRawMax' = 65535
+        Float        : [RW] 'AwbDamping' = 100 %
+        Integer      : [RW] 'AwbDampingRaw' = 256
+        Category    : 'AwbAOI'
+            Boolean      : [RW] 'AwbAOIEnable' = false
+        Boolean      : [RW] 'GammaEnable' = true
+        Float        : [RW] 'Gamma' = 1
+        Integer      : [RW] 'GammaRaw' = 256
+    Category    : 'LUTControl'
+        Enumeration  : [RW] 'LUTSelector' = 'Luminance'
+              * LUTEnable
+              * LUTIndex
+              * LUTValueAll
+        Boolean      : [RW] 'LUTEnable' = false
+        Integer      : [RW] 'LUTIndex' = 0
+              * LUTValue
+        Integer      : [RW] 'LUTValue' = 0
+        Register     : [RW] 'LUTValueAll' = 8196
+        Command      : [WO] 'LUTSave'
+        Command      : [WO] 'LUTReset'
+        Category    : 'LUTFunctionGeneration'
+            Enumeration  : [RW] 'LUTFunction' = 'LUTFunctionNone'
+    Category    : 'DefectCorrectionControl'
+        Boolean      : [RW] 'DefectCorrectionEnable' = true
+        Integer      : [RO] 'DefectCorrectionCount' = 38
+        Integer      : [RW] 'DefectCorrectionIndex' = 0
+              * DefectCorrectionPositionX
+              * DefectCorrectionPositionY
+        Integer      : [RW] 'DefectCorrectionPositionX' = 1975
+        Integer      : [RW] 'DefectCorrectionPositionY' = 32
+        Command      : [WO] 'DefectCorrectionGetNewDefect'
+        Command      : [WO] 'DefectCorrectionApply'
+        Command      : [WO] 'DefectCorrectionRemove'
+        Command      : [WO] 'DefectCorrectionSave'
+        Command      : [WO] 'DefectCorrectionRestoreDefault'
+    Category    : 'ShadingCorrectionControl'
+        Boolean      : [RW] 'ShadingCorrectionEnable' = false
+        Integer      : [RO] 'ShadingCorrectionCellWidth' = 128
+        Integer      : [RO] 'ShadingCorrectionCellHeight' = 128
+        Enumeration  : [RW] 'ShadingCorrectionSelector' = 'ShadingCorrection1'
+              * ShadingCorrectionNodeIndexX
+              * ShadingCorrectionNodeIndexY
+              * ShadingCorrectionValue
+        Integer      : [RW] 'ShadingCorrectionNodeIndexX' = 0
+        Integer      : [RW] 'ShadingCorrectionNodeIndexY' = 0
+        Float        : [RW] 'ShadingCorrectionValue' = 1
+        Command      : [WO] 'ShadingCorrectionSave'
+        Command      : [WO] 'ShadingCorrectionReset'
+    Category    : 'ChunkDataControl'
+        Boolean      : [RW] 'ChunkModeActive' = false
+        Enumeration  : [RW] 'ChunkSelector' = 'Image'
+              * ChunkEnable
+        Boolean      : [RW] 'ChunkEnable' = true
+        Register     : [RO] 'ChunkHistogramStats' = 1024
+    Category    : 'SerialAccessControl'
+        Enumeration  : [RW] 'SerialOperationSelector' = 'Read'
+              * SerialOperationExecute
+              * SerialAccessLength
+              * SerialOperationStatus
+              * SerialOperationResult
+        Command      : [WO] 'SerialOperationExecute'
+        Register     : [RW] 'SerialAccessBuffer' = 4096
+        Integer      : [RW] 'SerialAccessLength' = 0 B
+        Enumeration  : [RO] 'SerialOperationStatus' = 'None'
+        Integer      : [RO] 'SerialOperationResult' = 0
+        Integer      : [RO] 'SerialReceivedSize' = 0 B
+        Enumeration  : [RW] 'SerialReceiveSource' = 'Off'
+        Enumeration  : [RW] 'SerialBaudRate' = 'Baud57600'
+        Enumeration  : [RW] 'SerialParity' = 'None'
+        Enumeration  : [RW] 'SerialStopBits' = 'StopBits1'
+        Enumeration  : [RW] 'SerialDataBits' = 'DataBits8'
+        Enumeration  : [RW] 'SerialFlowControl' = 'None'
+    Category    : 'I2CAccessControl'
+        Enumeration  : [RW] 'I2COperationSelector' = 'Read'
+              * I2CRegisterAddress
+              * I2CRegisterAddressLength
+              * I2CRegisterDataLength
+              * I2CAccessLength
+              * I2COperationExecute
+              * I2COperationResult
+              * I2COperationStatus
+        Command      : [WO] 'I2COperationExecute'
+        Register     : [RW] 'I2CAccessBuffer' = 4096
+        Integer      : [RW] 'I2CRegisterAddress' = 0
+        Enumeration  : [RW] 'I2CRegisterAddressLength' = 'Bits8'
+        Enumeration  : [RW] 'I2CRegisterDataLength' = 'Bits8'
+        Integer      : [RW] 'I2CAccessLength' = 0 B
+        Enumeration  : [RO] 'I2COperationStatus' = 'None'
+        Integer      : [RO] 'I2COperationResult' = 0 B
+        Integer      : [RW] 'I2CSlaveDeviceAddress' = 0
+        Enumeration  : [RW] 'I2CSlaveDeviceAddressLength' = 'Bits7'
+        Enumeration  : [RW] 'I2CSclSource' = 'Off'
+        Enumeration  : [RW] 'I2CSdaSource' = 'Off'
+    Category    : 'CalibLensControl'
+        Float        : [RW] 'CalibFocalLengthX' = 0
+        Float        : [RW] 'CalibFocalLengthY' = 0
+        Float        : [RW] 'CalibOpticalCenterX' = 0
+        Float        : [RW] 'CalibOpticalCenterY' = 0
+        Enumeration  : [RW] 'CalibLensDistortionModel' = 'None'
+        Command      : [WO] 'CalibLensRestoreDefault'
+        Command      : [WO] 'CalibLensSave'
+        Command      : [WO] 'CalibLensLoad'
+        Boolean      : [RW] 'CalibLensUserWriteEnable' = false
+    Category    : 'DeviceGroup'
+        Category    : 'DeviceGroupMemberInfo'
