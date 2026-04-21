@@ -28,6 +28,7 @@ rust_library(
     deps = [
         "@crates//:aravis",
         "@crates//:aravis-sys",
+        "@crates//:argmin",
         "@crates//:axum",
         "@crates//:chrono",
         "@crates//:clap",
@@ -35,7 +36,10 @@ rust_library(
         "@crates//:eframe",
         "@crates//:glib",
         "@crates//:if-addrs",
+        "@crates//:levenberg-marquardt",
+        "@crates//:nalgebra",
         "@crates//:rand",
+        "@crates//:rand_distr",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:serialport",
