@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
 load(":generation.bzl", "generate_visibility_header")
 
 filegroup(
@@ -55,9 +54,7 @@ cc_library(
         "-ffunction-sections",
         "-fdata-sections",
         "-O2",
-        "-pthread",
         "-Wno-unknown-pragmas",
-        "-D_REENTRANT",
     ] + select({
         "@platforms//os:linux": ["-D_GNU_SOURCE"],
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
@@ -71,10 +68,15 @@ cc_library(
         "//:linux_arm64": ["libffi_per_platform_build_files/linux_arm64"],
         "//:linux_amd64": ["libffi_per_platform_build_files/linux_amd64"],
     }),
-    linkopts = [
-        "-pthread",
-        "-lm",
-    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 genrule(
@@ -152,9 +154,7 @@ cc_library(
         "-ffunction-sections",
         "-fdata-sections",
         "-O2",
-        "-pthread",
         "-Wno-unknown-pragmas",
-        "-D_REENTRANT",
     ] + select({
         "@platforms//os:linux": ["-D_GNU_SOURCE"],
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
@@ -168,10 +168,15 @@ cc_library(
         "HAVE_STDBOOL_H",
     ],
     includes = ["pcre2/src"],
-    linkopts = [
-        "-pthread",
-        "-lm",
-    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(
@@ -212,19 +217,22 @@ cc_library(
         "-ffunction-sections",
         "-fdata-sections",
         "-O2",
-        "-pthread",
         "-Wno-unknown-pragmas",
-        "-D_REENTRANT",
     ] + select({
         "@platforms//os:linux": ["-D_GNU_SOURCE"],
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
         "//conditions:default": [],
     }),
     defines = ["Z_HAVE_UNISTD_H"],
-    linkopts = [
-        "-pthread",
-        "-lm",
-    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 genrule(
@@ -370,7 +378,6 @@ cc_library(
         "-DHAVE_LIBMOUNT=0",
         "-pthread",
         "-Wno-unknown-pragmas",
-        "-D_REENTRANT",
         "-include",
         "glib/glib/glib.h",
         "-fvisibility=hidden",
@@ -398,18 +405,17 @@ cc_library(
         "glib_generated_includes",
         "glib_generated_includes/glib",
     ],
-    linkopts = [
-        "-pthread",
-        "-lm",
-    ] + select({
-        "//:darwin_arm64": [
-            "-liconv",
-            "-framework CoreFoundation",
-            "-framework Carbon",
-            "-framework Foundation",
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lrt",
+            "-lm",
+            "-lpthread",
+            "-Wl,--gc-sections",
         ],
-        "//:linux_arm64": ["-lrt"],
-        "//:linux_amd64": ["-lrt"],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
     }),
     deps = [
         ":pcre2",  # GLib's regex engine
@@ -452,7 +458,6 @@ cc_library(
     copts = [
         "-pthread",
         "-Wno-unknown-pragmas",
-        "-D_REENTRANT",
         "-fvisibility=hidden",
         "-ffunction-sections",
         "-fdata-sections",
@@ -465,18 +470,16 @@ cc_library(
     includes = [
         "glib/gmodule",
     ],
-    linkopts = [
-        "-pthread",
-        "-lm",
-    ] + select({
-        "//:darwin_arm64": [
-            "-liconv",
-            "-framework CoreFoundation",
-            "-framework Carbon",
-            "-framework Foundation",
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+            "-Wl,--gc-sections",
         ],
-        "//:linux_arm64": ["-lrt"],
-        "//:linux_amd64": ["-lrt"],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
     }),
     deps = [":glib"],
 )
@@ -536,9 +539,7 @@ cc_library(
         ":gobject_visibility",
     ],
     copts = [
-        "-pthread",
         "-Wno-unknown-pragmas",
-        "-D_REENTRANT",
         "-DGOBJECT_COMPILATION",
         "-fvisibility=hidden",
         "-ffunction-sections",
@@ -552,18 +553,14 @@ cc_library(
     includes = [
         "glib/gobject",
     ],
-    linkopts = [
-        "-pthread",
-        "-lm",
-    ] + select({
-        "//:darwin_arm64": [
-            "-liconv",
-            "-framework CoreFoundation",
-            "-framework Carbon",
-            "-framework Foundation",
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
         ],
-        "//:linux_arm64": ["-lrt"],
-        "//:linux_amd64": ["-lrt"],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
     }),
     deps = [
         ":glib",
@@ -807,7 +804,6 @@ cc_library(
     copts = [
         "-pthread",
         "-Wno-unknown-pragmas",
-        "-D_REENTRANT",
         "-DGIO_COMPILATION",
         "-fvisibility=hidden",
         "-fno-strict-aliasing",
@@ -830,30 +826,22 @@ cc_library(
         "glib/gio",
         "glib/subprojects/gvdb",
     ],
-    linkopts = [
-        "-Wl,--gc-sections",
-        "-pthread",
-        "-lm",
-    ] + select({
-        "//:darwin_arm64": [
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lrt",
+            "-lm",
+            "-lresolv",
+            "-lpthread",
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
             "-liconv",
             "-framework CoreFoundation",
-            "-framework Carbon",
-            "-framework Foundation",
             "-framework SystemConfiguration",
             "-framework CoreServices",
             "-Wl,-dead_strip",
         ],
-        "//:linux_arm64": [
-            "-lrt",
-            "-lresolv",
-            "-lpthread",
-        ],
-        "//:linux_amd64": [
-            "-lrt",
-            "-lresolv",
-            "-lpthread",
-        ],
+        "//conditions:default": [],
     }),
     textual_hdrs = ["glib/gio/strinfo.c"],
     deps = [
@@ -863,6 +851,62 @@ cc_library(
     ],
 )
 
+genrule(
+    name = "generate_arvapi_h",
+    srcs = ["aravis_generated_build_files/arvapi.h"],
+    outs = ["aravis/src/arvapi.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvfeatures_h",
+    srcs = ["aravis_generated_build_files/arvfeatures.h"],
+    outs = ["aravis/src/arvfeatures.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvversion_h",
+    srcs = ["aravis_generated_build_files/arvversion.h"],
+    outs = ["aravis/src/arvversion.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvparamsprivate_h",
+    srcs = ["aravis_generated_build_files/arvparamsprivate.h"],
+    outs = ["aravis/src/arvparamsprivate.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvenumtypes_h",
+    srcs = ["aravis_generated_build_files/arvenumtypes.h"],
+    outs = ["aravis/src/arvenumtypes.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvenumtypesprivate_h",
+    srcs = ["aravis_generated_build_files/arvenumtypesprivate.h"],
+    outs = ["aravis/src/arvenumtypesprivate.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvenumtypes_c",
+    srcs = ["aravis_generated_build_files/arvenumtypes.c"],
+    outs = ["aravis/src/arvenumtypes.c"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvenumtypesprivate_c",
+    srcs = ["aravis_generated_build_files/arvenumtypesprivate.c"],
+    outs = ["aravis/src/arvenumtypesprivate.c"],
+    cmd = "cp $< $@",
+)
+
 cc_library(
     name = "aravis_objects",
     srcs = glob(
@@ -870,28 +914,65 @@ cc_library(
             "aravis/src/*.c",
             "aravis/src/*.h",
         ],
-    ),
-    hdrs = ["aravis/src/arv.h"],
-    copts = select({
+        exclude = [
+            "aravis/src/arvuvinterface.c",  # USB
+            "aravis/src/arvuvdevice.c",  # USB
+            "aravis/src/arvuvstream.c",  # USB
+            "aravis/src/arvuvcp.c",  # USB
+            "aravis/src/arvuvsp.c",  # USB
+            "aravis/src/arvv4l2interface.c",  # V4L2
+            "aravis/src/arvv4l2device.c",  # V4L2
+            "aravis/src/arvv4l2stream.c",  # V4L2
+            "aravis/src/arvv4l2misc.c",  # V4L2
+        ],
+    ) + [
+        ":generate_arvenumtypes_c",
+        ":generate_arvenumtypesprivate_c",
+    ],
+    hdrs = [
+        "aravis/src/arv.h",
+        ":generate_arvapi_h",
+        ":generate_arvenumtypes_h",
+        ":generate_arvenumtypesprivate_h",
+        ":generate_arvfeatures_h",
+        ":generate_arvparamsprivate_h",
+        ":generate_arvversion_h",
+    ],
+    copts = [
+        "-pthread",
+        "-fvisibility=hidden",
+        "-fno-strict-aliasing",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+    }),
+    defines = ["ARAVIS_COMPILATION"],
+    includes = [
+        "aravis/src",
+    ],
+    linkopts = select({
         "@platforms//os:linux": [
-            "-D_GNU_SOURCE",
-            "-D_REENTRANT",
-            "-D_THREAD_SAFE",
+            "-lrt",
+            "-lm",
+            "-lresolv",
+            "-lpthread",
+            "-Wl,--gc-sections",
         ],
         "@platforms//os:macos": [
-            "-D_DARWIN_C_SOURCE",
-            "-D_REENTRANT",
-            "-D_THREAD_SAFE",
+            "-framework CoreFoundation",
+            "-framework SystemConfiguration",
+            "-framework CoreServices",
+            "-Wl,-dead_strip",
         ],
-    }),
-    # defines = [
-    #     "ZMQ_BUILD_DRAFT_API=0",
-    #     "ZMQ_STATIC=0",
-    # ],
-    # includes = ["libzmq/include"],
-    linkopts = ["-lpthread"] + select({
-        "@platforms//os:linux": ["-lrt"],
         "//conditions:default": [],
     }),
-    # deps = [":gen_libzmq_platform_hpp"],
+    deps = [
+        ":gio",
+        ":glib",
+        ":gmodule",
+        ":gobject",
+    ],
 )

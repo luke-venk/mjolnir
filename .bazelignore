@@ -1,2 +1,3 @@
 third_party/pcre2
 third_party/zlib
+third_party/glib/subprojects/pcre2-10.46
