@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 load("@rules_rust_bindgen//:defs.bzl", "rust_bindgen_library")
 load(":generation.bzl", "generate_visibility_header")
 
@@ -252,17 +253,12 @@ genrule(
     outs = [
         "glib_generated_includes/config.h",
     ],
-    cmd = select({
-        "//:darwin_arm64": """
-            cp $(location glib_per_platform_build_files/darwin_arm64/config.h) $(location glib_generated_includes/config.h)
-        """,
-        "//:linux_arm64": """
-            cp $(location glib_per_platform_build_files/linux_arm64/config.h) $(location glib_generated_includes/config.h)
-        """,
-        "//:linux_amd64": """
-            cp $(location glib_per_platform_build_files/linux_amd64/config.h) $(location glib_generated_includes/config.h)
-        """,
-    }),
+    cmd = """
+        sed -e 's/#define ENABLE_NLS 1/#undef ENABLE_NLS/g' \
+            -e 's/#define HAVE_GETTEXT 1/#undef HAVE_GETTEXT/g' \
+            -e 's/#define HAVE_LIBINT_H 1/#undef HAVE_LIBINT_H/g' \
+            $< > $@
+    """,
 )
 
 genrule(
@@ -343,6 +339,25 @@ generate_visibility_header(
     version = "2.88.0",
 )
 
+genrule(
+    name = "generate_dummy_libintl",
+    outs = ["glib_stubs/libintl.h"],
+    cmd = """
+echo '#ifndef LIBINTL_H
+#define LIBINTL_H
+#define gettext(String) (String)
+#define dgettext(Domain,String) (String)
+#define dcgettext(Domain,String,Type) (String)
+#define ngettext(String1,String2,N) ((N) == 1 ? (String1) : (String2))
+#define dngettext(Domain,String1,String2,N) ((N) == 1 ? (String1) : (String2))
+#define dcngettext(Domain,String1,String2,N,Type) ((N) == 1 ? (String1) : (String2))
+#define bindtextdomain(Domain,Directory) (Domain)
+#define bind_textdomain_codeset(Domain,Codeset) (Codeset)
+#define textdomain(String) (String)
+#endif' > $@
+    """,
+)
+
 cc_library(
     name = "glib",
     srcs = glob(
@@ -352,6 +367,7 @@ cc_library(
             "glib/glib/deprecated/*.c",
         ],
         exclude = [
+            "glib/glib/ggettext.c",
             "glib/glib/gdbus-daemon.c",
             "glib/glib/gstdio-private.c",
             "glib/glib/giowin32.c",
@@ -372,6 +388,7 @@ cc_library(
         "glib/glib/glib-visibility.h",
         "glib/glib/gthread-posix.c",
         "glib/glib/gversionmacros.h",
+        ":generate_dummy_libintl",
         ":glib_generated_config",
         ":glib_generated_glibconfig",
     ],
@@ -405,6 +422,7 @@ cc_library(
         "glib/glib",
         "glib_generated_includes",
         "glib_generated_includes/glib",
+        "glib_stubs",
     ],
     linkopts = select({
         "@platforms//os:linux": [
@@ -983,8 +1001,92 @@ rust_bindgen_library(
     bindgen_flags = [
         "--allowlist-file=.*aravis.*",
         "--no-layout-tests",
+        "--rust-target",
+        "1.94.0",  # This needs to match the rust version in MODULE.bazel. If you update it there, update it here too!
     ],
     cc_lib = ":aravis_objects",
-    header = "third_party/aravis/src/arv.h",
+    header = "aravis/src/arv.h",
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "libclang_dir",
+    srcs = ["@llvm_toolchain_llvm//:libclang"],
+    outs = ["libclang/libclang.dylib"],
+    cmd = "cp $< $@",
+)
+
+filegroup(
+    name = "libclang_filegroup",
+    srcs = [":libclang_dir"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "opencv_srcs",
+    srcs = glob(["opencv/**"]),
+    visibility = ["//visibility:private"],
+)
+
+cmake(
+    name = "opencv",
+    cache_entries = {
+        # Build static libs, no shared
+        "BUILD_SHARED_LIBS": "OFF",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+        # Disable all the random shit
+        "BUILD_TESTS": "OFF",
+        "BUILD_PERF_TESTS": "OFF",
+        "BUILD_EXAMPLES": "OFF",
+        "BUILD_DOCS": "OFF",
+        "BUILD_opencv_apps": "OFF",
+        # Disable GUI / display deps (no X11/GTK needed)
+        "WITH_GTK": "OFF",
+        "WITH_QT": "OFF",
+        "WITH_OPENGL": "OFF",
+        # Bundle third-party image codecs (no system deps)
+        "BUILD_ZLIB": "ON",
+        "BUILD_PNG": "ON",
+        "BUILD_JPEG": "ON",
+        "BUILD_TIFF": "ON",
+        "BUILD_WEBP": "ON",
+        "BUILD_OPENJPEG": "ON",
+        # Disable optional system libs that would create runtime deps
+        "WITH_FFMPEG": "OFF",
+        "WITH_GSTREAMER": "OFF",
+        "WITH_V4L": "OFF",
+        "WITH_1394": "OFF",
+        "WITH_EIGEN": "OFF",
+        # Enable only the core modules
+        "BUILD_opencv_core": "ON",
+        "BUILD_opencv_imgproc": "ON",
+        "BUILD_opencv_imgcodecs": "ON",
+        "BUILD_opencv_calib3d": "ON",
+        "BUILD_opencv_features2d": "ON",
+        "BUILD_opencv_flann": "ON",
+        "BUILD_opencv_dnn": "ON",
+        # Disable everything else
+        "BUILD_opencv_highgui": "OFF",
+        "BUILD_opencv_videoio": "OFF",
+        "BUILD_opencv_video": "OFF",
+        "BUILD_opencv_ml": "OFF",
+        "BUILD_opencv_objdetect": "OFF",
+        "BUILD_opencv_photo": "OFF",
+        "BUILD_opencv_stitching": "OFF",
+        "BUILD_opencv_gapi": "OFF",
+    },
+    generate_args = ["-GNinja"],
+    lib_source = ":opencv_srcs",
+    out_static_libs = [
+        # Core OpenCV modules
+        "libopencv_core.a",
+        "libopencv_imgproc.a",
+        "libopencv_imgcodecs.a",
+        "libopencv_calib3d.a",
+        "libopencv_features2d.a",
+        "libopencv_flann.a",
+        "libopencv_dnn.a",
+    ],
     visibility = ["//visibility:public"],
 )

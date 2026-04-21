@@ -17,19 +17,58 @@ module(
 )
 
 # External dependencies.
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
 
-# So we can compile vendored C++ dependencies.
-bazel_dep(
-    name = "platforms",
-    version = "1.0.0",
+# Toolchains
+
+# Needed for compiling for embedded platforms
+bazel_dep(name = "platforms", version = "1.0.0")
+
+# Custom C/C++/Rust/LLVM languages tooling
+bazel_dep(name = "toolchains_llvm", version = "1.6.0")
+
+llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
+llvm.toolchain(
+    name = "llvm_toolchain",
+    cxx_standard = {"": "c++20"},
+    llvm_version = "20.1.7",
 )
-bazel_dep(
-    name = "rules_cc",
-    version = "0.2.17",
+llvm.extra_target_compatible_with(
+    name = "llvm_toolchain",
+    constraints = ["@//:cxx20"],
 )
+use_repo(llvm, "llvm_toolchain", "llvm_toolchain_llvm")
+
+register_toolchains("@llvm_toolchain//:all")
+
+bazel_dep(name = "toolchains_musl", version = "0.1.27")
+
+toolchains_musl = use_extension("@toolchains_musl//:toolchains_musl.bzl", "toolchains_musl")
+toolchains_musl.config(
+    extra_target_compatible_with = ["//:musl"],
+)
+
+bazel_dep(name = "rules_rust_bindgen", version = "0.69.0")
+
+register_toolchains("//:rust_bindgen_toolchain")
+
+bazel_dep(name = "rules_cc", version = "0.2.17")
+
+# For building cmake projects
 bazel_dep(
     name = "rules_foreign_cc",
     version = "0.15.1",
+)
+
+rfc_tools = use_extension(
+    "@rules_foreign_cc//foreign_cc:extensions.bzl",
+    "tools",
+)
+use_repo(rfc_tools, "cmake_3.31.8_toolchains", "ninja_1.13.0_toolchains")
+
+register_toolchains(
+    "@cmake_3.31.8_toolchains//:all",
+    "@ninja_1.13.0_toolchains//:all",
 )
 
 # -----------------------------------------------------------------------------
@@ -73,11 +112,35 @@ crate.spec(
     package = "aravis",
     version = "0.11.1",
 )
-crate.spec(
-    default_features = False,
-    package = "aravis-sys",
-    version = "0.11.1",
+
+# Hijack aravis-sys
+crate.annotation(
+    crate = "aravis-sys",
+    # IMPORTANT: Stop it from trying to run its own build script
+    # which would look for system libs/pkg-config
+    gen_build_script = False,
+    # This points the 'lib' of aravis-sys to your local target
+    override_target_lib = "@@//third_party:aravis_sys",
 )
+
+# Hijack the high-level aravis crate to fix its Cargo.toml and deps
+crate.annotation(
+    crate = "aravis",
+    patch_args = ["-p1"],
+    # Use your patch to fix the relative path 'path = "../aravis-sys"'
+    # and remove 'workspace = true' if necessary
+    patches = ["@@//third_party:aravis_cargo.patch"],
+    deps = [
+        "@@//third_party:gio",
+        "@@//third_party:glib",
+    ],
+)
+
+# crate.spec(
+#     default_features = False,
+#     package = "aravis-sys",
+#     version = "0.11.1",
+# )
 crate.spec(
     package = "axum",
     version = "0.8.8",
@@ -126,6 +189,23 @@ crate.spec(
 crate.spec(
     package = "if-addrs",
     version = "0.15.0",
+)
+crate.spec(
+    features = ["clang-runtime"],
+    package = "opencv",
+    version = "0.98.2",
+)
+crate.annotation(
+    build_script_data = ["@@//third_party:libclang_filegroup"],
+    build_script_env = {
+        "OPENCV_LINK_LIBS": "opencv_core,opencv_imgproc,opencv_imgcodecs,opencv_calib3d,opencv_features2d,opencv_flann,opencv_dnn",
+        "OPENCV_PACKAGE_NAME": "opencv4",
+        "LIBCLANG_PATH": "$(execpath @@//third_party:libclang_filegroup)",
+        "DYLD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
+    },
+    build_script_link_deps = ["@@//third_party:opencv"],
+    crate = "opencv",
+    deps = ["@@//third_party:opencv"],
 )
 crate.spec(
     package = "rand",

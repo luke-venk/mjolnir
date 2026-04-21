@@ -1,3 +1,9 @@
+load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
+load("@rules_cc//cc:defs.bzl", "cc_import")
+load("@rules_rust_bindgen//:defs.bzl", "rust_bindgen_toolchain")
+
+package(default_visibility = ["//visibility:public"])
+
 config_setting(
     name = "release",
     values = {"compilation_mode": "opt"},
@@ -25,4 +31,64 @@ config_setting(
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
+)
+
+constraint_setting(
+    name = "linker",
+    default_constraint_value = ":unknown",
+)
+
+constraint_value(
+    name = "musl",
+    constraint_setting = ":linker",
+)
+
+# Default linker for anyone not setting the linker to `musl`.
+# You shouldn't ever need to set this value manually.
+constraint_value(
+    name = "unknown",
+    constraint_setting = ":linker",
+)
+
+platform(
+    name = "linux_arm64_musl",
+    constraint_values = [
+        ":musl",
+        "@platforms//cpu:arm64",
+        "@platforms//os:linux",
+    ],
+)
+
+constraint_setting(
+    name = "cxx_standard",
+    default_constraint_value = ":cxx20",
+)
+
+constraint_value(
+    name = "cxx20",
+    constraint_setting = ":cxx_standard",
+)
+
+native_binary(
+    name = "clang",
+    src = "@llvm_toolchain_llvm//:bin/clang",
+)
+
+cc_import(
+    name = "libclang",
+    data = ["@llvm_toolchain_llvm//:libclang"],
+    shared_library = "@llvm_toolchain_llvm//:libclang",
+)
+
+rust_bindgen_toolchain(
+    name = "_rust_bindgen_toolchain",
+    bindgen = "@rules_rust_bindgen//3rdparty:bindgen",
+    clang = ":clang",
+    libclang = ":libclang",
+)
+
+toolchain(
+    name = "rust_bindgen_toolchain",
+    toolchain = ":_rust_bindgen_toolchain",
+    toolchain_type = "@rules_rust_bindgen//:toolchain_type",
 )

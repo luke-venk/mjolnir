@@ -35,6 +35,7 @@ rust_library(
         "@crates//:eframe",
         "@crates//:glib",
         "@crates//:if-addrs",
+        "@crates//:opencv",
         "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
