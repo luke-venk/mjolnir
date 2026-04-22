@@ -5,7 +5,7 @@ use aravis::{Aravis, Buffer, Camera, Stream};
 /// discovery and recording tools.
 use std::slice;
 
-/// Retrieves token to access global state of the Aravis library.
+// Retrieves token to access global state of the Aravis library.
 pub fn initialize_aravis() -> Aravis {
     Aravis::initialize().expect("Failed to initialize Aravis.")
 }
@@ -102,6 +102,11 @@ pub fn copy_buffer_bytes(buffer: &Buffer) -> Vec<u8> {
     let (ptr, len) = buffer.data();
 
     if ptr.is_null() || len == 0 {
+        eprintln!(
+            "Warning: Aravis returned an empty buffer (ptr null: {}, len: {}).",
+            ptr.is_null(),
+            len
+        );
         return Vec::new();
     }
 

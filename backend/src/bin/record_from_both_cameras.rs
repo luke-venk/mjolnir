@@ -10,9 +10,11 @@ use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::aravis_utils::initialize_aravis;
 use backend_lib::camera::discovery::get_camera_ids;
 use backend_lib::camera_ingest::run_recording_ingest;
+use backend_lib::pipeline::Pipeline;
 use backend_lib::camera::record::cli::RecordWithBothCamerasArgs;
 use backend_lib::camera::record::run_capture_thread;
 use backend_lib::camera::record::writer::{Frame, ensure_dir, write_to_disk};
+use backend_lib::schemas::{CameraId, Frame as PipelineFrame};
 
 pub fn main() {
     println!("------------------------");
@@ -76,11 +78,17 @@ pub fn main() {
     // go to camera ingest and another copy can still be written to disk.
     let (ingest_tx, ingest_rx) = crossbeam::channel::bounded::<Frame>(100);
     let (writer_tx, writer_rx) = crossbeam::channel::bounded::<Frame>(100);
+    let (left_pipeline_tx, left_pipeline_rx) = crossbeam::channel::bounded::<PipelineFrame>(100);
+    let (right_pipeline_tx, right_pipeline_rx) =
+        crossbeam::channel::bounded::<PipelineFrame>(100);
+    let left_pipeline = Pipeline::new(CameraId::FieldLeft, left_pipeline_rx, 100);
+    let right_pipeline = Pipeline::new(CameraId::FieldRight, right_pipeline_rx, 100);
 
     // Shared shutdown flag set by Ctrl+C handler.
     let shutdown = Arc::new(AtomicBool::new(false));
     let shutdown_clone1 = Arc::clone(&shutdown);
     let shutdown_clone2 = Arc::clone(&shutdown);
+    let shutdown_clone3 = Arc::clone(&shutdown);
     
     ctrlc::set_handler(move || {
         println!("\nShutdown signal received, stopping recording...");
@@ -126,7 +134,14 @@ pub fn main() {
 
     // Spawn ingest thread.
     let ingest_handle = thread::spawn(move || {
-        run_recording_ingest(ingest_rx, camera_id1, camera_id2, 100);
+        run_recording_ingest(
+            ingest_rx,
+            camera_id1,
+            camera_id2,
+            left_pipeline_tx,
+            right_pipeline_tx,
+            shutdown_clone3,
+        );
     });
 
     // Spawn write thread.
@@ -150,6 +165,8 @@ pub fn main() {
     ingest_handle
         .join()
         .expect("Error: Ingest dispatch thread panicked.");
+    left_pipeline.stop();
+    right_pipeline.stop();
     writer_handle
         .join()
         .expect("Error: Writer thread panicked.");

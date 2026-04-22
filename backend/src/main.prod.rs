@@ -1,7 +1,4 @@
-use backend_lib::schemas::CameraId;
-use backend_lib::camera_ingest::start_default_camera_pipeline;
 use backend_lib::server::{create_api_router, start_server};
-
 use axum::Router;
 use axum_embed::ServeEmbed;
 use rust_embed::Embed;

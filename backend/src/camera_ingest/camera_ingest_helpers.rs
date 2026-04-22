@@ -4,10 +4,10 @@ use aravis::Buffer;
 
 use crate::camera::aravis_utils::copy_buffer_bytes;
 use crate::camera::record::writer::Frame as RecordedFrame;
-use crate::schemas::{Context, Frame};
+use crate::schemas::{Context, Frame as PipelineFrame};
 
 // Converts one successful Aravis buffer into the pipeline's frame type.
-pub fn buffer_to_frame(buffer: &Buffer) -> Frame {
+pub fn buffer_to_frame(buffer: &Buffer) -> PipelineFrame {
     let data = copy_buffer_bytes(buffer);
     let timestamp = if buffer.system_timestamp() != 0 {
         buffer.system_timestamp()
@@ -17,11 +17,11 @@ pub fn buffer_to_frame(buffer: &Buffer) -> Frame {
         buffer.frame_id()
     };
 
-    Frame::new(data, Context::new(timestamp))
+    PipelineFrame::new(data, Context::new(timestamp))
 }
 
 // Converts one recorded frame payload into the pipeline's frame type.
-pub fn recorded_frame_to_frame(frame: RecordedFrame) -> Frame {
+pub fn recorded_frame_to_frame(frame: RecordedFrame) -> PipelineFrame {
     let timestamp = if frame.metadata.system_timestamp_ns != 0 {
         frame.metadata.system_timestamp_ns
     } else if frame.metadata.buffer_timestamp_ns != 0 {
@@ -30,7 +30,7 @@ pub fn recorded_frame_to_frame(frame: RecordedFrame) -> Frame {
         frame.metadata.frame_id
     };
 
-    Frame::new(frame.bytes, Context::new(timestamp))
+    PipelineFrame::new(frame.bytes, Context::new(timestamp))
 }
 
 // Returns true once the configured frame limit has been reached.
@@ -43,9 +43,6 @@ pub fn reached_duration_limit(start_time: Instant, max_duration_s: Option<f64>) 
     max_duration_s.is_some_and(|seconds| start_time.elapsed() >= Duration::from_secs_f64(seconds))
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -53,9 +50,7 @@ mod tests {
 
     use crate::camera::record::writer::{Frame as RecordedFrame, Metadata};
 
-    use super::{
-        reached_duration_limit, reached_frame_limit, recorded_frame_to_frame,
-    };
+    use super::{reached_duration_limit, reached_frame_limit, recorded_frame_to_frame};
 
     #[test]
     fn recorded_frame_to_frame_prefers_system_timestamp() {

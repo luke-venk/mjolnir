@@ -1,10 +1,10 @@
-/// Code for handling configurations for recording with Aravis.
+// Code for handling configurations for recording with Aravis.
 use clap::ValueEnum;
 use crate::camera::record::cli::RecordWithBothCamerasArgs;
 use crate::camera::record::cli::RecordWithOneCameraArgs;
 use crate::camera::stream::cli::StreamFromCamerasArgs;
 
-/// Configuration for what specs we want to use while recording.
+// Configuration for what specs we want to use while recording.
 #[derive(Debug, Clone)]
 pub struct CameraIngestConfig {
     pub camera_id: String,
@@ -18,7 +18,6 @@ pub struct CameraIngestConfig {
     pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
-    pub use_fake_interface: bool,
     pub max_frames: Option<usize>,
     pub max_duration_s: Option<f64>,
 
@@ -36,7 +35,6 @@ impl CameraIngestConfig {
             enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
-            use_fake_interface: false,
             max_frames: args.common_args.max_frames,
             max_duration_s: args.common_args.max_duration,
             restart_requested: false,
@@ -52,7 +50,6 @@ impl CameraIngestConfig {
             enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
-            use_fake_interface: false,
             max_frames: args.common_args.max_frames,
             max_duration_s: args.common_args.max_duration,
             restart_requested: false,
@@ -68,7 +65,6 @@ impl CameraIngestConfig {
             enable_ptp: false,
             num_buffers: 8,
             timeout_ms: 5000,
-            use_fake_interface: false,
             max_frames: None,
             max_duration_s: None,
             restart_requested: false,
@@ -76,7 +72,7 @@ impl CameraIngestConfig {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.camera_id.is_empty() && !self.use_fake_interface {
+        if self.camera_id.is_empty() {
             return Err("camera_id cannot be empty".to_string());
         }
         if self.exposure_time_us <= 0.0 {
@@ -99,6 +95,23 @@ impl CameraIngestConfig {
             }
         }
         Ok(())
+    }
+}
+
+impl Default for CameraIngestConfig {
+    fn default() -> Self {
+        Self {
+            camera_id: String::new(),
+            exposure_time_us: 10000.0,
+            frame_rate_hz: 30.0,
+            resolution: Resolution::UHD4K,
+            enable_ptp: false,
+            num_buffers: 8,
+            timeout_ms: 5000,
+            max_frames: None,
+            max_duration_s: None,
+            restart_requested: false,
+        }
     }
 }
 
