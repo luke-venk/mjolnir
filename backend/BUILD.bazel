@@ -38,6 +38,7 @@ rust_library(
         "@crates//:if-addrs",
         "@crates//:levenberg-marquardt",
         "@crates//:nalgebra",
+        "@crates//:opencv",
         "@crates//:rand",
         "@crates//:rand_distr",
         "@crates//:serde",
