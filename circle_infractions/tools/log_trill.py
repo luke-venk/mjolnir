@@ -1,4 +1,7 @@
-
+# log_trill.py
+# Purpose:
+# - Collect labeled Trill Flex sensor readings into a CSV so we can tune thresholds.
+# - Labels: no_touch / top_touch (intended infraction press) / side_touch (edge bump/brush).
 import time
 import csv
 import serial
