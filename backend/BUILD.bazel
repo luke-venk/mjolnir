@@ -55,24 +55,13 @@ rust_library(
     # cameras, triangulation, etc. So just include the bare minimum
     # to simulate throws.
     srcs = glob([
-            "src/server/**/*.rs",
-            "src/throws/**/*.rs",
-            "src/**/lib.rs",
-            # Technically it doesn't make sense to include circle infractions
-            # code in fake lib, but will break if not included. Spin off ticket?
-            "src/circle_infractions_ingest/**/*.rs",
-        ],
-        exclude = [
-            "src/bin/",
-            "src/main.*.rs",
-            # Exclude following code that contains egui and eframe.
-            # See ticket #30 for more information.
-            "src/camera/stream/**/*.rs",
-            # Exclude any code related to computer vision.
-            "src/computer_vision/**/*.rs",
-            "src/pipeline/**/*.rs",
-        ],
-    ),
+        "src/server/**/*.rs",
+        "src/throws/**/*.rs",
+        "src/**/lib.rs",
+        # Technically it doesn't make sense to include circle infractions
+        # code in fake lib, but will break if not included. Spin off ticket?
+        "src/circle_infractions_ingest/**/*.rs",
+    ]),
     crate_features = ["fake"],
     crate_name = "backend_lib",
     rustc_flags = select({
