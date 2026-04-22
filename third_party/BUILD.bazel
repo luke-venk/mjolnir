@@ -49,6 +49,9 @@ cmake(
         "WITH_V4L": "OFF",
         "WITH_1394": "OFF",
         "WITH_EIGEN": "OFF",
+        "WITH_ITT": "OFF",
+        "WITH_OPENCL": "OFF",
+        "WITH_CAROTENE": "OFF",
         # Enable only the core modules
         "BUILD_opencv_core": "ON",
         "BUILD_opencv_imgproc": "ON",
@@ -56,8 +59,8 @@ cmake(
         "BUILD_opencv_calib3d": "ON",
         "BUILD_opencv_features2d": "ON",
         "BUILD_opencv_flann": "ON",
-        "BUILD_opencv_dnn": "ON",
         # Disable everything else
+        "BUILD_opencv_dnn": "OFF",
         "BUILD_opencv_highgui": "OFF",
         "BUILD_opencv_videoio": "OFF",
         "BUILD_opencv_video": "OFF",
@@ -77,7 +80,6 @@ cmake(
         "libopencv_calib3d.a",
         "libopencv_features2d.a",
         "libopencv_flann.a",
-        "libopencv_dnn.a",
     ],
     visibility = ["//visibility:public"],
 )

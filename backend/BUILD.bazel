@@ -51,16 +51,29 @@ rust_library(
 
 rust_library(
     name = "backend_lib_fake",
-    srcs = glob(
-        ["src/**/*.rs"],
+    # The source code should exclude anything related to CV, pipeline,
+    # cameras, triangulation, etc. So just include the bare minimum
+    # to simulate throws.
+    srcs = glob([
+            "src/server/**/*.rs",
+            "src/throws/**/*.rs",
+            "src/**/lib.rs",
+            # Technically it doesn't make sense to include circle infractions
+            # code in fake lib, but will break if not included. Spin off ticket?
+            "src/circle_infractions_ingest/**/*.rs",
+        ],
         exclude = [
             "src/bin/",
             "src/main.*.rs",
             # Exclude following code that contains egui and eframe.
             # See ticket #30 for more information.
             "src/camera/stream/**/*.rs",
+            # Exclude any code related to computer vision.
+            "src/computer_vision/**/*.rs",
+            "src/pipeline/**/*.rs",
         ],
     ),
+    crate_features = ["fake"],
     crate_name = "backend_lib",
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
@@ -218,6 +231,7 @@ rust_binary(
 rust_test(
     name = "tests",
     crate = ":backend_lib",
+    crate_features = ["real"],
     deps = [
         "@crates//:http-body-util",
         "@crates//:rstest",

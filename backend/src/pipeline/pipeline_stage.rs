@@ -1,7 +1,6 @@
-use std::thread;
-
-use crate::schemas::Frame;
+use crate::pipeline::Frame;
 use crossbeam::channel::{Receiver, Sender};
+use std::thread;
 
 pub struct PipelineStage<F>
 where
@@ -35,11 +34,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schemas::Context;
+    use crate::pipeline::Context;
 
     #[test]
     fn test_can_send_frame_through_pipeline_stage() {
-        let frame_in = Frame::new(vec![6, 9, 6, 9], Context::new(1738));
+        let frame_in = Frame::new(vec![6, 9, 6, 9], Context::new(1738, crate::camera::Resolution::FullHD));
 
         let (tx_in, rx_pipe) = crossbeam::channel::bounded::<Frame>(3);
         let (tx_pipe, rx_out) = crossbeam::channel::bounded::<Frame>(3);
@@ -47,7 +46,10 @@ mod tests {
         let my_function = |f: Frame| -> Frame {
             let new_data = vec![6, 7, 6, 7];
             let new_timestamp = f.context().timestamp() + 1;
-            Frame::new(new_data, Context::new(new_timestamp))
+            Frame::new(
+                new_data,
+                Context::new(new_timestamp, crate::camera::Resolution::FullHD),
+            )
         };
 
         let pipeline_stage = PipelineStage::new(rx_pipe, tx_pipe, my_function);

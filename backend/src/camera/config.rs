@@ -77,14 +77,22 @@ impl CameraIngestConfig {
 }
 
 /// Different resolutions we might want to record with.
-#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
+#[derive(Debug, Clone, Copy, ValueEnum, Eq, PartialEq, Hash, Default)]
 pub enum Resolution {
     #[value(name = "720p")]
     HD,
+
     #[value(name = "1080p")]
     FullHD,
+
     #[value(name = "4k")]
+    #[default]
     UHD4K,
+
+    // A way to indicate during CV that the frame has been downsampled
+    // to a lower resolution. This enum value should never be used in
+    // Aravis library functions.
+    Downsampled,
 }
 
 impl Resolution {
@@ -94,6 +102,7 @@ impl Resolution {
             Resolution::HD => (1024, 750),
             Resolution::FullHD => (2048, 1500),
             Resolution::UHD4K => (4096, 3000),
+            Resolution::Downsampled => (960, 540),
         }
     }
 
@@ -102,6 +111,7 @@ impl Resolution {
             Resolution::HD => 4,
             Resolution::FullHD => 2,
             Resolution::UHD4K => 1,
+            Resolution::Downsampled => panic!("Error: Do not use Downsampled resolution for binning!"),
         }
     }
 
@@ -110,6 +120,7 @@ impl Resolution {
             Resolution::HD => "720p".to_string(),
             Resolution::FullHD => "1080p".to_string(),
             Resolution::UHD4K => "4k".to_string(),
+            Resolution::Downsampled => panic!("Error: Do not use Downsampled resolution for streaming!"),
         }
     }
 }
