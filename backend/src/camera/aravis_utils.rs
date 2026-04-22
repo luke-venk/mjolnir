@@ -1,9 +1,20 @@
 use crate::camera::CameraIngestConfig;
+use aravis::glib::translate::ToGlibPtr;
 use aravis::prelude::*;
 use aravis::{Aravis, Buffer, Camera, Stream};
+use aravis_sys::arv_camera_get_string;
+use glib::translate::*; // To convert high-level types to raw pointers
+use std::ffi::CString;
+use std::ptr;
+use std::slice;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc};
+use super::{CancelableBarrier, BarrierResult};
+use std::thread::sleep;
+use std::time::Duration;
+
 /// Shared code for interacting with Aravis library, used by both
 /// discovery and recording tools.
-use std::slice;
 
 /// Retrieves token to access global state of the Aravis library.
 pub fn initialize_aravis() -> Aravis {
@@ -16,13 +27,85 @@ pub fn create_camera(camera_id: &str) -> Result<Camera, String> {
         .map_err(|_| format!("ERROR: Failed to create camera with camera_id = {camera_id}. Please try recording/streaming again..."))
 }
 
+fn unsafe_read_camera_string(camera: &Camera, node_name: &str) -> String {
+    unsafe {
+        let mut error: *mut glib::ffi::GError = ptr::null_mut();
+        let camera_ptr: *mut aravis_sys::ArvCamera = camera.to_glib_none().0;
+        let feature_c_str = CString::new(node_name).unwrap();
+        let raw_res = arv_camera_get_string(camera_ptr, feature_c_str.as_ptr(), &mut error);
+        if !error.is_null() {
+            panic!(
+                "Error calling arv_camera_get_string for node: {}",
+                node_name
+            );
+        }
+        return from_glib_none(raw_res);
+    }
+}
+
+fn unsafe_read_camera_boolean(camera: &Camera, node_name: &str) -> bool {
+    unsafe {
+        let mut error: *mut glib::ffi::GError = std::ptr::null_mut();
+        let camera_ptr: *mut aravis_sys::ArvCamera = camera.to_glib_none().0;
+        let feature_c_str = CString::new(node_name).unwrap();
+        let raw_res = aravis_sys::arv_camera_get_boolean(camera_ptr, feature_c_str.as_ptr(), &mut error);
+        if !error.is_null() {
+            panic!(
+                "Error calling arv_camera_get_boolean for node: {}",
+                node_name
+            );
+        }
+        raw_res != 0
+    }
+}
+
+pub struct PtpConfig {
+    pub is_slave: bool,
+    pub enable_barrier: CancelableBarrier,
+    pub configure_barrier: CancelableBarrier,
+    pub lock_barrier: CancelableBarrier,
+}
+
 /// Loads our information from our custom camera configuration type
 /// into Aravis camera.
-pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
+pub fn configure_camera(
+    camera: &Camera,
+    config: &CameraIngestConfig,
+    maybe_shutdown: Option<Arc<AtomicBool>>,
+    maybe_ptp_config: Option<&PtpConfig>,
+) {
+    // Packet size.
+    camera
+        .gv_set_packet_size(9000)
+        .expect("Failed to manually set the packet size in camera configuration.");
+
+    // Packet delay.
+    camera
+        .gv_set_packet_delay(1000)
+        .expect("Failed to set the packet delay in camera configuration.");
+
+    // Clear any old trigger state
+    camera
+        .clear_triggers()
+        .expect("Failed to clear old triggers");
+
+    // Disable auto settings
+    camera
+        .set_exposure_time_auto(aravis::Auto::Off)
+        .expect("Failed to disable auto exposure time.");
+    camera
+        .set_gain_auto(aravis::Auto::Off)
+        .expect("Failed to disable auto gains.");
+
     // Exposure time.
     camera
         .set_exposure_time(config.exposure_time_us)
         .expect("Failed to set exposure time in camera configuration.");
+
+    // Camera gains.
+    camera
+        .set_gain(0.0)
+        .expect("Failed to set the gains in camera configuration.");
 
     // Frame rate enable.
     camera
@@ -45,31 +128,155 @@ pub fn configure_camera(camera: &Camera, config: &CameraIngestConfig) {
     }
 
     // PTP enabling.
-    if config.enable_ptp {
+    // https://support.thinklucid.com/app-note-multi-camera-synchronization-using-ptp-and-scheduled-action-commands/
+    if let Some(ptp_config) = maybe_ptp_config {
         camera
             .set_boolean("PtpEnable", true)
             .expect("Failed to enable PTP in camera configuration.");
+        let ptp_is_enabled = unsafe_read_camera_boolean(camera, "PtpEnable");
+        if !ptp_is_enabled {
+            panic!("Failed to enable ptp on camera {}", config.camera_id);
+        } else {
+            println!("Enabled PTP on camera {}", config.camera_id);
+        }
+        if ptp_config.enable_barrier.wait() == BarrierResult::Canceled {
+            return;
+        }
+        if ptp_config.is_slave {
+            camera
+                .set_boolean("PtpSlaveOnly", true)
+                .expect("Failed to make camera ptp slave");
+            let ptp_is_slave = unsafe_read_camera_boolean(camera, "PtpSlaveOnly");
+            if !ptp_is_slave {
+                panic!("Failed to make camera {} a PTP slave", config.camera_id);
+            } else {
+                println!("Made camera {} a PTP slave", config.camera_id);
+            }
+            let mut success = false;
+            let mut attempts = 0;
+            while !success && attempts < 300 {
+                if let Some(ref shutdown) = maybe_shutdown && shutdown.load(Ordering::SeqCst) {
+                    println!("Exiting configuration for camera {}.", config.camera_id);
+                    return;
+                }
+                let ptp_status = unsafe_read_camera_string(camera, "PtpStatus");
+                println!(
+                    "Camera {} reads PtpStatus: {}",
+                    config.camera_id, ptp_status
+                );
+                success = ptp_status == "Slave";
+                attempts += 1;
+                sleep(Duration::from_millis(500));
+            }
+            if !success {
+                panic!("Camera {} failed to enable PTP slave", config.camera_id);
+            }
+        } else {
+            camera
+                .set_boolean("PtpSlaveOnly", false)
+                .expect("Failed to make camera ptp master");
+            let ptp_is_slave = unsafe_read_camera_boolean(camera, "PtpSlaveOnly");
+            if !ptp_is_slave {
+                println!("Made camera {} a PTP master", config.camera_id);
+            } else {
+                panic!("Failed to make camera {} a PTP master", config.camera_id);
+            }
+            let mut success = false;
+            let mut attempts = 0;
+            while !success && attempts < 300 {
+                if let Some(ref shutdown) = maybe_shutdown && shutdown.load(Ordering::SeqCst) {
+                    println!("Exiting configuration for camera {}.", config.camera_id);
+                    return;
+                }
+                let feature_name = "PtpStatus";
+                let ptp_status = unsafe_read_camera_string(camera, feature_name);
+                success = ptp_status == "Master";
+                attempts += 1;
+                sleep(Duration::from_millis(500));
+            }
+            if !success {
+                panic!("Camera {} failed to enable PTP master", config.camera_id);
+            }
+        };
+        if ptp_config.configure_barrier.wait() == BarrierResult::Canceled {
+            return;
+        }
+
+        let target_status = if ptp_config.is_slave { "Locked" } else { "Disabled" };
+        let mut consecutive_successes = 0;
+        let mut attempts = 0;
+        while consecutive_successes < 10 && attempts < 300 {
+            if let Some(ref shutdown) = maybe_shutdown && shutdown.load(Ordering::SeqCst) {
+                println!("Exiting configuration for camera {}.", config.camera_id);
+                return;
+            }
+            let ptp_enabled = unsafe_read_camera_boolean(camera, "PtpEnable");
+            let ptp_master_slave_status = unsafe_read_camera_string(camera, "PtpStatus");
+            let ptp_servo_status = unsafe_read_camera_string(camera, "PtpServoStatus");
+            println!(
+                "Camera {} reads PtpServoStatus: {} | PtpEnable: {} | PtpStatus: {}",
+                config.camera_id, ptp_servo_status, ptp_enabled, ptp_master_slave_status
+            );
+            if ptp_servo_status == target_status {
+                consecutive_successes += 1;
+            } else {
+                consecutive_successes = 0;
+            }
+            attempts += 1;
+            sleep(Duration::from_millis(500));
+        }
+        if consecutive_successes < 10 {
+            panic!("Camera {} failed to establish PTP lock", config.camera_id);
+        }
+        if ptp_config.lock_barrier.wait() == BarrierResult::Canceled {
+            return;
+        }
+
+        // Set transfer control settings for PTP synced captures
+        camera
+            .set_string("TransferControlMode", "UserControlled")
+            .expect("Failed to set TransferControlMode");
+        camera
+            .set_string("TransferOperationMode", "Continuous")
+            .expect("Failed to set TransferOperationMode");
+        camera
+            .execute_command("TransferStop")
+            .expect("Failed to stop early transfers");
+
+        // Set up frame start trigger system
+        camera
+            .set_string("TriggerSelector", "FrameStart")
+            .expect("Failed to set TriggerSelector");
+        camera
+            .set_string("TriggerMode", "On")
+            .expect("Failed to set TriggerMode");
+        camera
+            .set_string("TriggerSource", "Action0")
+            .expect("Failed to set TriggerSource");
+        camera
+            .set_string("ActionUnconditionalMode", "On")
+            .expect("Failed to set ActionUnconditionalMode");
+        camera
+            .set_boolean("ActionPTPSyncRequired", true)
+            .expect("Failed to set ActionPTPSyncRequired");
+        camera
+            .set_integer("ActionSelector", 0)
+            .expect("Failed to set ActionSelector");
+        camera
+            .set_integer("ActionDeviceKey", 1)
+            .expect("Failed to set ActionDeviceI+K");
+        camera
+            .set_integer("ActionGroupKey", 1)
+            .expect("Failed to set ActionGroupKey");
+        camera
+            .set_integer("ActionGroupMask", 1)
+            .expect("Failed to set ActionGroupMask");
     }
-
-    // Packet size.
-    camera
-        .gv_set_packet_size(8064)
-        .expect("Failed to manually set the packet size in camera configuration.");
-
-    // Packet delay.
-    camera
-        .gv_set_packet_delay(5000)
-        .expect("Failed to set the packet delay in camera configuration.");
 
     // Pixel format.
     camera
         .set_pixel_format(aravis::PixelFormat::MONO_8)
         .expect("Failed to set the pixel format in camera configuration.");
-
-    // Camera gains.
-    camera
-        .set_gain(0.0)
-        .expect("Failed to set the gains in camera configuration.");
 }
 
 /// Creates Aravis camera stream and allocates frame buffers.

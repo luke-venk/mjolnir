@@ -1,5 +1,5 @@
-/// Data for a single captured frame passed from capture thread
-/// to UI thread.
+// Data for a single captured frame passed from capture thread
+// to UI thread.
 pub struct FrameData {
     // Raw Mono8 pixel bytes.
     pub pixels: Vec<u8>,
