@@ -1,11 +1,3 @@
-# log_trill.py
-# Purpose:
-# - Collect labeled Trill Flex sensor readings into a CSV so we can tune thresholds.
-# - Labels: no_touch / top_touch (intended infraction press) / side_touch (edge bump/brush).
-#
-# Why "import time":
-# - time.sleep(2): Arduino often resets when a serial connection opens; we wait for it to reboot.
-# - time.time(): used to store a PC-side timestamp (pc_ms) for each sample in the CSV.
 
 import time
 import csv
