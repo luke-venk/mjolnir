@@ -1,3 +1,4 @@
+use super::{BarrierResult, CancelableBarrier};
 use crate::camera::CameraIngestConfig;
 use aravis::glib::translate::ToGlibPtr;
 use aravis::prelude::*;
@@ -7,9 +8,8 @@ use glib::translate::*; // To convert high-level types to raw pointers
 use std::ffi::CString;
 use std::ptr;
 use std::slice;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc};
-use super::{CancelableBarrier, BarrierResult};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -48,7 +48,8 @@ fn unsafe_read_camera_boolean(camera: &Camera, node_name: &str) -> bool {
         let mut error: *mut glib::ffi::GError = std::ptr::null_mut();
         let camera_ptr: *mut aravis_sys::ArvCamera = camera.to_glib_none().0;
         let feature_c_str = CString::new(node_name).unwrap();
-        let raw_res = aravis_sys::arv_camera_get_boolean(camera_ptr, feature_c_str.as_ptr(), &mut error);
+        let raw_res =
+            aravis_sys::arv_camera_get_boolean(camera_ptr, feature_c_str.as_ptr(), &mut error);
         if !error.is_null() {
             panic!(
                 "Error calling arv_camera_get_boolean for node: {}",
@@ -155,7 +156,9 @@ pub fn configure_camera(
             let mut success = false;
             let mut attempts = 0;
             while !success && attempts < 300 {
-                if let Some(ref shutdown) = maybe_shutdown && shutdown.load(Ordering::SeqCst) {
+                if let Some(ref shutdown) = maybe_shutdown
+                    && shutdown.load(Ordering::SeqCst)
+                {
                     println!("Exiting configuration for camera {}.", config.camera_id);
                     return;
                 }
@@ -184,7 +187,9 @@ pub fn configure_camera(
             let mut success = false;
             let mut attempts = 0;
             while !success && attempts < 300 {
-                if let Some(ref shutdown) = maybe_shutdown && shutdown.load(Ordering::SeqCst) {
+                if let Some(ref shutdown) = maybe_shutdown
+                    && shutdown.load(Ordering::SeqCst)
+                {
                     println!("Exiting configuration for camera {}.", config.camera_id);
                     return;
                 }
@@ -202,11 +207,17 @@ pub fn configure_camera(
             return;
         }
 
-        let target_status = if ptp_config.is_slave { "Locked" } else { "Disabled" };
+        let target_status = if ptp_config.is_slave {
+            "Locked"
+        } else {
+            "Disabled"
+        };
         let mut consecutive_successes = 0;
         let mut attempts = 0;
         while consecutive_successes < 10 && attempts < 300 {
-            if let Some(ref shutdown) = maybe_shutdown && shutdown.load(Ordering::SeqCst) {
+            if let Some(ref shutdown) = maybe_shutdown
+                && shutdown.load(Ordering::SeqCst)
+            {
                 println!("Exiting configuration for camera {}.", config.camera_id);
                 return;
             }

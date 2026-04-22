@@ -154,13 +154,14 @@ impl eframe::App for LiveViewApp {
             });
             ui.add_space(8.0);
 
-            // Render frame using the texture we made.
             if let Some(texture) = &self.texture {
+                // Render frame using the texture we made.
                 let available = ui.available_size();
                 ui.image((texture.id(), available));
             } else {
+                // Show start screen.
                 ui.centered_and_justified(|ui| {
-                    ui.label("Waiting for camera stream...");
+                    ui.label("Waiting for camera stream to start...");
                 });
             }
 
