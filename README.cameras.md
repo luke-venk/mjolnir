@@ -49,12 +49,12 @@ To run this program, run the following command:
 bazel run //backend:stream -- --camera <camera> --resolution <resolution> --exposure-us <exposure> --frame-rate-hz <frame rate>
 ```
 
-Example:
-
+Example for Camera 224:
 ```
 bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
 ```
 
+Example for Camera 242:
 ```
 bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
 ```
@@ -80,7 +80,7 @@ bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242
 To run this program, run the following command:
 
 ```
-bazel run //backend:record -- --resolution <resolution> --exposure-us <exposure> --frame-rate-hz <frame rate> --output-dir <output_dir> --max-duration-s <max_duration-s> --interface <interface>
+bazel run //backend:record -- --resolution <resolution> --exposure-us <exposure> --frame-rate-hz <frame rate> --output-dir <output_dir> --max-duration-s <max_duration-s> --throwaway-duration-s <throwaway-duration-s> --interface <interface>
 ```
 
 You can alternatively specify `--max-frames <max_frames>` instead of max duration.
@@ -88,7 +88,7 @@ You can alternatively specify `--max-frames <max_frames>` instead of max duratio
 Example:
 
 ```
-bazel run //backend:record -- --resolution 4k --exposure-us 10000 --frame-rate-hz 30.0 --output-dir ~/Downloads/camera_out --max-duration 20 --interface en8
+bazel run //backend:record -- --resolution 4k --exposure-us 10000 --frame-rate-hz 30 --output-dir ~/Downloads/camera_out/test --max-duration-s 10 --throwaway-duration-s 3 --interface en8
 ```
 
 The `interface` bit tells the binary which network interface the cameras are on so that we make our UDP socket broadcasts from the correct interface. You must have already configured an IP address on the specified network address. You can view your network interfaces via `ifconfig` and set a static IP on an interface in your network settings. On Mac, this is at `System Settings > Network > <the interface>`.
