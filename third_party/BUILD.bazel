@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
-load("@rules_rust_bindgen//:defs.bzl", "rust_bindgen_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_proc_macro")
 load(":generation.bzl", "generate_visibility_header")
 
 filegroup(
@@ -340,26 +340,21 @@ generate_visibility_header(
 )
 
 genrule(
-    name = "generate_dummy_libintl",
-    outs = ["glib_stubs/libintl.h"],
-    cmd = """
-echo '#ifndef LIBINTL_H
-#define LIBINTL_H
-#define gettext(String) (String)
-#define dgettext(Domain,String) (String)
-#define dcgettext(Domain,String,Type) (String)
-#define ngettext(String1,String2,N) ((N) == 1 ? (String1) : (String2))
-#define dngettext(Domain,String1,String2,N) ((N) == 1 ? (String1) : (String2))
-#define dcngettext(Domain,String1,String2,N,Type) ((N) == 1 ? (String1) : (String2))
-#define bindtextdomain(Domain,Directory) (Domain)
-#define bind_textdomain_codeset(Domain,Codeset) (Codeset)
-#define textdomain(String) (String)
-#endif' > $@
-    """,
+    name = "generate_libintl_h",
+    srcs = ["libintl_stubs/libintl.h"],
+    outs = ["glib/glib/libintl.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_intl_stubs",
+    srcs = ["libintl_stubs/intl_stubs.c"],
+    outs = ["glib/glib/intl_stubs.c"],
+    cmd = "cp $< $@",
 )
 
 cc_library(
-    name = "glib",
+    name = "glib_objects",
     srcs = glob(
         [
             "glib/glib/*.c",
@@ -379,7 +374,10 @@ cc_library(
             "glib/glib/win_iconv.c",
             "glib/glib/gutils-os2.c",
         ],
-    ),
+    ) + [
+        "libintl_stubs/intl_stubs.c",
+        "libintl_stubs/libintl.h",
+    ],
     hdrs = glob([
         "glib/glib/*.h",
         "glib/glib/libcharset/*.h",
@@ -388,7 +386,7 @@ cc_library(
         "glib/glib/glib-visibility.h",
         "glib/glib/gthread-posix.c",
         "glib/glib/gversionmacros.h",
-        ":generate_dummy_libintl",
+        "libintl_stubs/libintl.h",
         ":glib_generated_config",
         ":glib_generated_glibconfig",
     ],
@@ -422,7 +420,7 @@ cc_library(
         "glib/glib",
         "glib_generated_includes",
         "glib_generated_includes/glib",
-        "glib_stubs",
+        "libintl_stubs",
     ],
     linkopts = select({
         "@platforms//os:linux": [
@@ -437,8 +435,97 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        ":pcre2",  # GLib's regex engine
-        ":zlib",  # Used in various utilities
+        ":pcre2",
+        ":zlib",
+    ],
+)
+
+rust_library(
+    name = "glib_sys",
+    srcs = glob(["gtk-rs-core/glib/sys/src/*.rs"]),
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":glib_objects",
+        "@crates//:libc",
+    ],
+)
+
+rust_proc_macro(
+    name = "glib_macros",
+    srcs = glob(["gtk-rs-core/glib-macros/**/*.rs"]),
+    crate_features = ["proc-macro-crate"],
+    deps = [
+        "@crates//:heck",
+        "@crates//:proc-macro-crate",
+        "@crates//:proc-macro2",
+        "@crates//:quote",
+        "@crates//:syn",
+    ],
+)
+
+rust_library(
+    name = "glib",
+    srcs = glob(["gtk-rs-core/glib/src/**/*.rs"]),
+    compile_data = ["gtk-rs-core/glib/README.md"],
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+        "gio",
+        "gio-sys",
+        "futures",
+        "futures-core",
+        "futures-task",
+        "futures-executor",
+        "futures-channel",
+        "futures-util",
+    ],
+    proc_macro_deps = [":glib_macros"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gio_sys",
+        ":glib_sys",
+        ":gobject_sys",
+        "@crates//:bitflags",
+        "@crates//:futures-channel",
+        "@crates//:futures-core",
+        "@crates//:futures-executor",
+        "@crates//:futures-task",
+        "@crates//:futures-util",
+        "@crates//:libc",
+        "@crates//:memchr",
+        "@crates//:smallvec",
     ],
 )
 
@@ -500,7 +587,7 @@ cc_library(
         ],
         "//conditions:default": [],
     }),
-    deps = [":glib"],
+    deps = [":glib_objects"],
 )
 
 generate_visibility_header(
@@ -582,8 +669,37 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        ":glib",
+        ":glib_objects",
         ":libffi",
+    ],
+)
+
+rust_library(
+    name = "gobject_sys",
+    srcs = glob(["gtk-rs-core/glib/gobject-sys/src/*.rs"]),
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":glib_sys",
+        ":gobject",
+        "@crates//:libc",
     ],
 )
 
@@ -765,7 +881,7 @@ genrule(
 )
 
 cc_library(
-    name = "gio",
+    name = "gio_objects",
     srcs = glob(
         ["glib/gio/*.c"],
         exclude = [
@@ -864,9 +980,75 @@ cc_library(
     }),
     textual_hdrs = ["glib/gio/strinfo.c"],
     deps = [
-        ":glib",
+        ":glib_objects",
         ":gmodule",
         ":gobject",
+    ],
+)
+
+rust_library(
+    name = "gio_sys",
+    srcs = glob(["gtk-rs-core/gio/sys/src/**/*.rs"]),
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gio_objects",
+        ":glib_sys",
+        ":gobject_sys",
+        "@crates//:libc",
+    ],
+)
+
+rust_library(
+    name = "gio",
+    srcs = glob(["gtk-rs-core/gio/src/**/*.rs"]),
+    compile_data = ["gtk-rs-core/gio/README.md"],
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gio_sys",
+        ":glib",
+        "@crates//:futures-channel",
+        "@crates//:futures-core",
+        "@crates//:futures-io",
+        "@crates//:futures-util",
+        "@crates//:libc",
+        "@crates//:pin-project-lite",
+        "@crates//:smallvec",
     ],
 )
 
@@ -989,24 +1171,82 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        ":gio",
-        ":glib",
+        ":gio_objects",
+        ":glib_objects",
         ":gmodule",
         ":gobject",
     ],
 )
 
-rust_bindgen_library(
+# Have to hack away the link attribute with sed from the original lib.rs
+genrule(
+    name = "aravis_sys_unlinked_lib_rs",
+    srcs = ["aravis-rs/aravis-sys/src/lib.rs"],
+    outs = ["lib.rs"],
+    cmd = "sed 's/.*link(name = \"aravis-0.8\").*//g' $< > $@",
+)
+
+rust_library(
     name = "aravis_sys",
-    bindgen_flags = [
-        "--allowlist-file=.*aravis.*",
-        "--no-layout-tests",
-        "--rust-target",
-        "1.94.0",  # This needs to match the rust version in MODULE.bazel. If you update it there, update it here too!
+    srcs = [":aravis_sys_unlinked_lib_rs"],
+    crate_features = [
+        "v0_8_31",
+        "v0_8_27",
+        "v0_8_25",
+        "v0_8_23",
+        "v0_8_22",
+        "v0_8_20",
+        "v0_8_19",
+        "v0_8_17",
+        "v0_8_16",
+        "v0_8_15",
+        "v0_8_11",
+        "v0_8_8",
+        "v0_8_6",
+        "v0_8_3",
     ],
-    cc_lib = ":aravis_objects",
-    header = "aravis/src/arv.h",
+    edition = "2021",
     visibility = ["//visibility:public"],
+    deps = [
+        ":aravis_objects",
+        ":gio_sys",
+        ":glib_sys",
+        ":gobject_sys",
+        "@crates//:libc",
+    ],
+)
+
+rust_library(
+    name = "aravis",
+    srcs = glob(["aravis-rs/aravis/src/**/*.rs"]),
+    crate_features = [
+        "image",
+        "v0_8_31",
+        "v0_8_27",
+        "v0_8_25",
+        "v0_8_23",
+        "v0_8_22",
+        "v0_8_20",
+        "v0_8_19",
+        "v0_8_17",
+        "v0_8_16",
+        "v0_8_15",
+        "v0_8_11",
+        "v0_8_8",
+        "v0_8_6",
+        "v0_8_3",
+    ],
+    edition = "2015",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":aravis_sys",
+        ":gio",
+        ":gio_sys",
+        ":glib",
+        ":glib_sys",
+        ":gobject_sys",
+        "@crates//:image",
+    ],
 )
 
 genrule(

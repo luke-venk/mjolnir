@@ -16,3 +16,9 @@
 [submodule "third_party/opencv"]
 	path = third_party/opencv
 	url = https://github.com/opencv/opencv
+[submodule "third_party/aravis-rs"]
+	path = third_party/aravis-rs
+	url = https://github.com/robohouse-delft/aravis-rs
+[submodule "third_party/gtk-rs-core"]
+	path = third_party/gtk-rs-core
+	url = https://github.com/gtk-rs/gtk-rs-core
