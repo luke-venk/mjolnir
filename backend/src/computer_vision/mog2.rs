@@ -1,5 +1,8 @@
 use crate::schemas::{Context, Frame};
 
+/// The number of frames required for Mog2 to build the background model.
+pub const MOG2_HISTORY_FRAMES: usize = 300;
+
 pub fn mog2(frame: Frame) -> Frame {
     // TODO: implement actual logic
 

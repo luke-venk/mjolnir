@@ -5,6 +5,7 @@ use crate::camera::aravis_utils::{
     create_stream_and_allocate_buffers,
 };
 use crate::camera::{BarrierResult, CancelableBarrier};
+use crate::computer_vision::mog2::MOG2_HISTORY_FRAMES;
 use aravis::{BufferStatus, Camera, CameraExt, StreamExt};
 use aravis_sys::arv_camera_get_integer;
 use glib::translate::*; // To convert high-level types to raw pointers
@@ -253,6 +254,7 @@ pub fn run_capture_thread(
 
     // Used to provide countdowns to the user
     let mut countdown_timer: Instant = Instant::now();
+    let mog2_duration_s: f64 = (MOG2_HISTORY_FRAMES as f64) / config.frame_rate_hz;
 
     // Used to only print timeouts after first buffer arrives.
     let mut first_buffer_arrived = false;
@@ -276,7 +278,9 @@ pub fn run_capture_thread(
         // Stop streaming if a maximum duration was configured and the
         // camera has recorded for that amount of time.
         if let Some(max_duration_s) = max_duration_s {
-            if start_time.elapsed() >= Duration::from_secs_f64(max_duration_s + throwaway_duration_s) {
+            if start_time.elapsed()
+                >= Duration::from_secs_f64(max_duration_s + throwaway_duration_s + mog2_duration_s)
+            {
                 break;
             }
         }
@@ -286,8 +290,7 @@ pub fn run_capture_thread(
         if start_time.elapsed() <= Duration::from_secs_f64(throwaway_duration_s) {
             if countdown_timer.elapsed() >= Duration::from_secs_f64(1.0) {
                 let throwaway_seconds_remaining: Duration =
-                    Duration::from_secs_f64(throwaway_duration_s)
-                        - start_time.elapsed();
+                    Duration::from_secs_f64(throwaway_duration_s) - start_time.elapsed();
                 println!(
                     "Throwing away frames for {} more seconds...",
                     throwaway_seconds_remaining.as_secs_f64().round()
@@ -295,7 +298,7 @@ pub fn run_capture_thread(
                 countdown_timer = Instant::now();
             }
             // Also be sure to drain the buffer during this time.
-            if let Some(buffer) =  stream.timeout_pop_buffer(0) {
+            if let Some(buffer) = stream.timeout_pop_buffer(0) {
                 stream.push_buffer(buffer);
             }
             continue;
@@ -331,12 +334,31 @@ pub fn run_capture_thread(
             BufferStatus::Success => {
                 let elapsed_since_start = start_time.elapsed();
 
-                println!(
-                    "\nFrame {} received at {:.2}s for {}.",
-                    frames_saved,
-                    elapsed_since_start.as_secs_f64(),
-                    camera_id,
-                );
+                // If we still haven't saved the number of frames required for Mog2 to
+                // build the background model, continue writing to disk and inform the
+                // user every second of this, so they can remain still.
+                // We just check number of frames to determine if we've hit our frame
+                // limit or not, but use a calculated duration to inform the user of how
+                // much longer they shoudl wait.
+                if frames_saved < MOG2_HISTORY_FRAMES {
+                    if countdown_timer.elapsed() >= Duration::from_secs_f64(1.0) {
+                        let mog2_seconds_remaining: Duration =
+                            Duration::from_secs_f64(mog2_duration_s + throwaway_duration_s)
+                                .saturating_sub(start_time.elapsed());
+                        println!(
+                            "Recording background frames for Mog2. Remain still for *approximately* {} more seconds...",
+                            mog2_seconds_remaining.as_secs_f64().round()
+                        );
+                        countdown_timer = Instant::now();
+                    }
+                } else {
+                    println!(
+                        "\nFrame {} received at {:.2}s for {}.",
+                        frames_saved,
+                        elapsed_since_start.as_secs_f64(),
+                        camera_id,
+                    );
+                }
 
                 // Take the buffer from the stream and store its information, and then
                 // immediately push the buffer back to the stream, so it doesn't
