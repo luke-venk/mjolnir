@@ -241,6 +241,7 @@ crate.annotation(
         "OPENCV_PACKAGE_NAME": "opencv4",
         "LIBCLANG_PATH": "$(execpath @@//third_party:libclang_filegroup)",
         "DYLD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
+        "LD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
     },
     build_script_link_deps = ["@@//third_party:opencv"],
     crate = "opencv",
