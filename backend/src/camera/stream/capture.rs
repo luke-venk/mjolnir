@@ -1,13 +1,14 @@
-/// Capture thread that runs alongside UI thread that pulls frames from
-/// Aravis and places them into shared buffer for the UI thread to read.
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::frame::FrameData;
 use aravis::{BufferStatus, CameraExt, StreamExt};
-use super::FrameData;
-use crate::camera::aravis_utils::{
+use backend_lib::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
-use crate::camera::CameraIngestConfig;
+use backend_lib::camera::CameraIngestConfig;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+/// Capture thread that runs alongside UI thread that pulls frames from
+/// Aravis and places them into shared buffer for the UI thread to read.
 
 /// Live stream from the camera.
 pub fn run_capture_thread(
@@ -17,13 +18,18 @@ pub fn run_capture_thread(
 ) {
     // Lock settings mutex briefly to read values.
     let (camera_id, num_buffers, timeout_ms, resolution) = match config.lock() {
-        Ok(settings) => (settings.camera_id.clone(), settings.num_buffers, settings.timeout_ms, settings.resolution),
+        Ok(settings) => (
+            settings.camera_id.clone(),
+            settings.num_buffers,
+            settings.timeout_ms,
+            settings.resolution,
+        ),
         Err(_) => {
             eprintln!("Error: Failed to lock camera settings mutex.");
             return;
         }
     };
-    
+
     println!("Capture thread started for camera: {}", camera_id);
 
     // Create Aravis camera, apply configuration, start stream, and queue buffers.
@@ -32,13 +38,15 @@ pub fn run_capture_thread(
         Err(e) => {
             eprintln!("{e}");
             return;
-        },
+        }
     };
 
     // Lock settings mutex briefly to configure camera through Aravis.
     {
-        let settings = config.lock().expect("Error: Failed to lock camera settings mutex.");
-        configure_camera(&camera, &settings);
+        let settings = config
+            .lock()
+            .expect("Error: Failed to lock camera settings mutex.");
+        configure_camera(&camera, &settings, None, None);
     }
 
     let mut stream = create_stream_and_allocate_buffers(&camera, num_buffers);
@@ -59,8 +67,10 @@ pub fn run_capture_thread(
         }
 
         // Briefly lock camera settings mutex to check whether a restart was requested or not.
-        let restart =  {
-            let mut settings = config.lock().expect("Error: Failed to lock camera settings mutex.");
+        let restart = {
+            let mut settings = config
+                .lock()
+                .expect("Error: Failed to lock camera settings mutex.");
             if settings.restart_requested {
                 settings.restart_requested = false;
                 true
@@ -73,25 +83,29 @@ pub fn run_capture_thread(
         // the acquisition with the new specifications.
         if restart {
             println!("Restart requested.");
-            camera.stop_acquisition().expect("Error: Failed to stop camera acquisition.");
+            camera
+                .stop_acquisition()
+                .expect("Error: Failed to stop camera acquisition.");
             {
-                let settings = config.lock().expect("Error: Failed to lock camera settings mutex.");
-                configure_camera(&camera, &settings);
+                let settings = config
+                    .lock()
+                    .expect("Error: Failed to lock camera settings mutex.");
+                configure_camera(&camera, &settings, None, None);
             }
             stream = create_stream_and_allocate_buffers(&camera, num_buffers);
             camera
                 .start_acquisition()
                 .expect("Error: Failed to restart camera acquisition.");
         }
-        
+
         // Load camera buffer.
         // Block current thread until frame buffer delivered or the timeout elapses.
         let buffer = match stream.timeout_pop_buffer(timeout_ms * 1000) {
             Some(b) => b,
             None => {
                 eprintln!("Error: timeout_pop_buffer() timed out during streaming!");
-                continue
-            },
+                continue;
+            }
         };
 
         // If loading the buffer worked, copy the frame buffer into raw bytes.
@@ -100,7 +114,7 @@ pub fn run_capture_thread(
                 let data = copy_buffer_bytes(&buffer);
                 let received_at_ns = buffer.timestamp();
                 stream.push_buffer(buffer);
-                
+
                 if !data.is_empty() {
                     let frame = FrameData {
                         pixels: data,
@@ -110,12 +124,14 @@ pub fn run_capture_thread(
                     };
 
                     // Send this captured frame to the UI thread.
-                    frame_tx.send(frame).expect("Error: Failed to send frame from streaming capture thread to UI thread.");
+                    frame_tx.send(frame).expect(
+                        "Error: Failed to send frame from streaming capture thread to UI thread.",
+                    );
                 }
-            },
+            }
             _ => {
                 eprintln!("Error: BufferStatus was not a success in streaming.");
-            },
+            }
         }
     }
 }

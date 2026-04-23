@@ -10,3 +10,6 @@ build --action_env=PATH
 # See https://bazel.build/reference/be/general#config_setting_examples
 build:release -c opt
 build:release --@rules_rust//rust/settings:lto=thin
+
+build:macos --@toolchains_llvm//toolchain/config:libunwind=False
+

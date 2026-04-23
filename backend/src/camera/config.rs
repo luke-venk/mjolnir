@@ -1,8 +1,8 @@
-/// Code for handling configurations for recording with Aravis.
+// Code for handling configurations for recording with Aravis.
+use crate::camera::RecordWithBothCamerasArgs;
+use crate::camera::RecordWithOneCameraArgs;
+use crate::camera::StreamFromCamerasArgs;
 use clap::ValueEnum;
-use crate::camera::record::cli::RecordWithBothCamerasArgs;
-use crate::camera::record::cli::RecordWithOneCameraArgs;
-use crate::camera::stream::cli::StreamFromCamerasArgs;
 
 /// Configuration for what specs we want to use while recording.
 #[derive(Debug, Clone)]
@@ -15,7 +15,6 @@ pub struct CameraIngestConfig {
     pub resolution: Resolution,
 
     // System-level config.
-    pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
 
@@ -30,7 +29,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
-            enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
             restart_requested: false,
@@ -43,7 +41,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
-            enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
             restart_requested: false,
@@ -56,7 +53,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,
-            enable_ptp: false,
             num_buffers: 8,
             timeout_ms: 5000,
             restart_requested: false,
@@ -81,14 +77,22 @@ impl CameraIngestConfig {
 }
 
 /// Different resolutions we might want to record with.
-#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
+#[derive(Debug, Clone, Copy, ValueEnum, Eq, PartialEq, Hash, Default)]
 pub enum Resolution {
     #[value(name = "720p")]
     HD,
+
     #[value(name = "1080p")]
     FullHD,
+
     #[value(name = "4k")]
+    #[default]
     UHD4K,
+
+    // A way to indicate during CV that the frame has been downsampled
+    // to a lower resolution. This enum value should never be used in
+    // Aravis library functions.
+    Downsampled,
 }
 
 impl Resolution {
@@ -98,6 +102,7 @@ impl Resolution {
             Resolution::HD => (1024, 750),
             Resolution::FullHD => (2048, 1500),
             Resolution::UHD4K => (4096, 3000),
+            Resolution::Downsampled => (960, 540),
         }
     }
 
@@ -106,6 +111,7 @@ impl Resolution {
             Resolution::HD => 4,
             Resolution::FullHD => 2,
             Resolution::UHD4K => 1,
+            Resolution::Downsampled => panic!("Error: Do not use Downsampled resolution for binning!"),
         }
     }
 
@@ -114,6 +120,7 @@ impl Resolution {
             Resolution::HD => "720p".to_string(),
             Resolution::FullHD => "1080p".to_string(),
             Resolution::UHD4K => "4k".to_string(),
+            Resolution::Downsampled => panic!("Error: Do not use Downsampled resolution for streaming!"),
         }
     }
 }

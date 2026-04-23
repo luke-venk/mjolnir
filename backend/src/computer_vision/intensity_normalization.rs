@@ -1,9 +1,8 @@
-use crate::schemas::{Frame, Context};
+use crate::pipeline::Frame;
 
 pub fn intensity_normalization(frame: Frame) -> Frame {
-    // TODO: implement actual logic
-    
-    let data = frame.data();
-    let new_timestamp = frame.context().timestamp() + 1;
-    Frame::new(data.to_vec(), Context::new(new_timestamp))
+    // TODO: Currently just passes the frame through this stage untouched.
+    // Please implement the actual intensity normalization logic.
+
+    frame.clone()
 }

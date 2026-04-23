@@ -3,7 +3,8 @@ use crate::camera_ingest::ingest_frames;
 use crate::computer_vision::{
     contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
 };
-use crate::schemas::{CameraId, Frame};
+use crate::pipeline::Frame;
+use crate::schemas::CameraId;
 use crossbeam::channel::bounded;
 use std::thread::{self, JoinHandle};
 
@@ -19,8 +20,6 @@ impl Pipeline {
     // Calling this function automatically starts each of the pipeline
     // stages.
     pub fn new(_camera_id: CameraId, capacity_per_channel: usize) -> Self {
-        // TODO(#6): Implement Custom Queue Policy.
-
         // Define inter-stage message channels for thread-safe message sharing.
         let (tx_ingest, rx_stage1) = bounded::<Frame>(capacity_per_channel);
         let (tx_stage1, rx_stage2) = bounded::<Frame>(capacity_per_channel);
@@ -29,23 +28,31 @@ impl Pipeline {
         let (tx_stage4, rx_stage5) = bounded::<Frame>(capacity_per_channel);
         let (tx_stage5, rx_output) = bounded::<Frame>(capacity_per_channel);
 
+        // Input: Camera Ingest.
         // Spawn a thread to handle camera ingest from GigEVision API here.
         let handle_ingest = thread::spawn(move || {
             ingest_frames(tx_ingest);
         });
 
-        // Create and start each of the pipeline stages.
-        // Note, storing handles instead of directly storing the pipeline stages since spawn() moves
-        // the pipeline stage into the thread anyway. Just store handles so can join() later on.
+        // Stage 1: Undistortion.
         let handle_stage1 = PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn();
+
+        // Stage 2: Intensity Normalization.
         let handle_stage2 =
             PipelineStage::new(rx_stage2, tx_stage2, intensity_normalization).spawn();
+
+        // Stage 3: Forward Downsampled Copy.
         let handle_stage3 =
             PipelineStage::new(rx_stage3, tx_stage3, forward_downsampled_copy).spawn();
+
+        // Stage 4: Mog2.
         let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, mog2).spawn();
+
+        // Stage 5: Contour.
         let handle_stage5 = PipelineStage::new(rx_stage5, tx_stage5, contour).spawn();
 
-        // Spawn a thread to handle reporting pipeline outputs to server.
+        // Output: Pixel coordinates.
+        // Spawn a thread to handle reporting pipeline outputs to math triangulation.
         let handle_output = thread::spawn(move || {
             for _frame in rx_output.iter() {
                 // TODO: forward results to output.

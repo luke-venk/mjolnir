@@ -1,5 +1,5 @@
-use clap::Parser;
 use crate::camera::Resolution;
+use clap::Parser;
 
 /// The command line arguments we'd expect for the cameras to live stream.
 #[derive(Parser, Debug, Clone)]
@@ -12,7 +12,7 @@ pub struct StreamFromCamerasArgs {
     // Resolution to start with.
     #[arg(long, value_enum, default_value_t = Resolution::HD)]
     pub resolution: Resolution,
-    
+
     // Exposure time to start with (microseconds).
     #[arg(long = "exposure-us", default_value_t = 10000.0)]
     pub exposure_time_us: f64,

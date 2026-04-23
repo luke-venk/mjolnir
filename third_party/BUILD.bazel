@@ -1,0 +1,85 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+genrule(
+    name = "libclang_dir",
+    srcs = ["@llvm_toolchain_llvm//:libclang"],
+    outs = ["libclang/libclang.dylib"],
+    cmd = "cp $< $@",
+)
+
+filegroup(
+    name = "libclang_filegroup",
+    srcs = [":libclang_dir"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "opencv_srcs",
+    srcs = glob(["opencv/**"]),
+    visibility = ["//visibility:private"],
+)
+
+cmake(
+    name = "opencv",
+    cache_entries = {
+        # Build static libs, no shared
+        "BUILD_SHARED_LIBS": "OFF",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+        # Disable all the random shit
+        "BUILD_TESTS": "OFF",
+        "BUILD_PERF_TESTS": "OFF",
+        "BUILD_EXAMPLES": "OFF",
+        "BUILD_DOCS": "OFF",
+        "BUILD_opencv_apps": "OFF",
+        # Disable GUI / display deps (no X11/GTK needed)
+        "WITH_GTK": "OFF",
+        "WITH_QT": "OFF",
+        "WITH_OPENGL": "OFF",
+        # Bundle third-party image codecs (no system deps)
+        "BUILD_ZLIB": "ON",
+        "BUILD_PNG": "ON",
+        "BUILD_JPEG": "ON",
+        "BUILD_TIFF": "ON",
+        "BUILD_WEBP": "ON",
+        "BUILD_OPENJPEG": "ON",
+        # Disable optional system libs that would create runtime deps
+        "WITH_FFMPEG": "OFF",
+        "WITH_GSTREAMER": "OFF",
+        "WITH_V4L": "OFF",
+        "WITH_1394": "OFF",
+        "WITH_EIGEN": "OFF",
+        "WITH_ITT": "OFF",
+        "WITH_OPENCL": "OFF",
+        "WITH_CAROTENE": "OFF",
+        # Enable only the core modules
+        "BUILD_opencv_core": "ON",
+        "BUILD_opencv_imgproc": "ON",
+        "BUILD_opencv_imgcodecs": "ON",
+        "BUILD_opencv_calib3d": "ON",
+        "BUILD_opencv_features2d": "ON",
+        "BUILD_opencv_flann": "ON",
+        # Disable everything else
+        "BUILD_opencv_dnn": "OFF",
+        "BUILD_opencv_highgui": "OFF",
+        "BUILD_opencv_videoio": "OFF",
+        "BUILD_opencv_video": "OFF",
+        "BUILD_opencv_ml": "OFF",
+        "BUILD_opencv_objdetect": "OFF",
+        "BUILD_opencv_photo": "OFF",
+        "BUILD_opencv_stitching": "OFF",
+        "BUILD_opencv_gapi": "OFF",
+    },
+    generate_args = ["-GNinja"],
+    lib_source = ":opencv_srcs",
+    out_static_libs = [
+        # Core OpenCV modules
+        "libopencv_core.a",
+        "libopencv_imgproc.a",
+        "libopencv_imgcodecs.a",
+        "libopencv_calib3d.a",
+        "libopencv_features2d.a",
+        "libopencv_flann.a",
+    ],
+    visibility = ["//visibility:public"],
+)
