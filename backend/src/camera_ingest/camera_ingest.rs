@@ -26,7 +26,7 @@ pub fn ingest_frames(tx: Sender<PipelineFrame>, config: CameraIngestConfig) {
 
     initialize_aravis();
     let camera = create_camera(&config.camera_id).unwrap_or_else(|err| panic!("{err}"));
-    configure_camera(&camera, &config);
+    configure_camera(&camera, &config, None, None);
     let stream = create_stream_and_allocate_buffers(&camera, config.num_buffers);
 
     camera

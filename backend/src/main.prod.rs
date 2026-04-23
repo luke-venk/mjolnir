@@ -1,7 +1,20 @@
-use backend_lib::server::{create_api_router, start_server};
 use axum::Router;
 use axum_embed::ServeEmbed;
+use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
+#[cfg(feature = "real")]
+use backend_lib::camera::aravis_utils::initialize_aravis;
+#[cfg(feature = "real")]
+use backend_lib::camera::discovery::get_camera_ids;
+#[cfg(feature = "real")]
+use backend_lib::camera::CameraIngestConfig;
+#[cfg(feature = "real")]
+use backend_lib::pipeline::start_camera_pipeline;
+#[cfg(feature = "real")]
+use backend_lib::schemas::CameraId;
+use backend_lib::server::{create_api_router, start_server, ThrowSource};
 use rust_embed::Embed;
+
+const ARDUINO_BAUD_RATE: u32 = 115200;
 
 // The env var `EMBEDDED_FRONTEND_DIR` is where Bazel placed the frontend
 // static exports, so rust_embed can embed those into this binary.
@@ -12,28 +25,57 @@ pub struct Asset;
 // In prod mode, the backend will serve the API but instead of serving
 // the Next.js server, it will embed the frontend's static exports using
 // rust-embed and serve using axum_embed.
-pub fn create_prod_app() -> Router {
+pub fn create_prod_app(throw_source: ThrowSource) -> Router {
     let serve_assets = ServeEmbed::<Asset>::new();
-        
+
+    let infractions_rx = begin_detecting_circle_infractions(ARDUINO_BAUD_RATE);
+
     // Use the fallback service so any request that isn't one of the
     // API's routes will be directed to the frontend static exports.
-    create_api_router()
-        .fallback_service(serve_assets)
+    create_api_router(throw_source, infractions_rx).fallback_service(serve_assets)
 }
 
-// Start tokio async runtime.
+// The "fake" configuration will not start the CV pipelines, and will point the
+// `analyze-throw` route to simulated throw data.
+#[cfg(feature = "fake")]
 #[tokio::main]
 async fn main() {
-    // Start the 2 pipelines (one for each camera).
-    let rolling_buffer_size: usize = 10;
-    let _ = start_default_camera_pipeline(CameraId::FieldLeft, rolling_buffer_size);
-    let _ = start_default_camera_pipeline(CameraId::FieldRight, rolling_buffer_size);
-
-    // TODO(#7): Implement Clean Shutdown.
-
     // Build the Axum router.
-    let app = create_prod_app();
+    let app = create_prod_app(ThrowSource::Simulated);
 
     // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
+}
+
+// The "real" configuration will start the CV pipelines, and will point the
+// `analyze-throw` route to the processed throw data from the pipelines.
+#[cfg(feature = "real")]
+#[tokio::main]
+async fn main() {
+    // Start the 2 camera-ingest + pipeline flows (one for each camera).
+    let aravis = initialize_aravis();
+    let camera_ids = get_camera_ids(&aravis);
+    assert_eq!(
+        camera_ids.len(),
+        2,
+        "expected exactly 2 cameras for real prod mode, found {}",
+        camera_ids.len()
+    );
+
+    let mut left_config = CameraIngestConfig::default();
+    left_config.camera_id = camera_ids[0].clone();
+    let mut right_config = CameraIngestConfig::default();
+    right_config.camera_id = camera_ids[1].clone();
+
+    let rolling_buffer_size: usize = 10;
+    let _ = start_camera_pipeline(CameraId::FieldLeft, left_config, rolling_buffer_size);
+    let _ = start_camera_pipeline(CameraId::FieldRight, right_config, rolling_buffer_size);
+
+    // Build the Axum router.
+    let app = create_prod_app(ThrowSource::Camera);
+
+    // Start the Axum server.
+    start_server(app, "0.0.0.0:5001").await;
+
+    // TODO(#7): Implement Clean Shutdown.
 }
