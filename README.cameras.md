@@ -52,11 +52,11 @@ bazel run //backend:stream -- --camera <camera> --resolution <resolution> --expo
 Example:
 
 ```
-bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 200 --frame-rate-hz 10
+bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
 ```
 
 ```
-bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 200 --frame-rate-hz 10
+bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
 ```
 
 ## Record from One Camera
@@ -65,20 +65,14 @@ This program just records footage from one camera and writes to disk.
 
 To run this program, run the following command:
 
+Example for Camera 224:
 ```
-bazel run //backend:record-from-one -- --camera <camera> --resolution <resolution> --exposure-us <exposure> --frame-rate-hz <frame rate> --output-dir <output_dir> --max-frames <max_frames>
-```
-
-Example:
-
-```
-bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 4k --exposure-us 2000 --frame-rate-hz 1 --output-dir ~/Downloads/camera_out/intrinsics --max-frames 100000
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out/ --max-duration-s 5 --throwaway-duration-s 5
 ```
 
-Example:
-
+Example for Camera 242:
 ```
-bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 4k --exposure-us 2000 --frame-rate-hz 1 --output-dir ~/Downloads/camera_out/intrinsics --max-frames 100000
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out/ --max-duration-s 5 --throwaway-duration-s 5
 ```
 
 ## Record from Both Cameras
@@ -86,7 +80,7 @@ bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242
 To run this program, run the following command:
 
 ```
-bazel run //backend:record -- --resolution <resolution> --exposure-us <exposure> --frame-rate-hz <frame rate> --output-dir <output_dir> --max-duration <max_duration> --interface <interface>
+bazel run //backend:record -- --resolution <resolution> --exposure-us <exposure> --frame-rate-hz <frame rate> --output-dir <output_dir> --max-duration-s <max_duration-s> --interface <interface>
 ```
 
 You can alternatively specify `--max-frames <max_frames>` instead of max duration.
