@@ -6,7 +6,6 @@ use crate::camera::Resolution;
 use crate::pipeline::{Context, Frame};
 use opencv::core::{CV_8U, Mat, Size};
 use opencv::imgproc::{INTER_LINEAR, resize};
-use opencv::prelude::MatTraitConstManual;
 
 const DOWNSAMPLED_WIDTH_PX: i32 = 960;
 const DOWNSAMPLED_HEIGHT_PX: i32 = 540;
@@ -24,51 +23,50 @@ pub fn forward_downsampled_copy(frame: Frame) -> Frame {
             original_height_px,
             original_width_px,
             CV_8U,
-            frame.data().as_ptr() as *mut _,
+            frame.data_as_arr().as_ptr() as *mut _,
             opencv::core::Mat_AUTO_STEP,
         )
         .expect("Error: Failed to generate input Mat from frame in forward_downsampled_copy().")
     };
     let mut output_mat: Mat = Mat::default();
 
-    if let Err(_) = resize(&input_mat, &mut output_mat, SIZE, 0.0, 0.0, INTER_LINEAR) {
+    if let Err(err) = resize(&input_mat, &mut output_mat, SIZE, 0.0, 0.0, INTER_LINEAR) {
         eprintln!(
-            "Error: Failed to downsample frame in forward_downsampled_copy(). Returning original frame."
+            "Error: Failed to downsample frame in forward_downsampled_copy(). Returning original frame. {err}"
         );
         return frame;
     }
 
-    // If resize was successful, convert the output Mat back into a Frame.
-    let output_data = output_mat
-        .data_bytes()
-        .expect("Error: Failed to convert outupt Mat to frame in forward_downsampled_copy().")
-        .to_vec();
-
     // Update context's resolution to this processed resolution.
-    let output_context: Context = Context::new(frame.context().timestamp(), Resolution::Downsampled);
-    
-    Frame::new(output_data, output_context)
+    let output_context: Context =
+        Context::new(frame.context().timestamp(), Resolution::Downsampled);
+
+    Frame::new(output_mat, output_context)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::rstest;
+    use crate::pipeline::test_utils::generate_frame;
 
     #[rstest]
     #[case(Resolution::HD)]
     #[case(Resolution::FullHD)]
     #[case(Resolution::UHD4K)]
     fn test_downsample_output_dimensions(#[case] resolution: Resolution) {
-        let (h, w): (i32, i32) = resolution.dimensions();
-        let context: Context = Context::new(6969, resolution);
-        let data: Vec<u8> = vec![69u8; (h * w) as usize];
-        let input_frame: Frame = Frame::new(data, context);
-        
+        let input_frame: Frame = generate_frame(69, 6969, resolution);
+
         let output_frame = forward_downsampled_copy(input_frame);
 
+        // Check downsampled dimension and resolution.
         let expected_size: usize = (DOWNSAMPLED_WIDTH_PX * DOWNSAMPLED_HEIGHT_PX) as usize;
-        assert_eq!(output_frame.data().len(), expected_size);
+        assert_eq!(output_frame.data_as_arr().len(), expected_size);
         assert_eq!(output_frame.context().resolution(), Resolution::Downsampled);
+
+        // Check data stayed the same.
+        for &pixel in output_frame.data_as_arr().iter() {
+            assert_eq!(pixel, 69u8);
+        }
     }
 }

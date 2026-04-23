@@ -34,22 +34,17 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pipeline::Context;
+    use crate::pipeline::test_utils::generate_frame;
 
     #[test]
     fn test_can_send_frame_through_pipeline_stage() {
-        let frame_in = Frame::new(vec![6, 9, 6, 9], Context::new(1738, crate::camera::Resolution::FullHD));
+        let frame_in = generate_frame(69, 1738, crate::camera::Resolution::FullHD);
 
         let (tx_in, rx_pipe) = crossbeam::channel::bounded::<Frame>(3);
         let (tx_pipe, rx_out) = crossbeam::channel::bounded::<Frame>(3);
 
         let my_function = |f: Frame| -> Frame {
-            let new_data = vec![6, 7, 6, 7];
-            let new_timestamp = f.context().timestamp() + 1;
-            Frame::new(
-                new_data,
-                Context::new(new_timestamp, crate::camera::Resolution::FullHD),
-            )
+            generate_frame(67, f.context().timestamp() + 1, f.context().resolution())
         };
 
         let pipeline_stage = PipelineStage::new(rx_pipe, tx_pipe, my_function);
@@ -57,7 +52,10 @@ mod tests {
         tx_in.send(frame_in).unwrap();
         let frame_out = rx_out.recv().unwrap();
 
-        assert_eq!(frame_out.data(), vec![6, 7, 6, 7]);
         assert_eq!(frame_out.context().timestamp(), 1739);
+        // Check data stayed the same.
+        for &pixel in frame_out.data_as_arr().iter() {
+            assert_eq!(pixel, 67);
+        }
     }
 }
