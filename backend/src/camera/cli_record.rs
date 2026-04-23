@@ -36,8 +36,15 @@ pub struct CommonRecordArgs {
     pub max_frames: Option<usize>,
 
     /// Stop recording after this many seconds.
-    #[arg(long)]
-    pub max_duration: Option<f64>,
+    #[arg(long = "max-duration-s")]
+    pub max_duration_s: Option<f64>,
+
+    /// How long to throw away frames for before writing to disk.
+    /// This is required because we noticed that sometimes, the first few frames
+    /// are super white. At startup, the camera's sensor and readout electronics
+    /// need to reach thermal/electrical equilibrium.
+    #[arg(long = "throwaway-duration-s")]
+    pub throwaway_duration_s: f64,
 
     /// Whether to enable Precision Time Protocol if supported by the device.
     #[arg(long, default_value_t = true)]
@@ -47,7 +54,7 @@ pub struct CommonRecordArgs {
 impl CommonRecordArgs {
     /// Ensure that at least one stop condition was provided.
     pub fn validate(&self) -> Result<(), String> {
-        if self.max_frames.is_none() && self.max_duration.is_none() {
+        if self.max_frames.is_none() && self.max_duration_s.is_none() {
             Err(
                 "You must provide at least one stopping condition: --max-frames or --max-duration"
                     .to_string(),
