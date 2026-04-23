@@ -1,5 +1,5 @@
-use clap::Parser;
 use crate::camera::Resolution;
+use clap::Parser;
 
 /// The command line arguments we'd expect for recording, regardless of whether
 /// the user wishes to record with one, or record with both.
@@ -10,7 +10,7 @@ pub struct CommonRecordArgs {
     /// Resolution of the footage.
     #[arg(long, value_enum, default_value_t = Resolution::UHD4K)]
     pub resolution: Resolution,
-    
+
     /// Exposure time in microseconds.
     #[arg(long = "exposure-us", default_value_t = 10000.0)]
     pub exposure_time_us: f64,
@@ -20,7 +20,7 @@ pub struct CommonRecordArgs {
     pub frame_rate_hz: f64,
 
     /// The number of buffers the cameras can push frames to, enabling asynchrony.
-    #[arg(long, default_value_t = 8)]
+    #[arg(long, default_value_t = 16)]
     pub num_buffers: usize,
 
     /// Timeout for waiting on a frame buffer, in milliseconds.
@@ -81,4 +81,7 @@ pub struct RecordWithBothCamerasArgs {
     // Common record args.
     #[command(flatten)]
     pub common_args: CommonRecordArgs,
+
+    #[arg(long = "interface", required = true)]
+    pub interface: String,
 }
