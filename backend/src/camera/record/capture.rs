@@ -254,7 +254,8 @@ pub fn run_capture_thread(
 
     // Used to provide countdowns to the user
     let mut countdown_timer: Instant = Instant::now();
-    let mog2_duration_s: f64 = (MOG2_HISTORY_FRAMES as f64) / config.frame_rate_hz;
+    let expected_mog2_duration_s: f64 = (MOG2_HISTORY_FRAMES as f64) / config.frame_rate_hz;
+    let mut mog2_completed_at: Option<Instant> = None;
 
     // Used to only print timeouts after first buffer arrives.
     let mut first_buffer_arrived = false;
@@ -275,13 +276,18 @@ pub fn run_capture_thread(
             }
         }
 
-        // Stop streaming if a maximum duration was configured and the
-        // camera has recorded for that amount of time.
+        // Stop streaming if a maximum duration was configured and the camera has recorded
+        // for that amount of time. Note that the max duration needs to account for both
+        // time spent throwing away frames and time spent recording still frames for Mog2.
+        // Since the time duration for recording for Mog2 (mog2_duration_s) is an approximation
+        // and this would be wrong if frames are dropped, we actually record the instant at
+        // which Mog2 frame collection completed, which also accounts for the time throwing
+        // away frames.
         if let Some(max_duration_s) = max_duration_s {
-            if start_time.elapsed()
-                >= Duration::from_secs_f64(max_duration_s + throwaway_duration_s + mog2_duration_s)
-            {
-                break;
+            if let Some(mog2_completed_at) = mog2_completed_at {
+                if mog2_completed_at.elapsed() >= Duration::from_secs_f64(max_duration_s) {
+                    break;
+                }
             }
         }
 
@@ -342,9 +348,10 @@ pub fn run_capture_thread(
                 // much longer they shoudl wait.
                 if frames_saved < MOG2_HISTORY_FRAMES {
                     if countdown_timer.elapsed() >= Duration::from_secs_f64(1.0) {
-                        let mog2_seconds_remaining: Duration =
-                            Duration::from_secs_f64(mog2_duration_s + throwaway_duration_s)
-                                .saturating_sub(start_time.elapsed());
+                        let mog2_seconds_remaining: Duration = Duration::from_secs_f64(
+                            expected_mog2_duration_s + throwaway_duration_s,
+                        )
+                        .saturating_sub(start_time.elapsed());
                         println!(
                             "Recording background frames for Mog2. Remain still for *approximately* {} more seconds...",
                             mog2_seconds_remaining.as_secs_f64().round()
@@ -353,7 +360,7 @@ pub fn run_capture_thread(
                     }
                 } else {
                     println!(
-                        "\nFrame {} received at {:.2}s for {}.",
+                        "Frame {} received at {:.2}s for {}.",
                         frames_saved,
                         elapsed_since_start.as_secs_f64(),
                         camera_id,
@@ -399,6 +406,10 @@ pub fn run_capture_thread(
                 );
 
                 frames_saved += 1;
+
+                if frames_saved == MOG2_HISTORY_FRAMES {
+                    mog2_completed_at = Some(Instant::now());
+                }
             }
             status => {
                 eprintln!(
