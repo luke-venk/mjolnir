@@ -2,6 +2,11 @@
 # Purpose:
 # - Collect labeled Trill Flex sensor readings into a CSV so we can tune thresholds.
 # - Labels: no_touch / top_touch (intended infraction press) / side_touch (edge bump/brush).
+
+# NOTE: Windows-only because it uses msvcrt for keypress handling.
+# macOS/Linux users can:
+#  - use tools/read_serial.py to validate the binary byte protocol, or
+#  - rewrite label input using an alternative input method.
 import time
 import csv
 import serial
@@ -49,5 +54,3 @@ with open(OUT, "w", newline="") as f:
         w.writerow([int(time.time() * 1000), label, line])
         f.flush()
         print(line)
-
-
