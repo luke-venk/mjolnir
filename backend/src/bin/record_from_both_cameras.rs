@@ -40,10 +40,6 @@ pub fn main() {
     let output_base_dir_clone = output_base_dir.clone();
     ensure_dir(&output_base_dir);
 
-    // Stopping condition.
-    let max_frames = args.common_args.max_frames;
-    let max_duration = args.common_args.max_duration;
-
     // Find all cameras on the LAN.
     let aravis = initialize_aravis();
     let camera_ids = get_camera_ids(&aravis);
@@ -131,8 +127,9 @@ pub fn main() {
             output_base_dir,
             &camera_ingest_config1,
             frame_tx1,
-            max_frames,
-            max_duration,
+            args.common_args.max_frames,
+            args.common_args.max_duration_s,
+            args.common_args.throwaway_duration_s,
             Arc::clone(&shutdown_clone1),
             Some(addr),
             Some(configuration_barrier_1),
@@ -147,8 +144,9 @@ pub fn main() {
             output_base_dir_clone,
             &camera_ingest_config2,
             frame_tx2,
-            max_frames,
-            max_duration,
+            args.common_args.max_frames,
+            args.common_args.max_duration_s,
+            args.common_args.throwaway_duration_s,
             Arc::clone(&shutdown_clone2),
             None,
             Some(configuration_barrier_2),
