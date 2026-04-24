@@ -65,7 +65,17 @@ async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisR
         }
     }
 }
+async fn get_circle_status(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let stale = state.is_circle_infraction_system_stale().await;
+    let history = state.get_infraction_history().await;
+    let last_infraction_ms = history.last().copied();
 
+    Json(json!({
+        "stale": stale,
+        "last_infraction_ms": last_infraction_ms,
+        "history_len": history.len(),
+    }))
+}
 // In both dev and prod mode, the router will require the HTTP routes
 // and the thread-safe shared app state.
 pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleInfractionDetectionState>) -> Router {
@@ -82,10 +92,15 @@ pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleIn
             .await
             {
                 Ok(Ok(CircleInfractionDetectionState::DetectedInfraction(ts))) => {
+                    state.set_circle_infraction_system_is_stale(false).await;
                     state.record_infraction(ts).await;
                 }
-                Ok(Ok(CircleInfractionDetectionState::KeepAlive)) => {}
-                Ok(Ok(CircleInfractionDetectionState::Stale)) => {}
+                Ok(Ok(CircleInfractionDetectionState::KeepAlive)) => {
+                    state.set_circle_infraction_system_is_stale(false).await;
+                }
+                Ok(Ok(CircleInfractionDetectionState::Stale)) => {
+                    state.set_circle_infraction_system_is_stale(true).await;
+                }
                 Ok(Err(_)) | Err(_) => break, // sender dropped or task panicked
             }
         }
@@ -95,8 +110,8 @@ pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleIn
     let http_routes = Router::new()
         .route("/health", get(health_check))
         .route("/throw-type", post(post_throw_type).get(get_throw_type))
-        .route("/analyze-throw", get(get_throw_results));
-
+        .route("/analyze-throw", get(get_throw_results))
+        .route("/circle-status", get(get_circle_status));
     // Nest the routes behind the "/api" prefix so no naming collisions
     // with frontend requests.
     Router::new().nest("/api", http_routes).with_state(state)
@@ -198,5 +213,16 @@ mod tests {
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+    async fn get_circle_status(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let stale = state.is_circle_infraction_system_stale().await;
+    let history = state.get_infraction_history().await;
+    let last_infraction_ms = history.last().copied();
+
+    Json(json!({
+        "stale": stale,
+        "last_infraction_ms": last_infraction_ms,
+        "history_len": history.len(),
+    }))
     }
 }
