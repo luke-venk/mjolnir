@@ -1,5 +1,4 @@
 use std::thread;
-
 use crate::schemas::Frame;
 use crossbeam::channel::{Receiver, Sender};
 

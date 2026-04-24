@@ -43,7 +43,7 @@ impl Pipeline {
         let handle_stage3 =
             PipelineStage::new(rx_stage3, tx_stage3, forward_downsampled_copy).spawn();
         let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, mog2).spawn();
-        let handle_stage5 = PipelineStage::new(rx_stage5, tx_stage5, contour).spawn();
+        let handle_stage5 = PipelineStage::new(rx_stage5, tx_stage5, contour::contour).spawn();
 
         // Spawn a thread to handle reporting pipeline outputs to server.
         let handle_output = thread::spawn(move || {

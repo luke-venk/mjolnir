@@ -4,7 +4,7 @@ pub mod intensity_normalization;
 pub mod mog2;
 pub mod undistortion;
 
-pub use contour::contour;
+// pub use contour::contour;
 pub use forward_downsampled_copy::forward_downsampled_copy;
 pub use intensity_normalization::intensity_normalization;
 pub use mog2::mog2;

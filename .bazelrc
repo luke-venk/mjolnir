@@ -6,6 +6,7 @@
 # Aravis Rust crate using FFI bindings to native C/C++ libraries.  
 build --action_env=PATH
 
+
 # For optimizations.
 # See https://bazel.build/reference/be/general#config_setting_examples
 build:release -c opt
