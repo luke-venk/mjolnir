@@ -1,33 +1,25 @@
-/*
-  Trill Flex → Circle Infraction Event Stream (Arduino Uno)
+ /*
+  Circle Infractions – Trill Flex → Arduino Uno (I2C)
 
   Purpose
   -------
-  - Read Bela Trill Flex capacitive sensor over I2C.
-  - Compute a simple infraction state (threshold + debounce).
-  - Stream a 1-byte state over UART/USB-Serial at a fixed rate for Rust ingestion.
+  - Read two Bela Trill Flex sensors on a shared I2C bus (unique addresses).
+  - Convert raw readings into a stable "pressed" state using:
+      (1) per-sensor thresholding (baseline-calibrated at boot)
+      (2) debounce (state must remain stable for DEBOUNCE_MS)
+  - Stream a 1-byte state at 20 Hz for Rust ingestion.
 
-  Output Protocol (binary)
-  ------------------------
-  At 20 Hz (SAMPLE_PERIOD_MS = 50), Arduino writes exactly ONE byte:
-    - 0x01 : CLEAR (no infraction)
-    - 0xFE : INFRACTION
+  Output (binary, 1 byte @ 20 Hz)
+  -------------------------------
+    0x01 = CLEAR
+    0xFE = INFRACTION   (if either sensor is pressed)
 
-  Hardware
-  --------
-  - Board: Arduino Uno
-  - Sensor: Bela Trill Flex
-  - Wiring: SDA->A4, SCL->A5, VCC->5V, GND->GND
-
-  Hardware Notes
-  -------------------
-  - Trill default I2C address is 0x48.
-  - To use multiple Trill sensors on the same I2C bus, you must assign unique addresses
-    (typically by soldering address/jumper pads on the Trill board).
-  - Long-term: maintain a map of sensor address -> physical location on the circle.
-    (And optionally require agreement across sensors to reduce false positives.)
-
-
+  Wiring (Arduino Uno)
+  --------------------
+    SDA = A4 (or SDA header)
+    SCL = A5 (or SCL header)
+    VCC = 5V
+    GND = GND
 */
 
 #include <Wire.h>
@@ -202,5 +194,3 @@ void loop() {
   // Production: 1 byte @ 20 Hz
   Serial.write(anyInfraction ? BYTE_INFRACTION : BYTE_CLEAR);
 }
-
-
