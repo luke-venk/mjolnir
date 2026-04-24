@@ -54,16 +54,34 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
 // source is `Camera`.
 async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisResponse> {
     let throw_type: ThrowType = *state.throw_type.read().await;
-    match state.throw_source {
-        ThrowSource::Simulated => Json(simulate_throw_event(throw_type)),
+
+    // 1) Produce the base throw analysis result (simulated for now)
+    let mut result: ThrowAnalysisResponse = match state.throw_source {
+        ThrowSource::Simulated => simulate_throw_event(throw_type),
         ThrowSource::Camera => {
-            // TODO(#28)
-            // NOTE: I'm having these 2 do the same thing for now, but how would this actually work?
-            // Would it like continually listen for our final output function (that relies on the math scripts)
-            // to return a ThrowAnalysisResponse?
-            Json(simulate_throw_event(throw_type))
+            // TODO(#28): replace with real CV pipeline output
+            simulate_throw_event(throw_type)
         }
+    };
+
+    // 2) If we saw a recent circle infraction signal, attach it to this throw
+    let now_ms = chrono::Utc::now().timestamp_millis() as u64;
+    let history = state.get_infraction_history().await;
+
+    // Use the most recent infraction only (simpler + less confusing)
+    let recent_circle = history
+        .last()
+        .map(|t| now_ms.saturating_sub(*t) <= 10_000) // 10 seconds
+        .unwrap_or(false);
+
+    if recent_circle {
+        result.infractions.push(Infraction {
+            infraction_type: InfractionType::Circle,
+            confidence: 1.0,
+        });
     }
+
+    Json(result)
 }
 async fn get_circle_status(State(state): State<AppState>) -> Json<serde_json::Value> {
     let stale = state.is_circle_infraction_system_stale().await;
@@ -214,15 +232,5 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
-    async fn get_circle_status(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let stale = state.is_circle_infraction_system_stale().await;
-    let history = state.get_infraction_history().await;
-    let last_infraction_ms = history.last().copied();
 
-    Json(json!({
-        "stale": stale,
-        "last_infraction_ms": last_infraction_ms,
-        "history_len": history.len(),
-    }))
-    }
 }
