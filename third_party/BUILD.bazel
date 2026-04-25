@@ -1,7 +1,14 @@
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 
 genrule(
-    name = "libclang_dir",
+    name = "linux_libclang_dir",
+    srcs = ["@llvm_toolchain_llvm//:libclang"],
+    outs = ["libclang/libclang.so"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "mac_libclang_dir",
     srcs = ["@llvm_toolchain_llvm//:libclang"],
     outs = ["libclang/libclang.dylib"],
     cmd = "cp $< $@",
@@ -9,7 +16,11 @@ genrule(
 
 filegroup(
     name = "libclang_filegroup",
-    srcs = [":libclang_dir"],
+    srcs = select({
+        "@platforms//os:linux": [":linux_libclang_dir"],
+        "@platforms//os:macos": [":mac_libclang_dir"],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
 )
 

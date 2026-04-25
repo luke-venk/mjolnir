@@ -1,9 +1,9 @@
 use crate::frame::FrameData;
 use aravis::{BufferStatus, CameraExt, StreamExt};
+use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
 };
-use backend_lib::camera::CameraIngestConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -17,7 +17,7 @@ pub fn run_capture_thread(
     shutdown: Arc<AtomicBool>,
 ) {
     // Lock settings mutex briefly to read values.
-    let (camera_id, num_buffers, timeout_ms, resolution) = match config.lock() {
+    let (camera_id, num_buffers, timeout_ms, mut resolution) = match config.lock() {
         Ok(settings) => (
             settings.camera_id.clone(),
             settings.num_buffers,
@@ -83,19 +83,37 @@ pub fn run_capture_thread(
         // the acquisition with the new specifications.
         if restart {
             println!("Restart requested.");
+
+            // Stop acquisition and drop any remaining buffers from the old stream,
+            // as well as the stream itself. Note that before these were not being
+            // dropped, which seems to be the root cause as to why the stream wasn't
+            // restarting. Beforehand the new stream was being created before the
+            // new stream was dropped, so both streams were trying to communicate
+            // over the same channel with the same camera.
             camera
                 .stop_acquisition()
                 .expect("Error: Failed to stop camera acquisition.");
+            while let Some(buffer) = stream.timeout_pop_buffer(0) {
+                drop(buffer);
+            }
+            drop(stream);
+
+            // Configure the new camera and check if a new resolution was set, and
+            // update it so rest of loop uses updated resolution.
             {
                 let settings = config
                     .lock()
                     .expect("Error: Failed to lock camera settings mutex.");
                 configure_camera(&camera, &settings, None, None);
-            }
+                resolution = settings.resolution;
+            };
+
             stream = create_stream_and_allocate_buffers(&camera, num_buffers);
             camera
                 .start_acquisition()
                 .expect("Error: Failed to restart camera acquisition.");
+
+            continue;
         }
 
         // Load camera buffer.
