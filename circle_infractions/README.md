@@ -47,4 +47,3 @@ pip install pyserial
 python tools/read_serial.py --port <PORT>
 ```
 
-
