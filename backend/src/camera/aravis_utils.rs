@@ -123,6 +123,16 @@ pub fn configure_camera(
         .is_binning_available()
         .expect("Error: Binning is not available for this camera.")
     {
+        // Set the binning modes to "Average" instead of the default, "Sum". This
+        // will prevent brightness inconsistencies between resolutions.
+        // See issue #40 for more information.
+        camera
+            .set_string("BinningHorizontalMode", "Average")
+            .expect("Failed to set BinningHorizontalMode");
+        camera
+            .set_string("BinningVerticalMode", "Average")
+            .expect("Failed to set BinningVerticalMode");
+
         camera
             .set_binning(config.resolution.binning(), config.resolution.binning())
             .expect("Error: Failed to set binning for camera.");
