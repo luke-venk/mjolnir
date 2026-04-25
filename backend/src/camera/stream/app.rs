@@ -9,6 +9,13 @@ use std::{
     time::Instant,
 };
 
+// See camera specs at the following link:
+// https://www.edmundoptics.com/p/lucid-vision-labst-atlas-atp124s-mc-sony-imx545-123mp-ip67-monochrome-camera/49821/
+const CAMERA_EXPOSURE_TIME_MICROSECONDS_MIN: f64 = 25.4;
+const CAMERA_EXPOSURE_TIME_MICROSECONDS_MAX: f64 = 100000000.0;
+const CAMERA_FRAMES_PER_SECOND_MIN: f64 = 1.0;
+const CAMERA_FRAMES_PER_SECOND_MAX: f64 = 42.5;
+
 pub struct LiveViewApp {
     // Receiver for the latest frame from the capture thread.
     pub frame_rx: crossbeam::channel::Receiver<FrameData>,
@@ -94,16 +101,18 @@ impl eframe::App for LiveViewApp {
 
                 // Slider for exposure time.
                 ui.label("Exposure time (µs):");
+                ui.spacing_mut().slider_width = 250.0;
                 ui.add(egui::Slider::new(
                     &mut settings.exposure_time_us,
-                    25.4..=20000.0,
-                ));
+                    CAMERA_EXPOSURE_TIME_MICROSECONDS_MIN..=CAMERA_EXPOSURE_TIME_MICROSECONDS_MAX,
+                ).logarithmic(true));
 
                 ui.add_space(16.0);
 
                 // Slider for desired frame rate.
                 ui.label("Desired frame rate (Hz):");
-                ui.add(egui::Slider::new(&mut settings.frame_rate_hz, 1.0..=42.5));
+                ui.spacing_mut().slider_width = 100.0;
+                ui.add(egui::Slider::new(&mut settings.frame_rate_hz, CAMERA_FRAMES_PER_SECOND_MIN..=CAMERA_FRAMES_PER_SECOND_MAX));
 
                 // Button for resolution.
                 ui.label("Resolution:");
@@ -154,13 +163,14 @@ impl eframe::App for LiveViewApp {
             });
             ui.add_space(8.0);
 
-            // Render frame using the texture we made.
             if let Some(texture) = &self.texture {
+                // Render frame using the texture we made.
                 let available = ui.available_size();
                 ui.image((texture.id(), available));
             } else {
+                // Show start screen.
                 ui.centered_and_justified(|ui| {
-                    ui.label("Waiting for camera stream...");
+                    ui.label("Waiting for camera stream to start...");
                 });
             }
 

@@ -111,6 +111,6 @@ cd "$PROJECT_ROOT"
 bazel run @rules_rust//tools/rust_analyzer:gen_rust_project
 
 echo "Updating git submodules..."
-git submodule update --init --recursive
+git submodule update --init --recursive --depth 1
 
 echo "Setup complete."
