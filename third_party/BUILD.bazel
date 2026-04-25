@@ -392,7 +392,6 @@ cc_library(
     ],
     copts = [
         "-DHAVE_LIBMOUNT=0",
-        "-pthread",
         "-Wno-unknown-pragmas",
         "-include",
         "glib/glib/glib.h",
@@ -401,7 +400,10 @@ cc_library(
         "-fdata-sections",
         "-O2",
     ] + select({
-        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
         "//conditions:default": [],
     }),
@@ -562,14 +564,16 @@ cc_library(
         "glib/gmodule/gmodule-visibility.h",
     ],
     copts = [
-        "-pthread",
         "-Wno-unknown-pragmas",
         "-fvisibility=hidden",
         "-ffunction-sections",
         "-fdata-sections",
         "-O2",
     ] + select({
-        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
         "//conditions:default": [],
     }),
@@ -937,7 +941,6 @@ cc_library(
         "glib/subprojects/gvdb/gvdb/gvdb-reader.h",
     ],
     copts = [
-        "-pthread",
         "-Wno-unknown-pragmas",
         "-DGIO_COMPILATION",
         "-fvisibility=hidden",
@@ -946,7 +949,10 @@ cc_library(
         "-fdata-sections",
         "-O2",
     ] + select({
-        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
         "//conditions:default": [],
     }),
@@ -1140,21 +1146,23 @@ cc_library(
         ":generate_arvversion_h",
     ],
     copts = [
-        "-pthread",
         "-fvisibility=hidden",
         "-fno-strict-aliasing",
         "-ffunction-sections",
         "-fdata-sections",
         "-O2",
     ] + select({
-        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
     }),
     defines = ["ARAVIS_COMPILATION"],
     includes = [
         "aravis/src",
     ],
-    linkopts = select({
+    linkopts = ["-lxml2"] + select({
         "@platforms//os:linux": [
             "-lrt",
             "-lm",
