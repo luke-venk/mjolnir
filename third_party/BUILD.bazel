@@ -16,7 +16,10 @@ cc_library(
     name = "libffi",
     srcs = glob(
         ["libffi/src/*.c"],
-        exclude = ["libffi/src/java_raw_api.c"],
+        exclude = [
+            "libffi/src/java_raw_api.c",
+            "libffi/src/dlmalloc.c",
+        ],
     ) + select({
         "//:darwin_arm64": glob(
             [
@@ -1162,7 +1165,10 @@ cc_library(
     includes = [
         "aravis/src",
     ],
-    linkopts = ["-lxml2"] + select({
+    linkopts = [
+        "-lxml2",
+        "-Wl,-fatal_warnings",
+    ] + select({
         "@platforms//os:linux": [
             "-lrt",
             "-lm",
@@ -1171,9 +1177,14 @@ cc_library(
             "-Wl,--gc-sections",
         ],
         "@platforms//os:macos": [
-            "-framework CoreFoundation",
-            "-framework SystemConfiguration",
-            "-framework CoreServices",
+            # I don't think this link flag is needed anymore but if there are issues add it back :)
+            # "-liconv",
+            "-framework",
+            "CoreFoundation",
+            "-framework",
+            "SystemConfiguration",
+            "-framework",
+            "CoreServices",
             "-Wl,-dead_strip",
         ],
         "//conditions:default": [],
