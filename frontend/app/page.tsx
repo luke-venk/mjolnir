@@ -43,10 +43,8 @@ export default function Page() {
             onChange={async (e) => {
               setCurrentThrow(null);
               setStatus("waiting");
-              const newType = e.target.value as ThrowType;
-              setSelectedThrowType(newType);
-
               try {
+                const newType = e.target.value as ThrowType;
                 const res = await fetch(urlPostThrowType, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
@@ -57,10 +55,10 @@ export default function Page() {
                   const message = errorData.message || res.statusText || 'Unknown Error';
                   throw new Error(`HTTP ${res.status}: ${message}`);
                 }
+                setSelectedThrowType(newType);
               } catch (err) {
                 console.error("POST /throw-type failed. Did you forget to start the Axum server if you are running in integration mode?", err);
               }
-
             }}
             className="bg-gray-800 border border-gray-600 text-white rounded px-3 py-2 text-base font-normal focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
