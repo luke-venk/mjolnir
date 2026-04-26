@@ -48,13 +48,25 @@ impl CommonRecordArgs {
     /// Ensure that at least one stop condition was provided.
     pub fn validate(&self) -> Result<(), String> {
         if self.max_frames.is_none() && self.max_duration.is_none() {
-            Err(
+            return Err(
                 "You must provide at least one stopping condition: --max-frames or --max-duration"
                     .to_string(),
-            )
-        } else {
-            Ok(())
+            );
         }
+
+        if self.max_frames == Some(0) {
+            return Err("max_frames must be > 0".to_string());
+        }
+
+        if self.max_duration == Some(0.0) {
+            return Err("max_duration must be > 0".to_string());
+        }
+
+        if self.max_duration.is_some_and(|seconds| seconds < 0.0) {
+            return Err("max_duration must be > 0".to_string());
+        }
+
+        Ok(())
     }
 }
 

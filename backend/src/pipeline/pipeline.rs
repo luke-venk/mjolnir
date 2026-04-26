@@ -1,11 +1,17 @@
 use super::PipelineStage;
 use crate::camera::CameraIngestConfig;
-use crate::camera_ingest::ingest_frames;
+use crate::camera::record::{
+    CaptureStopConditions, DualCameraCapture, start_dual_camera_capture,
+};
+use crate::camera_ingest::{ingest_frames, replay_recorded_session, run_recording_ingest};
 use crate::computer_vision::{
     contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
 };
 use crate::schemas::{CameraId, Frame as PipelineFrame};
 use crossbeam::channel::{Receiver, bounded};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::thread::{self, JoinHandle};
 
 pub struct Pipeline {
@@ -82,6 +88,58 @@ pub fn start_camera_pipeline(
     let pipeline = Pipeline::new(camera_id, rx_stage1, capacity_per_channel);
 
     (ingest_handle, pipeline)
+}
+
+// Starts one replay thread and one left/right pipeline pair for recorded footage.
+pub fn start_recorded_footage_pipelines(
+    footage_dir: PathBuf,
+    capacity_per_channel: usize,
+) -> (JoinHandle<()>, Pipeline, Pipeline) {
+    let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity_per_channel);
+    let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity_per_channel);
+    let replay_handle = thread::spawn(move || {
+        replay_recorded_session(footage_dir, left_tx, right_tx);
+    });
+    let left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, capacity_per_channel);
+    let right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, capacity_per_channel);
+
+    (replay_handle, left_pipeline, right_pipeline)
+}
+
+pub fn start_recording_camera_pipelines(
+    interface: Option<&str>,
+    left_config: CameraIngestConfig,
+    right_config: CameraIngestConfig,
+    capacity_per_channel: usize,
+) -> (DualCameraCapture, JoinHandle<()>, Pipeline, Pipeline) {
+    let left_camera_id = left_config.camera_id.clone();
+    let right_camera_id = right_config.camera_id.clone();
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let (frame_rx, capture_runtime) = start_dual_camera_capture(
+        None,
+        interface,
+        left_config,
+        right_config,
+        CaptureStopConditions::default(),
+        Arc::clone(&shutdown),
+        capacity_per_channel,
+    );
+    let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity_per_channel);
+    let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity_per_channel);
+    let ingest_handle = thread::spawn(move || {
+        run_recording_ingest(
+            frame_rx,
+            left_camera_id,
+            right_camera_id,
+            left_tx,
+            right_tx,
+            shutdown,
+        );
+    });
+    let left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, capacity_per_channel);
+    let right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, capacity_per_channel);
+
+    (capture_runtime, ingest_handle, left_pipeline, right_pipeline)
 }
 
 #[cfg(test)]

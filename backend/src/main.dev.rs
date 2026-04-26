@@ -5,11 +5,9 @@ use backend_lib::camera::aravis_utils::initialize_aravis;
 #[cfg(feature = "real")]
 use backend_lib::camera::discovery::get_camera_ids;
 #[cfg(feature = "real")]
-use backend_lib::camera::CameraIngestConfig;
+use backend_lib::camera::{CameraIngestConfig, parse_real_backend_args};
 #[cfg(feature = "real")]
-use backend_lib::pipeline::start_camera_pipeline;
-#[cfg(feature = "real")]
-use backend_lib::schemas::CameraId;
+use backend_lib::pipeline::{start_recorded_footage_pipelines, start_recording_camera_pipelines};
 use backend_lib::server::{create_api_router, start_server, ThrowSource};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -48,24 +46,36 @@ async fn main() {
 #[cfg(feature = "real")]
 #[tokio::main]
 async fn main() {
-    // Start the 2 camera-ingest + pipeline flows (one for each camera).
-    let aravis = initialize_aravis();
-    let camera_ids = get_camera_ids(&aravis);
-    assert_eq!(
-        camera_ids.len(),
-        2,
-        "expected exactly 2 cameras for real dev mode, found {}",
-        camera_ids.len()
-    );
-
-    let mut left_config = CameraIngestConfig::default();
-    left_config.camera_id = camera_ids[0].clone();
-    let mut right_config = CameraIngestConfig::default();
-    right_config.camera_id = camera_ids[1].clone();
-
+    let args = parse_real_backend_args();
+    args.validate().unwrap_or_else(|err| panic!("{err}"));
     let rolling_buffer_size: usize = 10;
-    let _ = start_camera_pipeline(CameraId::FieldLeft, left_config, rolling_buffer_size);
-    let _ = start_camera_pipeline(CameraId::FieldRight, right_config, rolling_buffer_size);
+
+    if let Some(footage_dir) = args.feed_footage_dir {
+        println!(
+            "Starting real dev backend in recorded-footage replay mode from {}.",
+            footage_dir.display()
+        );
+        let _ = start_recorded_footage_pipelines(footage_dir, rolling_buffer_size);
+    } else {
+        // Start the 2 camera-ingest + pipeline flows (one for each camera).
+        let aravis = initialize_aravis();
+        let camera_ids = get_camera_ids(&aravis);
+        assert_eq!(
+            camera_ids.len(),
+            2,
+            "expected exactly 2 cameras for real dev mode, found {}",
+            camera_ids.len()
+        );
+
+        let left_config = CameraIngestConfig::from_real_args(camera_ids[0].clone(), &args);
+        let right_config = CameraIngestConfig::from_real_args(camera_ids[1].clone(), &args);
+        let _ = start_recording_camera_pipelines(
+            args.interface.as_deref(),
+            left_config,
+            right_config,
+            rolling_buffer_size,
+        );
+    }
 
     // Build the Axum router.
     let app = create_dev_app(ThrowSource::Camera);

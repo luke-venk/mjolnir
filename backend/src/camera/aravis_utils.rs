@@ -1,15 +1,15 @@
-use crate::camera::CameraIngestConfig;
+use super::{BarrierResult, CancelableBarrier};
 use aravis::glib::translate::ToGlibPtr;
 use aravis::prelude::*;
 use aravis::{Aravis, Buffer, Camera, Stream};
 use aravis_sys::arv_camera_get_string;
+use crate::camera::CameraIngestConfig;
 use glib::translate::*; // To convert high-level types to raw pointers
 use std::ffi::CString;
 use std::ptr;
 use std::slice;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc};
-use super::{CancelableBarrier, BarrierResult};
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 

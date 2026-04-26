@@ -1,27 +1,28 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 use aravis::{BufferStatus, CameraExt, StreamExt};
 use crossbeam::channel::{Receiver, RecvTimeoutError, Sender};
-
 use crate::camera::CameraIngestConfig;
 use crate::camera::aravis_utils::{
     configure_camera, create_camera, create_stream_and_allocate_buffers, initialize_aravis,
 };
 use crate::camera::record::writer::Frame as RecordedFrame;
-use crate::camera_ingest::camera_ingest_helpers::{
-    buffer_to_frame, reached_duration_limit, reached_frame_limit, recorded_frame_to_frame,
-};
+use crate::camera_ingest::camera_ingest_helpers::{buffer_to_frame, forward_recorded_frame};
 use crate::schemas::Frame as PipelineFrame;
 
-// Ingests frames from the cameras using the GigEVision API and sends them into the pipeline.
+// Ingests frames straight from the cameras using the GigEVision API and sends them into the pipeline 
+// if we wanted it straight from recording (if we wanted to send frames straight from recording)
 pub fn ingest_frames(tx: Sender<PipelineFrame>, config: CameraIngestConfig) {
     config
         .validate()
         .unwrap_or_else(|err| panic!("invalid camera ingest config: {err}"));
 
-    let start_time = Instant::now();
     let mut frames_sent = 0usize;
 
     initialize_aravis();
@@ -34,13 +35,6 @@ pub fn ingest_frames(tx: Sender<PipelineFrame>, config: CameraIngestConfig) {
         .expect("Failed to start acquisition.");
 
     loop {
-        if reached_frame_limit(frames_sent, config.max_frames) {
-            break;
-        }
-        if reached_duration_limit(start_time, config.max_duration_s) {
-            break;
-        }
-
         let buffer = match stream.timeout_pop_buffer(config.timeout_ms * 1000) {
             Some(buffer) => buffer,
             None => continue,
@@ -94,26 +88,15 @@ pub fn run_recording_ingest(
             Err(RecvTimeoutError::Disconnected) => break,
         };
 
-        let source_camera_id = recorded_frame.metadata.camera_id.clone();
-        let frame_index = recorded_frame.metadata.frame_index;
-        let pipeline_frame = recorded_frame_to_frame(recorded_frame);
-
-        let (send_result, destination) = if source_camera_id == left_camera_id {
-            (left_tx.send(pipeline_frame), "left")
-        } else if source_camera_id == right_camera_id {
-            (right_tx.send(pipeline_frame), "right")
-        } else {
-            eprintln!("Received frame for unexpected camera {}.", source_camera_id);
-            continue;
-        };
-
-        if send_result.is_err() {
+        if !forward_recorded_frame(
+            recorded_frame,
+            &left_camera_id,
+            &right_camera_id,
+            &left_tx,
+            &right_tx,
+        ) {
             break;
         }
-        println!(
-            "camera_ingest: forwarded recorded frame {} from {} into {} pipeline",
-            frame_index, source_camera_id, destination
-        );
     }
 }
 
@@ -139,7 +122,7 @@ mod tests {
 
         recorded_tx
             .send(RecordedFrame {
-                output_camera_dir: PathBuf::new(),
+                output_camera_dir: Some(PathBuf::new()),
                 frame_index: 0,
                 bytes: vec![1, 2, 3, 4],
                 metadata: Metadata {
@@ -157,7 +140,7 @@ mod tests {
 
         recorded_tx
             .send(RecordedFrame {
-                output_camera_dir: PathBuf::new(),
+                output_camera_dir: Some(PathBuf::new()),
                 frame_index: 0,
                 bytes: vec![5, 6, 7, 8],
                 metadata: Metadata {

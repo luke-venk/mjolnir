@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use crossbeam::channel::Sender;
 
 use aravis::Buffer;
 
@@ -33,29 +33,73 @@ pub fn recorded_frame_to_frame(frame: RecordedFrame) -> PipelineFrame {
     PipelineFrame::new(frame.bytes, Context::new(timestamp))
 }
 
-// Returns true once the configured frame limit has been reached.
-pub fn reached_frame_limit(frames_sent: usize, max_frames: Option<usize>) -> bool {
-    max_frames.is_some_and(|limit| frames_sent >= limit)
+pub fn recorded_frame_sort_key(frame: &RecordedFrame) -> (u64, u64, String, usize) {
+    let primary_timestamp = if frame.metadata.buffer_timestamp_ns != 0 {
+        frame.metadata.buffer_timestamp_ns
+    } else if frame.metadata.system_timestamp_ns != 0 {
+        frame.metadata.system_timestamp_ns
+    } else {
+        frame.metadata.frame_id
+    };
+    let secondary_timestamp = if frame.metadata.system_timestamp_ns != 0 {
+        frame.metadata.system_timestamp_ns
+    } else {
+        frame.metadata.buffer_timestamp_ns
+    };
+
+    (
+        primary_timestamp,
+        secondary_timestamp,
+        frame.metadata.camera_id.clone(),
+        frame.metadata.frame_index,
+    )
 }
 
-// Returns true once the configured recording duration has elapsed.
-pub fn reached_duration_limit(start_time: Instant, max_duration_s: Option<f64>) -> bool {
-    max_duration_s.is_some_and(|seconds| start_time.elapsed() >= Duration::from_secs_f64(seconds))
+pub fn forward_recorded_frame(
+    recorded_frame: RecordedFrame,
+    left_camera_id: &str,
+    right_camera_id: &str,
+    left_tx: &Sender<PipelineFrame>,
+    right_tx: &Sender<PipelineFrame>,
+) -> bool {
+    let source_camera_id = recorded_frame.metadata.camera_id.clone();
+    let frame_index = recorded_frame.metadata.frame_index;
+    let pipeline_frame = recorded_frame_to_frame(recorded_frame);
+
+    let (send_result, destination) = if source_camera_id == left_camera_id {
+        (left_tx.send(pipeline_frame), "left")
+    } else if source_camera_id == right_camera_id {
+        (right_tx.send(pipeline_frame), "right")
+    } else {
+        eprintln!("Received frame for unexpected camera {}.", source_camera_id);
+        return true;
+    };
+
+    if send_result.is_err() {
+        return false;
+    }
+
+    println!(
+        "camera_ingest: forwarded recorded frame {} from {} into {} pipeline",
+        frame_index, source_camera_id, destination
+    );
+    true
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-    use std::time::{Duration, Instant};
 
     use crate::camera::record::writer::{Frame as RecordedFrame, Metadata};
 
-    use super::{reached_duration_limit, reached_frame_limit, recorded_frame_to_frame};
+    use crossbeam::channel::bounded;
+
+    use super::{forward_recorded_frame, recorded_frame_sort_key, recorded_frame_to_frame};
 
     #[test]
     fn recorded_frame_to_frame_prefers_system_timestamp() {
         let frame = RecordedFrame {
-            output_camera_dir: PathBuf::new(),
+            output_camera_dir: Some(PathBuf::new()),
             frame_index: 3,
             bytes: vec![1, 2, 3],
             metadata: Metadata {
@@ -79,7 +123,7 @@ mod tests {
     #[test]
     fn recorded_frame_to_frame_falls_back_to_buffer_timestamp() {
         let frame = RecordedFrame {
-            output_camera_dir: PathBuf::new(),
+            output_camera_dir: Some(PathBuf::new()),
             frame_index: 1,
             bytes: vec![9, 8, 7],
             metadata: Metadata {
@@ -102,7 +146,7 @@ mod tests {
     #[test]
     fn recorded_frame_to_frame_falls_back_to_frame_id() {
         let frame = RecordedFrame {
-            output_camera_dir: PathBuf::new(),
+            output_camera_dir: Some(PathBuf::new()),
             frame_index: 2,
             bytes: vec![4, 5, 6],
             metadata: Metadata {
@@ -123,18 +167,59 @@ mod tests {
     }
 
     #[test]
-    fn reached_frame_limit_handles_some_and_none() {
-        assert!(!reached_frame_limit(0, None));
-        assert!(!reached_frame_limit(1, Some(2)));
-        assert!(reached_frame_limit(2, Some(2)));
+    fn recorded_frame_sort_key_prefers_buffer_then_system_then_frame_id() {
+        let frame = RecordedFrame {
+            output_camera_dir: Some(PathBuf::new()),
+            frame_index: 7,
+            bytes: vec![],
+            metadata: Metadata {
+                camera_id: "camera-z".to_string(),
+                frame_index: 7,
+                width: 0,
+                height: 0,
+                payload_bytes: 0,
+                system_timestamp_ns: 33,
+                buffer_timestamp_ns: 22,
+                frame_id: 11,
+            },
+        };
+
+        assert_eq!(
+            recorded_frame_sort_key(&frame),
+            (22, 33, "camera-z".to_string(), 7)
+        );
     }
 
     #[test]
-    fn reached_duration_limit_handles_some_and_none() {
-        assert!(!reached_duration_limit(Instant::now(), None));
-        assert!(!reached_duration_limit(Instant::now(), Some(1.0)));
+    fn forward_recorded_frame_routes_by_camera_id() {
+        let frame = RecordedFrame {
+            output_camera_dir: Some(PathBuf::new()),
+            frame_index: 1,
+            bytes: vec![1, 2, 3],
+            metadata: Metadata {
+                camera_id: "left-camera".to_string(),
+                frame_index: 1,
+                width: 3,
+                height: 1,
+                payload_bytes: 3,
+                system_timestamp_ns: 123,
+                buffer_timestamp_ns: 0,
+                frame_id: 0,
+            },
+        };
+        let (left_tx, left_rx) = bounded(1);
+        let (right_tx, right_rx) = bounded(1);
 
-        let started_earlier = Instant::now() - Duration::from_millis(20);
-        assert!(reached_duration_limit(started_earlier, Some(0.001)));
+        let forwarded = forward_recorded_frame(
+            frame,
+            "left-camera",
+            "right-camera",
+            &left_tx,
+            &right_tx,
+        );
+
+        assert!(forwarded);
+        assert_eq!(left_rx.try_recv().unwrap().context().timestamp(), 123);
+        assert!(right_rx.try_recv().is_err());
     }
 }
