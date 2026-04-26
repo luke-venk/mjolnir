@@ -254,15 +254,12 @@ pub fn configure_camera(
         }
 
         // Set transfer control settings for PTP synced captures
+        // Note: TransferControlMode was set to Basic because,
+        // unlike in the article linked above, our data throughput isn't close to saturating the link
+        // So we should be able to let the cameras transfer without us scheduling it
         camera
-            .set_string("TransferControlMode", "UserControlled")
+            .set_string("TransferControlMode", "Basic")
             .expect("Failed to set TransferControlMode");
-        camera
-            .set_string("TransferOperationMode", "Continuous")
-            .expect("Failed to set TransferOperationMode");
-        camera
-            .execute_command("TransferStop")
-            .expect("Failed to stop early transfers");
 
         // Set up frame start trigger system
         camera
@@ -277,9 +274,14 @@ pub fn configure_camera(
         camera
             .set_string("ActionUnconditionalMode", "On")
             .expect("Failed to set ActionUnconditionalMode");
+        // Disabling this because it will make cams ignore action commands when PTP sync is not 'locked'
+        // So even if PTP sync was successfully enabled and cameras were 'locked'
+        // If a camera missed a PTP check-in and was no longer 'locked'
+        // It would fail to capture a frame
+        // Even though its PTP timing is probably still very close to the other camera's
         camera
-            .set_boolean("ActionPTPSyncRequired", true)
-            .expect("Failed to set ActionPTPSyncRequired");
+            .set_boolean("ActionPTPSyncRequired", false)
+            .expect("Failed to disable ActionPTPSyncRequired");
         camera
             .set_integer("ActionSelector", 0)
             .expect("Failed to set ActionSelector");

@@ -220,7 +220,7 @@ pub fn run_capture_thread(
 
             std::thread::spawn(move || {
                 let mut frames_pushed = 0u64;
-                let lead_time_ns = 150_000_000; // 150ms look-ahead
+                let lead_time_ns = 2 * interval_ns; // 150ms look-ahead
 
                 loop {
                     if shutdown_heartbeat.load(Ordering::SeqCst) {
@@ -234,7 +234,15 @@ pub fn run_capture_thread(
                     // Calculate the PTP timestamp for the next frame in the sequence
                     let scheduled_until = start_ns + (frames_pushed * interval_ns);
 
-                    // Fill the camera pipeline if we are less than 150ms ahead
+                    if estimated_ptp > scheduled_until + interval_ns {
+                        let frames_behind = (estimated_ptp - scheduled_until) / interval_ns;
+                        eprintln!("Action command heartbeat is {frames_behind} frame(s) behind. Local clock may be drifting from PTP time. Skipping {frames_behind} missed frame slots.");
+                        // Skip ahead rather than firing a burst of catch-up commands
+                        frames_pushed += frames_behind;
+                        continue;
+                    }
+
+                    // Fill the camera pipeline if we are less than `lead_time_ns` ahead
                     if scheduled_until < (estimated_ptp + lead_time_ns) {
                         send_action_command(&socket, scheduled_until, 1, 1, 1);
                         frames_pushed += 1;
