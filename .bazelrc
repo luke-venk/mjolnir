@@ -12,4 +12,3 @@ build:release -c opt
 build:release --@rules_rust//rust/settings:lto=thin
 
 build:macos --@toolchains_llvm//toolchain/config:libunwind=False
-
