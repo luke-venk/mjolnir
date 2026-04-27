@@ -6,22 +6,16 @@ import {
 } from "./schemas";
 import { v4 as uuidv4 } from "uuid";
 
-function randomInfractions(): { type: Infraction; confidence: number }[] {
-  const infractions: { type: Infraction; confidence: number }[] = [];
+function randomInfractions(): Infraction[] {
+  const infractions: Infraction[] = [];
   if (Math.random() < 0.3) {
-    infractions.push({
-      type: Infraction.LEFT_SECTOR,
-      confidence: Math.random(),
-    });
+    infractions.push(Infraction.LEFT_SECTOR);
   }
   if (Math.random() < 0.3) {
-    infractions.push({
-      type: Infraction.RIGHT_SECTOR,
-      confidence: Math.random(),
-    });
+    infractions.push(Infraction.RIGHT_SECTOR);
   }
   if (Math.random() < 0.3) {
-    infractions.push({ type: Infraction.CIRCLE, confidence: Math.random() });
+    infractions.push(Infraction.CIRCLE);
   }
   return infractions;
 }
@@ -73,7 +67,6 @@ export async function getThrowEvent(throwType: ThrowType): Promise<ThrowEvent> {
     distanceM: randDistance,
     infractions,
     images: [
-      "https://placeholdpicsum.dev/photo/800/450",
       "https://placeholdpicsum.dev/photo/1600/900",
       "https://placeholdpicsum.dev/photo/1200/675",
     ].sort(() => Math.random() - 0.5),

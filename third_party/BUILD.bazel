@@ -1,4 +1,1272 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_proc_macro")
+load(":generation.bzl", "generate_visibility_header")
+
+filegroup(
+    name = "libffi_platform_headers",
+    srcs = select({
+        "//:darwin_arm64": glob(["libffi_per_platform_build_files/darwin_arm64/*.h"]),
+        "//:linux_arm64": glob(["libffi_per_platform_build_files/linux_arm64/*.h"]),
+        "//:linux_amd64": glob(["libffi_per_platform_build_files/linux_amd64/*.h"]),
+    }),
+)
+
+cc_library(
+    name = "libffi",
+    srcs = glob(
+        ["libffi/src/*.c"],
+        exclude = [
+            "libffi/src/java_raw_api.c",
+            "libffi/src/dlmalloc.c",
+        ],
+    ) + select({
+        "//:darwin_arm64": glob(
+            [
+                "libffi/src/aarch64/*.S",
+                "libffi/src/aarch64/*.c",
+                "libffi/src/aarch64/*.h",
+            ],
+            exclude = ["libffi/src/aarch64/win64_armasm.S"],
+        ),
+        "//:linux_arm64": glob(
+            [
+                "libffi/src/aarch64/*.S",
+                "libffi/src/aarch64/*.c",
+                "libffi/src/aarch64/*.h",
+            ],
+            exclude = ["libffi/src/aarch64/win64_armasm.S"],
+        ),
+        "//:linux_amd64": glob(
+            [
+                "libffi/src/x86/*.S",
+                "libffi/src/x86/*.c",
+                "libffi/src/x86/*.h",
+            ],
+            exclude = [
+                "libffi/src/x86/win64_intel.S",
+                "libffi/src/x86/win64.S",
+            ],
+        ),
+    }),
+    hdrs = [":libffi_platform_headers"] + [
+        "libffi/include/ffi_cfi.h",
+        "libffi/include/ffi_common.h",
+        "libffi/include/tramp.h",
+    ],
+    copts = [
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+        "-Wno-unknown-pragmas",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = ["FFI_BUILDING"],
+    includes = [
+        "libffi/include",
+    ] + select({
+        "//:darwin_arm64": ["libffi_per_platform_build_files/darwin_arm64"],
+        "//:linux_arm64": ["libffi_per_platform_build_files/linux_arm64"],
+        "//:linux_amd64": ["libffi_per_platform_build_files/linux_amd64"],
+    }),
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+genrule(
+    name = "copy_pcre2_h",
+    srcs = ["pcre2/src/pcre2.h.generic"],
+    outs = ["pcre2/src/pcre2.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "copy_pcre2_config",
+    srcs = ["pcre2/src/config.h.generic"],
+    outs = ["pcre2/src/config.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "copy_pcre2_chartables",
+    srcs = ["pcre2/src/pcre2_chartables.c.dist"],
+    outs = ["pcre2/src/pcre2_chartables.c"],
+    cmd = "cp $< $@",
+)
+
+cc_library(
+    name = "pcre2",
+    # Have to spec manually because glob doesn't work across bazel submodules :/
+    srcs = [
+        "pcre2/src/config.h",
+        "pcre2/src/pcre2_auto_possess.c",
+        "pcre2/src/pcre2_chartables.c",
+        "pcre2/src/pcre2_chkdint.c",
+        "pcre2/src/pcre2_compile.c",
+        "pcre2/src/pcre2_compile.h",
+        "pcre2/src/pcre2_compile_cgroup.c",
+        "pcre2/src/pcre2_compile_class.c",
+        "pcre2/src/pcre2_config.c",
+        "pcre2/src/pcre2_context.c",
+        "pcre2/src/pcre2_convert.c",
+        "pcre2/src/pcre2_dfa_match.c",
+        "pcre2/src/pcre2_error.c",
+        "pcre2/src/pcre2_extuni.c",
+        "pcre2/src/pcre2_find_bracket.c",
+        "pcre2/src/pcre2_internal.h",
+        "pcre2/src/pcre2_intmodedep.h",
+        "pcre2/src/pcre2_jit_char_inc.h",
+        "pcre2/src/pcre2_jit_compile.c",
+        "pcre2/src/pcre2_jit_match_inc.h",
+        "pcre2/src/pcre2_jit_misc_inc.h",
+        "pcre2/src/pcre2_jit_simd_inc.h",
+        "pcre2/src/pcre2_maketables.c",
+        "pcre2/src/pcre2_match.c",
+        "pcre2/src/pcre2_match_data.c",
+        "pcre2/src/pcre2_match_next.c",
+        "pcre2/src/pcre2_newline.c",
+        "pcre2/src/pcre2_ord2utf.c",
+        "pcre2/src/pcre2_pattern_info.c",
+        "pcre2/src/pcre2_printint_inc.h",
+        "pcre2/src/pcre2_script_run.c",
+        "pcre2/src/pcre2_serialize.c",
+        "pcre2/src/pcre2_string_utils.c",
+        "pcre2/src/pcre2_study.c",
+        "pcre2/src/pcre2_substitute.c",
+        "pcre2/src/pcre2_substring.c",
+        "pcre2/src/pcre2_tables.c",
+        "pcre2/src/pcre2_ucd.c",
+        "pcre2/src/pcre2_ucp.h",
+        "pcre2/src/pcre2_ucptables_inc.h",
+        "pcre2/src/pcre2_util.h",
+        "pcre2/src/pcre2_valid_utf.c",
+        "pcre2/src/pcre2_xclass.c",
+    ],
+    hdrs = ["pcre2/src/pcre2.h"],
+    copts = [
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+        "-Wno-unknown-pragmas",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = [
+        "HAVE_CONFIG_H",
+        "PCRE2_CODE_UNIT_WIDTH=8",
+        "SUPPORT_UNICODE",
+        "HAVE_UNISTD_H",
+        "HAVE_STDBOOL_H",
+    ],
+    includes = ["pcre2/src"],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "zlib",
+    # Have to spec manually because glob doesn't work across bazel submodules :/
+    srcs = [
+        "zlib/adler32.c",
+        "zlib/compress.c",
+        "zlib/crc32.c",
+        "zlib/crc32.h",
+        "zlib/deflate.c",
+        "zlib/deflate.h",
+        "zlib/gzclose.c",
+        "zlib/gzguts.h",
+        "zlib/gzlib.c",
+        "zlib/gzread.c",
+        "zlib/gzwrite.c",
+        "zlib/infback.c",
+        "zlib/inffast.c",
+        "zlib/inffast.h",
+        "zlib/inffixed.h",
+        "zlib/inflate.c",
+        "zlib/inflate.h",
+        "zlib/inftrees.c",
+        "zlib/inftrees.h",
+        "zlib/trees.c",
+        "zlib/trees.h",
+        "zlib/uncompr.c",
+        "zlib/zutil.c",
+        "zlib/zutil.h",
+    ],
+    hdrs = [
+        "zlib/zconf.h",
+        "zlib/zlib.h",
+    ],
+    copts = [
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+        "-Wno-unknown-pragmas",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = ["Z_HAVE_UNISTD_H"],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+genrule(
+    name = "glib_generated_config",
+    srcs = select({
+        "//:darwin_arm64": glob([
+            "glib_per_platform_build_files/darwin_arm64/*.h",
+        ]),
+        "//:linux_arm64": glob([
+            "glib_per_platform_build_files/linux_arm64/*.h",
+        ]),
+        "//:linux_amd64": glob([
+            "glib_per_platform_build_files/linux_amd64/*.h",
+        ]),
+    }),
+    outs = [
+        "glib_generated_includes/config.h",
+    ],
+    cmd = """
+        sed -e 's/#define ENABLE_NLS 1/#undef ENABLE_NLS/g' \
+            -e 's/#define HAVE_GETTEXT 1/#undef HAVE_GETTEXT/g' \
+            -e 's/#define HAVE_LIBINT_H 1/#undef HAVE_LIBINT_H/g' \
+            $< > $@
+    """,
+)
+
+genrule(
+    name = "glib_generated_glibconfig",
+    srcs = select({
+        "//:darwin_arm64": glob([
+            "glib_per_platform_build_files/glib/darwin_arm64/*.h",
+        ]),
+        "//:linux_arm64": glob([
+            "glib_per_platform_build_files/glib/linux_arm64/*.h",
+        ]),
+        "//:linux_amd64": glob([
+            "glib_per_platform_build_files/glib/linux_amd64/*.h",
+        ]),
+    }),
+    outs = [
+        "glib_generated_includes/glib/glibconfig.h",
+    ],
+    cmd = select({
+        "//:darwin_arm64": """
+            cp $(location glib_per_platform_build_files/glib/darwin_arm64/glibconfig.h) $(location glib_generated_includes/glib/glibconfig.h)
+        """,
+        "//:linux_arm64": """
+            cp $(location glib_per_platform_build_files/glib/linux_arm64/glibconfig.h) $(location glib_generated_includes/glib/glibconfig.h)
+        """,
+        "//:linux_amd64": """
+            cp $(location glib_per_platform_build_files/glib/linux_amd64/glibconfig.h) $(location glib_generated_includes/glib/glibconfig.h)
+        """,
+    }),
+)
+
+genrule(
+    name = "generate_gversionmacros_h",
+    srcs = ["glib/glib/gversionmacros.h.in"],
+    outs = ["glib/glib/gversionmacros.h"],
+    cmd = """
+        VERSIONS_BLOCK='\\
+#define GLIB_VERSION_2_26 (G_ENCODE_VERSION(2, 26))\\n\\
+#define GLIB_VERSION_2_28 (G_ENCODE_VERSION(2, 28))\\n\\
+#define GLIB_VERSION_2_30 (G_ENCODE_VERSION(2, 30))\\n\\
+#define GLIB_VERSION_2_32 (G_ENCODE_VERSION(2, 32))\\n\\
+#define GLIB_VERSION_2_34 (G_ENCODE_VERSION(2, 34))\\n\\
+#define GLIB_VERSION_2_36 (G_ENCODE_VERSION(2, 36))\\n\\
+#define GLIB_VERSION_2_38 (G_ENCODE_VERSION(2, 38))\\n\\
+#define GLIB_VERSION_2_40 (G_ENCODE_VERSION(2, 40))\\n\\
+#define GLIB_VERSION_2_42 (G_ENCODE_VERSION(2, 42))\\n\\
+#define GLIB_VERSION_2_44 (G_ENCODE_VERSION(2, 44))\\n\\
+#define GLIB_VERSION_2_46 (G_ENCODE_VERSION(2, 46))\\n\\
+#define GLIB_VERSION_2_48 (G_ENCODE_VERSION(2, 48))\\n\\
+#define GLIB_VERSION_2_50 (G_ENCODE_VERSION(2, 50))\\n\\
+#define GLIB_VERSION_2_52 (G_ENCODE_VERSION(2, 52))\\n\\
+#define GLIB_VERSION_2_54 (G_ENCODE_VERSION(2, 54))\\n\\
+#define GLIB_VERSION_2_56 (G_ENCODE_VERSION(2, 56))\\n\\
+#define GLIB_VERSION_2_58 (G_ENCODE_VERSION(2, 58))\\n\\
+#define GLIB_VERSION_2_60 (G_ENCODE_VERSION(2, 60))\\n\\
+#define GLIB_VERSION_2_62 (G_ENCODE_VERSION(2, 62))\\n\\
+#define GLIB_VERSION_2_64 (G_ENCODE_VERSION(2, 64))\\n\\
+#define GLIB_VERSION_2_66 (G_ENCODE_VERSION(2, 66))\\n\\
+#define GLIB_VERSION_2_68 (G_ENCODE_VERSION(2, 68))\\n\\
+#define GLIB_VERSION_2_70 (G_ENCODE_VERSION(2, 70))\\n\\
+#define GLIB_VERSION_2_72 (G_ENCODE_VERSION(2, 72))\\n\\
+#define GLIB_VERSION_2_74 (G_ENCODE_VERSION(2, 74))\\n\\
+#define GLIB_VERSION_2_76 (G_ENCODE_VERSION(2, 76))\\n\\
+#define GLIB_VERSION_2_78 (G_ENCODE_VERSION(2, 78))\\n\\
+#define GLIB_VERSION_2_80 (G_ENCODE_VERSION(2, 80))\\n\\
+#define GLIB_VERSION_2_82 (G_ENCODE_VERSION(2, 82))\\n\\
+#define GLIB_VERSION_2_84 (G_ENCODE_VERSION(2, 84))\\n\\
+#define GLIB_VERSION_2_86 (G_ENCODE_VERSION(2, 86))\\n\\
+#define GLIB_VERSION_2_88 (G_ENCODE_VERSION(2, 88))' && \\
+        sed "s/@GLIB_VERSIONS@/$$VERSIONS_BLOCK/" $< > $@
+    """,
+)
+
+generate_visibility_header(
+    name = "glib_visibility",
+    out = "glib/glib/glib-visibility.h",
+    namespace = "GLIB",
+    version = "2.88.0",
+)
+
+genrule(
+    name = "generate_libintl_h",
+    srcs = ["libintl_stubs/libintl.h"],
+    outs = ["glib/glib/libintl.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_intl_stubs",
+    srcs = ["libintl_stubs/intl_stubs.c"],
+    outs = ["glib/glib/intl_stubs.c"],
+    cmd = "cp $< $@",
+)
+
+cc_library(
+    name = "glib_objects",
+    srcs = glob(
+        [
+            "glib/glib/*.c",
+            "glib/glib/libcharset/*.c",
+            "glib/glib/deprecated/*.c",
+        ],
+        exclude = [
+            "glib/glib/ggettext.c",
+            "glib/glib/gdbus-daemon.c",
+            "glib/glib/gstdio-private.c",
+            "glib/glib/giowin32.c",
+            "glib/glib/gspawn-win32.c",
+            "glib/glib/gspawn-win32-helper.c",
+            "glib/glib/gthread-win32.c",
+            "glib/glib/twin32.c",
+            "glib/glib/gwin32.c",
+            "glib/glib/win_iconv.c",
+            "glib/glib/gutils-os2.c",
+        ],
+    ) + [
+        "libintl_stubs/intl_stubs.c",
+        "libintl_stubs/libintl.h",
+    ],
+    hdrs = glob([
+        "glib/glib/*.h",
+        "glib/glib/libcharset/*.h",
+        "glib/glib/deprecated/*.h",
+    ]) + [
+        "glib/glib/glib-visibility.h",
+        "glib/glib/gthread-posix.c",
+        "glib/glib/gversionmacros.h",
+        "libintl_stubs/libintl.h",
+        ":glib_generated_config",
+        ":glib_generated_glibconfig",
+    ],
+    copts = [
+        "-DHAVE_LIBMOUNT=0",
+        "-Wno-unknown-pragmas",
+        "-include",
+        "glib/glib/glib.h",
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = [
+        "GLIB_MAJOR_VERSION=2",
+        "LIBDIR=\\\"/usr/local/lib\\\"",
+        "GLIB_CHARSETALIAS_DIR=\\\"/usr/local/lib\\\"",
+        "GLIB_COMPILATION",
+        "G_DISABLE_CAST_CHECKS",
+        "HAVE_CONFIG_H",
+        "G_LOG_DOMAIN=\\\"GLib\\\"",
+    ],
+    includes = [
+        ".",
+        "glib",
+        "glib/glib",
+        "glib_generated_includes",
+        "glib_generated_includes/glib",
+        "libintl_stubs",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lrt",
+            "-lm",
+            "-lpthread",
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":pcre2",
+        ":zlib",
+    ],
+)
+
+rust_library(
+    name = "glib_sys",
+    srcs = glob(["gtk-rs-core/glib/sys/src/*.rs"]),
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":glib_objects",
+        "@crates//:libc",
+    ],
+)
+
+rust_proc_macro(
+    name = "glib_macros",
+    srcs = glob(["gtk-rs-core/glib-macros/**/*.rs"]),
+    crate_features = ["proc-macro-crate"],
+    deps = [
+        "@crates//:heck",
+        "@crates//:proc-macro-crate",
+        "@crates//:proc-macro2",
+        "@crates//:quote",
+        "@crates//:syn",
+    ],
+)
+
+rust_library(
+    name = "glib",
+    srcs = glob(["gtk-rs-core/glib/src/**/*.rs"]),
+    compile_data = ["gtk-rs-core/glib/README.md"],
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+        "gio",
+        "gio-sys",
+        "futures",
+        "futures-core",
+        "futures-task",
+        "futures-executor",
+        "futures-channel",
+        "futures-util",
+    ],
+    proc_macro_deps = [":glib_macros"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gio_sys",
+        ":glib_sys",
+        ":gobject_sys",
+        "@crates//:bitflags",
+        "@crates//:futures-channel",
+        "@crates//:futures-core",
+        "@crates//:futures-executor",
+        "@crates//:futures-task",
+        "@crates//:futures-util",
+        "@crates//:libc",
+        "@crates//:memchr",
+        "@crates//:smallvec",
+    ],
+)
+
+generate_visibility_header(
+    name = "gmodule_visibility",
+    out = "glib/gmodule/gmodule-visibility.h",
+    namespace = "GMODULE",
+    version = "2.88.0",
+)
+
+genrule(
+    name = "generate_gmoduleconf",
+    srcs = ["glib/gmodule/gmoduleconf.h.in"],
+    outs = ["glib/gmodule/gmoduleconf.h"],
+    cmd = """
+        sed -e 's/@G_MODULE_IMPL@/1/g' \
+            -e 's/@G_MODULE_HAVE_DLERROR@/1/g' \
+            -e 's/@G_MODULE_NEED_USCORE@/0/g' \
+            -e 's/@G_MODULE_BROKEN_RTLD_GLOBAL@/0/g' \
+            $< > $@
+    """,
+)
+
+cc_library(
+    name = "gmodule",
+    srcs = [
+        "glib/gmodule/gmodule.c",
+        "glib/gmodule/gmodule-deprecated.c",
+        ":generate_gmoduleconf",
+    ],
+    hdrs = [
+        "glib/gmodule/gmodule.h",
+        "glib/gmodule/gmodule-dl.c",
+        "glib/gmodule/gmodule-visibility.h",
+    ],
+    copts = [
+        "-Wno-unknown-pragmas",
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    includes = [
+        "glib/gmodule",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lpthread",
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [":glib_objects"],
+)
+
+generate_visibility_header(
+    name = "gobject_visibility",
+    out = "glib/gobject/gobject-visibility.h",
+    namespace = "GOBJECT",
+    version = "2.88.0",
+)
+
+genrule(
+    name = "configure_glib_mkenums",
+    srcs = ["glib/gobject/glib-mkenums.in"],
+    outs = ["glib/gobject/glib-mkenums.py"],
+    cmd = """
+        sed -e 's/@PYTHON@/python3/g' \
+            -e 's/@VERSION@/2.88.0/g' \
+            $< > $@
+    """,
+)
+
+genrule(
+    name = "generate_glib_enumtypes_h",
+    srcs = [
+        "glib/glib/gunicode.h",
+        "glib/gobject/glib-enumtypes.h.template",
+        "glib/gobject/glib-mkenums.py",
+    ],
+    outs = ["glib/gobject/glib-enumtypes.h"],
+    cmd = "python3 $(location glib/gobject/glib-mkenums.py) " +
+          "--template $(location glib/gobject/glib-enumtypes.h.template) " +
+          "$(location glib/glib/gunicode.h) > $@",
+)
+
+genrule(
+    name = "generate_glib_enumtypes_c",
+    srcs = [
+        "glib/glib/gunicode.h",
+        "glib/gobject/glib-enumtypes.c.template",
+        "glib/gobject/glib-mkenums.py",
+    ],
+    outs = ["glib/gobject/glib-enumtypes.c"],
+    cmd = "python3 $(location glib/gobject/glib-mkenums.py) " +
+          "--template $(location glib/gobject/glib-enumtypes.c.template) " +
+          "$(location glib/glib/gunicode.h) > $@",
+)
+
+cc_library(
+    name = "gobject",
+    srcs = [":generate_glib_enumtypes_c"] + glob(
+        ["glib/gobject/*.c"],
+        exclude = ["glib/gobject/gobject-query.c"],
+    ),
+    hdrs = glob(["glib/gobject/*.h"]) + [
+        ":generate_glib_enumtypes_h",
+        ":gobject_visibility",
+    ],
+    copts = [
+        "-Wno-unknown-pragmas",
+        "-DGOBJECT_COMPILATION",
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    includes = [
+        "glib/gobject",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":glib_objects",
+        ":libffi",
+    ],
+)
+
+rust_library(
+    name = "gobject_sys",
+    srcs = glob(["gtk-rs-core/glib/gobject-sys/src/*.rs"]),
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":glib_sys",
+        ":gobject",
+        "@crates//:libc",
+    ],
+)
+
+generate_visibility_header(
+    name = "gio_visibility",
+    out = "glib/gio/gio-visibility.h",
+    namespace = "GIO",
+    version = "2.88.0",
+)
+
+genrule(
+    name = "generate_gnetworking_h",
+    srcs = ["glib/gio/gnetworking.h.in"],
+    outs = ["glib/gio/gnetworking.h"],
+    cmd = """
+        sed -e 's/@GLIB_HAVE_SYS_FILIO_H@/1/g' \
+            -e 's/@GLIB_HAVE_SYS_SOCKIO_H@/1/g' \
+            -e 's/@GLIB_HAVE_NET_IF_STORAGE_H@/0/g' \
+            -e 's/@NAMESER_COMPAT_INCLUDE@//g' \
+            -e 's/@G_NETWORKING_LIBS_FOR_G_NETWORKING_H@//g' \
+            $< > $@
+    """,
+)
+
+GIO_ENUM_HEADERS = glob(
+    ["glib/gio/*.h"],
+    exclude = [
+        "glib/gio/gsandbox.h",
+        "glib/gio/glocalfilestat.h",
+        "glib/gio/glocalfileinfo.h",
+        "glib/gio/gdbusauthmechanism.h",
+        "glib/gio/gdocumentportalprivate.h",
+        "glib/gio/gdbusdaemon.h",
+        "glib/gio/gsubprocesslauncher-private.h",
+        "glib/gio/gcontenttypeprivate.h",
+        "glib/gio/gmountprivate.h",
+        "glib/gio/gthreadedresolver-private.h",
+        "glib/gio/gunixmounts-private.h",
+        "glib/gio/gnetworkingprivate.h",
+        "glib/gio/gdbusprivate.h",
+        "glib/gio/gappinfoprivate.h",
+        "glib/gio/gioprivate.h",
+        "glib/gio/gcredentialsprivate.h",
+        "glib/gio/gnotification-private.h",
+        "glib/gio/gdbusactiongroup-private.h",
+        "glib/gio/giounix-private.h",
+        "glib/gio/gresourcefile.h",
+        "glib/gio/gsettings-mapping.h",
+        "glib/gio/gsettingsbackendinternal.h",
+        "glib/gio/gsettingsschema-internal.h",
+        "glib/gio/gwin32appinfo.h",
+        "glib/gio/gwin32registrykey.h",
+        "glib/gio/gsandboxutil.h",
+        "glib/gio/gmemorymonitor.h",
+        "glib/gio/gproxyresolverportal.h",
+        "glib/gio/gnetworkmonitorportal.h",
+        "glib/gio/gportalsupport.h",
+        "glib/gio/gmemorymonitorbase.h",
+    ],
+)
+
+filegroup(
+    name = "gio_enum_header_sources",
+    srcs = GIO_ENUM_HEADERS,
+)
+
+genrule(
+    name = "generate_gio_enumtypes_h",
+    srcs = [
+        ":gio_enum_header_sources",
+        "glib/gio/gioenumtypes.h.template",
+        ":configure_glib_mkenums",
+    ],
+    outs = ["glib/gio/gioenumtypes.h"],
+    cmd = "python3 $(location :configure_glib_mkenums) " +
+          "--template $(location glib/gio/gioenumtypes.h.template) " +
+          "$(locations :gio_enum_header_sources) > $@",
+)
+
+genrule(
+    name = "generate_gio_enumtypes_c",
+    srcs = [
+        ":gio_enum_header_sources",
+        "glib/gio/gioenumtypes.c.template",
+        ":configure_glib_mkenums",
+    ],
+    outs = ["glib/gio/gioenumtypes.c"],
+    cmd = "python3 $(location :configure_glib_mkenums) " +
+          "--template $(location glib/gio/gioenumtypes.c.template) " +
+          "$(locations :gio_enum_header_sources) > $@",
+)
+
+genrule(
+    name = "configure_gdbus_codegen_config",
+    srcs = ["glib/gio/gdbus-2.0/codegen/config.py.in"],
+    outs = ["glib/gio/gdbus-2.0/codegen/config.py"],
+    cmd = """
+        sed -e 's/@VERSION@/2.88.0/g' \
+            -e 's/@MAJOR_VERSION@/2/g' \
+            -e 's/@MINOR_VERSION@/88/g' \
+            $< > $@
+    """,
+)
+
+genrule(
+    name = "configure_gdbus_codegen",
+    srcs = ["glib/gio/gdbus-2.0/codegen/gdbus-codegen.in"],
+    outs = ["glib/gio/gdbus-codegen.py"],
+    cmd = """
+        sed -e 's/@PYTHON@/python3/g' \
+            -e 's/@VERSION@/2.88.0/g' \
+            -e 's/@DATADIR@/./g' \
+            $< > $@
+    """,
+)
+
+genrule(
+    name = "generate_gdbus_daemon_sources",
+    srcs = [
+        "glib/gio/dbus-daemon.xml",
+        ":configure_gdbus_codegen",
+        ":configure_gdbus_codegen_config",
+    ] + glob(["glib/gio/gdbus-2.0/codegen/*.py"]),
+    outs = [
+        "glib/gio/gdbus-daemon-generated.c",
+        "glib/gio/gdbus-daemon-generated.h",
+    ],
+    cmd = """
+        mkdir -p codegen_tmp/codegen
+                for f in $(SRCS); do
+            if [[ "$$f" == *.py ]]; then
+                cp -f "$$f" codegen_tmp/codegen/
+            fi
+        done
+        MAIN_SCRIPT="codegen_tmp/codegen/gdbus-codegen.py"
+        export PYTHONPATH="$$PWD/codegen_tmp:$${PYTHONPATH:-}"
+        python3 "$$MAIN_SCRIPT" \
+            --interface-prefix org. \
+            --c-namespace _G \
+            --generate-c-code $(RULEDIR)/glib/gio/gdbus-daemon-generated \
+            $(location glib/gio/dbus-daemon.xml)
+    """,
+)
+
+genrule(
+    name = "generate_xdp_dbus_sources",
+    srcs = [
+        "glib/gio/org.freedesktop.portal.Documents.xml",
+        "glib/gio/org.freedesktop.portal.OpenURI.xml",
+        "glib/gio/org.freedesktop.portal.ProxyResolver.xml",
+        "glib/gio/org.freedesktop.portal.Trash.xml",
+        ":configure_gdbus_codegen",
+        ":configure_gdbus_codegen_config",
+    ] + glob(["glib/gio/gdbus-2.0/codegen/*.py"]),
+    outs = [
+        "xdp-dbus.c",
+        "xdp-dbus.h",
+    ],
+    cmd = """
+        mkdir -p codegen_tmp/codegen
+        for f in $(SRCS); do
+            if [[ "$$f" == *.py ]]; then
+                cp -f "$$f" codegen_tmp/codegen/
+            fi
+        done
+        
+        MAIN_SCRIPT="codegen_tmp/codegen/gdbus-codegen.py"
+        export PYTHONPATH="$$PWD/codegen_tmp:$${PYTHONPATH:-}"
+        
+        python3 "$$MAIN_SCRIPT" \
+            --interface-prefix org.freedesktop.portal. \
+            --c-namespace GXdp \
+            --generate-c-code $(RULEDIR)/xdp-dbus \
+            $(location glib/gio/org.freedesktop.portal.Documents.xml) \
+            $(location glib/gio/org.freedesktop.portal.OpenURI.xml) \
+            $(location glib/gio/org.freedesktop.portal.ProxyResolver.xml) \
+            $(location glib/gio/org.freedesktop.portal.Trash.xml)
+    """,
+)
+
+cc_library(
+    name = "gio_objects",
+    srcs = glob(
+        ["glib/gio/*.c"],
+        exclude = [
+            "glib/gio/strinfo.c",
+            "glib/gio/gsandbox.c",
+            "glib/gio/gsettings-tool.c",
+            "glib/gio/gresource-tool.c",
+            "glib/gio/gio-tool*.c",
+            "glib/gio/gsandboxutil.c",
+            "glib/gio/gnetworkmonitornetlink.c",
+            "glib/gio/gnetworkmonitornm.c",
+            "glib/gio/gdesktopappinfo.c",
+            "glib/gio/gfdonotificationbackend.c",
+            "glib/gio/gkeyfilesettingsbackend.c",
+            "glib/gio/gdbus-daemon.c",
+            "glib/gio/gdbus-tool.c",
+            "glib/gio/gwin32*.c",
+            "glib/gio/giowin32*.c",
+            "glib/gio/*-win32.c",
+            "glib/gio/glocalvfs.c",
+            "glib/gio/gcontenttype-win32.c",
+            "glib/gio/gcontenttype-fdo.c",
+            "glib/gio/glib-compile-resources.c",
+            "glib/gio/glib-compile-schemas.c",
+            "glib/gio/gsettings-tool.c",
+            "glib/gio/gresource-tool.c",
+            "glib/gio/gio-tool*.c",
+            "glib/gio/gapplication-tool.c",
+            "glib/gio/gmemorymonitorbase.c",
+            "glib/gio/gmemorymonitor.c",
+            "glib/gio/gmemorymonitorportal.c",
+            "glib/gio/gmemorymonitordbus.c",
+            "glib/gio/gmemorymonitorwin32.c",
+            "glib/gio/gthreadedresolver.c",
+            "glib/gio/gregistrysettingsbackend.c",
+            "glib/gio/gwin32registrykey.c",
+        ],
+    ) + [
+        ":generate_gdbus_daemon_sources",
+        ":generate_gio_enumtypes_c",
+        ":generate_xdp_dbus_sources",
+    ] + [
+        "glib/subprojects/gvdb/gvdb/gvdb-reader.c",
+    ],
+    hdrs = glob(["glib/gio/*.h"]) + [
+        ":generate_gdbus_daemon_sources",
+        ":generate_gio_enumtypes_h",
+        ":generate_gnetworking_h",
+        ":generate_xdp_dbus_sources",
+        ":gio_visibility",
+    ] + [
+        "glib/subprojects/gvdb/gvdb/gvdb-format.h",
+        "glib/subprojects/gvdb/gvdb/gvdb-reader.h",
+    ],
+    copts = [
+        "-Wno-unknown-pragmas",
+        "-DGIO_COMPILATION",
+        "-fvisibility=hidden",
+        "-fno-strict-aliasing",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    defines = [
+        "LOCALSTATEDIR=\\\"/var\\\"",
+        "SYSCONFDIR=\\\"/etc\\\"",
+        "GIO_MODULE_DIR=\\\"/usr/local/lib/gio/modules\\\"",
+        "GIO_LAUNCH_DESKTOP=\\\"/usr/local/libexec/gio-launch-desktop\\\"",
+    ],
+    includes = [
+        ".",
+        "glib/gio",
+        "glib/subprojects/gvdb",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lrt",
+            "-lm",
+            "-lresolv",
+            "-lpthread",
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-liconv",
+            "-framework CoreFoundation",
+            "-framework SystemConfiguration",
+            "-framework CoreServices",
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+    textual_hdrs = ["glib/gio/strinfo.c"],
+    deps = [
+        ":glib_objects",
+        ":gmodule",
+        ":gobject",
+    ],
+)
+
+rust_library(
+    name = "gio_sys",
+    srcs = glob(["gtk-rs-core/gio/sys/src/**/*.rs"]),
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gio_objects",
+        ":glib_sys",
+        ":gobject_sys",
+        "@crates//:libc",
+    ],
+)
+
+rust_library(
+    name = "gio",
+    srcs = glob(["gtk-rs-core/gio/src/**/*.rs"]),
+    compile_data = ["gtk-rs-core/gio/README.md"],
+    crate_features = [
+        "v2_88",
+        "v2_86",
+        "v2_84",
+        "v2_82",
+        "v2_80",
+        "v2_78",
+        "v2_76",
+        "v2_74",
+        "v2_72",
+        "v2_70",
+        "v2_68",
+        "v2_66",
+        "v2_64",
+        "v2_62",
+        "v2_60",
+        "v2_58",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gio_sys",
+        ":glib",
+        "@crates//:futures-channel",
+        "@crates//:futures-core",
+        "@crates//:futures-io",
+        "@crates//:futures-util",
+        "@crates//:libc",
+        "@crates//:pin-project-lite",
+        "@crates//:smallvec",
+    ],
+)
+
+genrule(
+    name = "generate_arvapi_h",
+    srcs = ["aravis_generated_build_files/arvapi.h"],
+    outs = ["aravis/src/arvapi.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvfeatures_h",
+    srcs = ["aravis_generated_build_files/arvfeatures.h"],
+    outs = ["aravis/src/arvfeatures.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvversion_h",
+    srcs = ["aravis_generated_build_files/arvversion.h"],
+    outs = ["aravis/src/arvversion.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvparamsprivate_h",
+    srcs = ["aravis_generated_build_files/arvparamsprivate.h"],
+    outs = ["aravis/src/arvparamsprivate.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvenumtypes_h",
+    srcs = ["aravis_generated_build_files/arvenumtypes.h"],
+    outs = ["aravis/src/arvenumtypes.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvenumtypesprivate_h",
+    srcs = ["aravis_generated_build_files/arvenumtypesprivate.h"],
+    outs = ["aravis/src/arvenumtypesprivate.h"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvenumtypes_c",
+    srcs = ["aravis_generated_build_files/arvenumtypes.c"],
+    outs = ["aravis/src/arvenumtypes.c"],
+    cmd = "cp $< $@",
+)
+
+genrule(
+    name = "generate_arvenumtypesprivate_c",
+    srcs = ["aravis_generated_build_files/arvenumtypesprivate.c"],
+    outs = ["aravis/src/arvenumtypesprivate.c"],
+    cmd = "cp $< $@",
+)
+
+cc_library(
+    name = "aravis_objects",
+    srcs = glob(
+        [
+            "aravis/src/*.c",
+            "aravis/src/*.h",
+        ],
+        exclude = [
+            "aravis/src/arvuvinterface.c",  # USB
+            "aravis/src/arvuvdevice.c",  # USB
+            "aravis/src/arvuvstream.c",  # USB
+            "aravis/src/arvuvcp.c",  # USB
+            "aravis/src/arvuvsp.c",  # USB
+            "aravis/src/arvv4l2interface.c",  # V4L2
+            "aravis/src/arvv4l2device.c",  # V4L2
+            "aravis/src/arvv4l2stream.c",  # V4L2
+            "aravis/src/arvv4l2misc.c",  # V4L2
+        ],
+    ) + [
+        ":generate_arvenumtypes_c",
+        ":generate_arvenumtypesprivate_c",
+    ],
+    hdrs = [
+        "aravis/src/arv.h",
+        ":generate_arvapi_h",
+        ":generate_arvenumtypes_h",
+        ":generate_arvenumtypesprivate_h",
+        ":generate_arvfeatures_h",
+        ":generate_arvparamsprivate_h",
+        ":generate_arvversion_h",
+    ],
+    copts = [
+        "-fvisibility=hidden",
+        "-fno-strict-aliasing",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+    }),
+    defines = ["ARAVIS_COMPILATION"],
+    includes = [
+        "aravis/src",
+    ],
+    linkopts = [
+        "-lxml2",
+        "-Wl,-fatal_warnings",
+    ] + select({
+        "@platforms//os:linux": [
+            "-lrt",
+            "-lm",
+            "-lresolv",
+            "-lpthread",
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            # I don't think this link flag is needed anymore but if there are issues add it back :)
+            # "-liconv",
+            "-framework",
+            "CoreFoundation",
+            "-framework",
+            "SystemConfiguration",
+            "-framework",
+            "CoreServices",
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":gio_objects",
+        ":glib_objects",
+        ":gmodule",
+        ":gobject",
+    ],
+)
+
+# Have to hack away the link attribute with sed from the original lib.rs
+genrule(
+    name = "aravis_sys_unlinked_lib_rs",
+    srcs = ["aravis-rs/aravis-sys/src/lib.rs"],
+    outs = ["lib.rs"],
+    cmd = "sed 's/.*link(name = \"aravis-0.8\").*//g' $< > $@",
+)
+
+rust_library(
+    name = "aravis_sys",
+    srcs = [":aravis_sys_unlinked_lib_rs"],
+    crate_features = [
+        "v0_8_31",
+        "v0_8_27",
+        "v0_8_25",
+        "v0_8_23",
+        "v0_8_22",
+        "v0_8_20",
+        "v0_8_19",
+        "v0_8_17",
+        "v0_8_16",
+        "v0_8_15",
+        "v0_8_11",
+        "v0_8_8",
+        "v0_8_6",
+        "v0_8_3",
+    ],
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":aravis_objects",
+        ":gio_sys",
+        ":glib_sys",
+        ":gobject_sys",
+        "@crates//:libc",
+    ],
+)
+
+rust_library(
+    name = "aravis",
+    srcs = glob(["aravis-rs/aravis/src/**/*.rs"]),
+    crate_features = [
+        "image",
+        "v0_8_31",
+        "v0_8_27",
+        "v0_8_25",
+        "v0_8_23",
+        "v0_8_22",
+        "v0_8_20",
+        "v0_8_19",
+        "v0_8_17",
+        "v0_8_16",
+        "v0_8_15",
+        "v0_8_11",
+        "v0_8_8",
+        "v0_8_6",
+        "v0_8_3",
+    ],
+    edition = "2015",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":aravis_sys",
+        ":gio",
+        ":gio_sys",
+        ":glib",
+        ":glib_sys",
+        ":gobject_sys",
+        "@crates//:image",
+    ],
+)
 
 genrule(
     name = "linux_libclang_dir",
