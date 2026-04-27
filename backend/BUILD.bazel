@@ -17,7 +17,7 @@ rust_library(
         ],
     ),
     crate_features = [
-        "real_infractions",
+        "real_circle_sensors",
         "real_cameras",
     ],
     crate_name = "backend_lib",
@@ -68,15 +68,15 @@ rust_library(
         "//conditions:default": [],
     }),
     deps = [
-        "@crates//:aravis",
-        "@crates//:aravis-sys",
+        "//third_party:aravis",
+        "//third_party:aravis_sys",
+        "//third_party:glib",
         "@crates//:argmin",
         "@crates//:axum",
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:eframe",
-        "@crates//:glib",
         "@crates//:if-addrs",
         "@crates//:levenberg-marquardt",
         "@crates//:nalgebra",
@@ -92,7 +92,7 @@ rust_library(
 )
 
 rust_library(
-    name = "backend_lib_real_infractions",
+    name = "backend_lib_real_circle_sensors",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = [
@@ -103,22 +103,22 @@ rust_library(
             "src/camera/stream/**/*.rs",
         ],
     ),
-    crate_features = ["real_infractions"],
+    crate_features = ["real_circle_sensors"],
     crate_name = "backend_lib",
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
     }),
     deps = [
-        "@crates//:aravis",
-        "@crates//:aravis-sys",
+        "//third_party:aravis",
+        "//third_party:aravis_sys",
+        "//third_party:glib",
         "@crates//:argmin",
         "@crates//:axum",
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:eframe",
-        "@crates//:glib",
         "@crates//:if-addrs",
         "@crates//:levenberg-marquardt",
         "@crates//:nalgebra",
@@ -233,10 +233,10 @@ rust_binary(
 )
 
 rust_binary(
-    name = "dev_real_infractions",
+    name = "dev_real_circle_sensors",
     srcs = ["src/main.dev.rs"],
     deps = [
-        ":backend_lib_real_infractions",
+        ":backend_lib_real_circle_sensors",
         "@crates//:axum",
         "@crates//:tokio",
         "@crates//:tower-http",
@@ -316,7 +316,7 @@ rust_binary(
 )
 
 rust_binary(
-    name = "prod_real_infractions",
+    name = "prod_real_circle_sensors",
     srcs = ["src/main.prod.rs"],
     compile_data = ["//frontend:static_exports"],
     # At compile-time, this env var tells our source code exactly where
@@ -334,7 +334,7 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib_real_infractions",
+        ":backend_lib_real_circle_sensors",
         "@crates//:axum",
         "@crates//:axum-embed",
         "@crates//:rust-embed",
