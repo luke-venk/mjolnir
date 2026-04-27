@@ -6,7 +6,7 @@
 // from the inside edge of the throwing circle, deciding whether the throw is a
 // sector violation, and assembling the final response.
 //
-// Coordinate frame assumption (TODO #28: confirm with @yashj1579):
+// Coordinate frame:
 // - Origin is at the center of the throwing circle.
 // - +x points down the center of the legal sector.
 // - +z points up.
