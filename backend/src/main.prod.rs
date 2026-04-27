@@ -5,9 +5,9 @@ use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 use rust_embed::Embed;
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
-#[cfg(feature = "real")]
+#[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::Pipeline;
-#[cfg(feature = "real")]
+#[cfg(feature = "real_cameras")]
 use backend_lib::schemas::CameraId;
 
 // The env var `EMBEDDED_FRONTEND_DIR` is where Bazel placed the frontend
@@ -30,9 +30,9 @@ pub fn create_prod_app(throw_source: ThrowSource) -> Router {
         .fallback_service(serve_assets)
 }
 
-// The "fake" configuration will not start the CV pipelines, and will point the
+// Lacking a "real_cameras" feature flag will not start the CV pipelines, and will point the
 // `analyze-throw` route to simulated throw data.
-#[cfg(feature = "fake")]
+#[cfg(not(feature = "real_cameras"))]
 #[tokio::main]
 async fn main() {
     // Build the Axum router.
@@ -42,9 +42,9 @@ async fn main() {
     start_server(app, "0.0.0.0:5001").await;
 }
 
-// The "real" configuration will start the CV pipelines, and will point the
+// The "real_cameras" configuration will start the CV pipelines, and will point the
 // `analyze-throw` route to the processed throw data from the pipelines.
-#[cfg(feature = "real")]
+#[cfg(feature = "real_cameras")]
 #[tokio::main]
 async fn main() {
     // Start the 2 computer vision pipelines (one for each camera).
