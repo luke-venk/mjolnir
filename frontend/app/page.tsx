@@ -22,7 +22,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [selectedThrowType, setSelectedThrowType] = useState<ThrowType>(ThrowType.SHOTPUT);
   const [isLoadingCurrentThrow, setIsLoadingCurrentThrow] = useState(false);
-  
+
   // URL varies based on whether or not the request is same origin (frontend-only
   // dev, production, etc.) or if request is across servers (integration-dev).
   const urlPostThrowType = process.env.NEXT_PUBLIC_API_BASE_URL + "/api/throw-type";
@@ -43,19 +43,22 @@ export default function Page() {
             onChange={async (e) => {
               setCurrentThrow(null);
               setStatus("waiting");
-              const newType = e.target.value as ThrowType;
-              setSelectedThrowType(newType);
-
               try {
+                const newType = e.target.value as ThrowType;
                 const res = await fetch(urlPostThrowType, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ throwType: newType }),
+                  body: JSON.stringify({ throwType: newType.toLocaleLowerCase() }),
                 });
+                if (!res.ok) {
+                  const errorData = await res.json().catch(() => ({}));
+                  const message = errorData.message || res.statusText || 'Unknown Error';
+                  throw new Error(`HTTP ${res.status}: ${message}`);
+                }
+                setSelectedThrowType(newType);
               } catch (err) {
                 console.error("POST /throw-type failed. Did you forget to start the Axum server if you are running in integration mode?", err);
               }
-              
             }}
             className="bg-gray-800 border border-gray-600 text-white rounded px-3 py-2 text-base font-normal focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
@@ -118,7 +121,7 @@ export default function Page() {
           <ul className="list-disc ml-5">
             {currentThrow!.infractions.map((i, idx) => (
               <li key={idx}>
-                {currentThrow?.throwType === ThrowType.JAVELIN ? 'Foul Throw' : displayNameForInfraction(i.type)} (confidence: {(i.confidence * 100).toFixed(0)}%)
+                {currentThrow?.throwType === ThrowType.JAVELIN ? 'Foul Throw' : displayNameForInfraction(i)}
               </li>
             ))}
           </ul>
@@ -131,17 +134,17 @@ export default function Page() {
         <div className="col-span-9 flex justify-center">
           {currentThrow ? (
             selectedThrowType === ThrowType.JAVELIN ? (
-                <JavelinField
-                  landingPoint={currentThrow.landingPointXY}
-                  infractions={currentThrow.infractions.map((i) => i.type)}
-                />
-              ) : (
-                <CircleField
-                  throwType={selectedThrowType}
-                  landingPoint={currentThrow.landingPointXY}
-                  infractions={currentThrow.infractions.map((i) => i.type)}
-                />
-              )
+              <JavelinField
+                landingPoint={currentThrow.landingPointXY}
+                infractions={currentThrow.infractions}
+              />
+            ) : (
+              <CircleField
+                throwType={selectedThrowType}
+                landingPoint={currentThrow.landingPointXY}
+                infractions={currentThrow.infractions}
+              />
+            )
           ) : (
             <p className="text-gray-400">Waiting for throw...</p>
           )}

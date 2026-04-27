@@ -1,4 +1,4 @@
-use super::{Infraction, ThrowType};
+use super::{InfractionType, ThrowType};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -16,13 +16,13 @@ pub struct ThrowAnalysisResponse {
     // Whether the throw is shot put, discus, hammer, or javelin.
     pub throw_type: ThrowType,
 
-    // The distance from where the implement landed to the inside edge of 
+    // The distance from where the implement landed to the inside edge of
     // the stop board, in meters.
     pub distance_m: f32,
 
     // Can possibly have circle infractions, sector violations, both,
     // or no infractions.
-    pub infractions: Vec<Infraction>,
+    pub infractions: Vec<InfractionType>,
 
     // The URLs associated with the images of the object's landing point.
     pub images: Vec<String>,

@@ -7,10 +7,3 @@ pub enum InfractionType {
     RightSector,
     Circle,
 }
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Infraction {
-    #[serde(rename = "type")]
-    pub infraction_type: InfractionType,
-    pub confidence: f32,
-}

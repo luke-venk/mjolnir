@@ -1,17 +1,17 @@
-use super::{Infraction, InfractionType, ThrowAnalysisResponse, ThrowType};
+use super::{InfractionType, ThrowAnalysisResponse, ThrowType};
 use chrono::Utc;
 use std::f32::consts::PI;
 use uuid::Uuid;
 
 /// Based on what sport is being evaluated, return the field dimensions.
-/// 
+///
 /// The first number is the diameter of the throwing circle in meters, or
 /// for javelin it's the length of the runway.
-/// 
+///
 /// The second number is the length of the field in meters.
-/// 
+///
 /// The third number is the sector angle, in degrees.
-/// 
+///
 /// For reference, see the following link:
 /// https://www.cits.wa.gov.au/sport-and-recreation/sports-dimensions-guide/athletics-throwing-events
 pub fn get_field_dimensions(throw_type: ThrowType) -> (f32, f32, f32) {
@@ -23,39 +23,28 @@ pub fn get_field_dimensions(throw_type: ThrowType) -> (f32, f32, f32) {
     }
 }
 
-pub fn get_random_infractions() -> Vec<Infraction> {
+pub fn get_random_infractions() -> Vec<InfractionType> {
     let infraction_probability = 0.3;
 
-    let mut infractions: Vec<Infraction> = vec![];
+    let mut infractions: Vec<InfractionType> = vec![];
 
     if rand::random::<f32>() < infraction_probability {
-        infractions.push(Infraction {
-            infraction_type: InfractionType::LeftSector,
-            confidence: rand::random::<f32>(),
-        });
+        infractions.push(InfractionType::LeftSector);
     } else if rand::random::<f32>() < infraction_probability {
-        infractions.push(Infraction {
-            infraction_type: InfractionType::RightSector,
-            confidence: rand::random::<f32>(),
-        });
+        infractions.push(InfractionType::RightSector);
     }
 
     if rand::random::<f32>() < infraction_probability {
-        infractions.push(Infraction {
-            infraction_type: InfractionType::Circle,
-            confidence: rand::random::<f32>(),
-        });
+        infractions.push(InfractionType::Circle);
     }
 
     infractions
 }
 
 pub fn simulate_throw_event(throw_type: ThrowType) -> ThrowAnalysisResponse {
-    let (circle_diameter, field_length, sector_angle): (f32, f32, f32) = get_field_dimensions(throw_type);
+    let (circle_diameter, field_length, sector_angle): (f32, f32, f32) =
+        get_field_dimensions(throw_type);
 
-    // Note: Does the math look okay? Sometimes when I'm running sims, the object
-    // will appear to land in the throwing area or out of bounds and not be an
-    // infraction.
     let rand_distance_base: f32 = rand::random::<f32>() * field_length;
     let rand_distance: f32 = circle_diameter / 2.0 + rand_distance_base;
 
@@ -71,7 +60,7 @@ pub fn simulate_throw_event(throw_type: ThrowType) -> ThrowAnalysisResponse {
     let random_y = rand_distance * ((rand_pos_theta * PI) / 180.0).sin() * random_y_multiplier;
 
     // Cumulative probability of 26.5% chance of infraction.
-    let infractions: Vec<Infraction> = if rand::random::<f32>() < 0.4 {
+    let infractions: Vec<InfractionType> = if rand::random::<f32>() < 0.4 {
         get_random_infractions()
     } else {
         Vec::new()
@@ -80,7 +69,10 @@ pub fn simulate_throw_event(throw_type: ThrowType) -> ThrowAnalysisResponse {
     // Show landing point as long as there is no sector violation. It is still
     // useful to show the landing point even if there is a circle infraction.
     let has_sector_violation = infractions.iter().any(|infraction| {
-        matches!(infraction.infraction_type, InfractionType::LeftSector | InfractionType::RightSector)
+        matches!(
+            infraction,
+            InfractionType::LeftSector | InfractionType::RightSector
+        )
     });
     let landing_point_x_y: Option<(f32, f32)> = if !has_sector_violation {
         Some((random_x, random_y))
@@ -95,7 +87,6 @@ pub fn simulate_throw_event(throw_type: ThrowType) -> ThrowAnalysisResponse {
         distance_m: rand_distance,
         infractions,
         images: vec![
-            "https://placeholdpicsum.dev/photo/id/729/400".to_string(),
             "https://placeholdpicsum.dev/photo/id/929/600/400".to_string(),
             "https://placeholdpicsum.dev/photo/id/925/600/400".to_string(),
         ],
