@@ -112,6 +112,5 @@ bazel run @rules_rust//tools/rust_analyzer:gen_rust_project
 
 echo "Setting up git hooks..."
 git config core.hooksPath .githooks
-chmod +x .githooks/post-checkout
 
 echo "Setup complete."
