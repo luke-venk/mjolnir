@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+ 
+# Remove submodule directories that aren't in .gitmodules anymore
+git submodule sync
+git submodule update --init --recursive --depth 1
+ 
+# Get rid of untracked orphaned submodule directories. This only occurs if
+# switching from a branch with submodules to a branch that doesn't
+# have them yet.
+git clean -ffd third_party/
