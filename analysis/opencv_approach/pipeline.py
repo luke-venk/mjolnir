@@ -21,37 +21,8 @@ from dataclasses import dataclass, field
 import time
 from typing import Optional, Tuple, List
 
-DISPLAY_WIDTH  = 1920
-DISPLAY_HEIGHT = 1080
-PROCESS_WIDTH  = 960#4096# 
-PROCESS_HEIGHT = 540#3000 # 540
+from params import *
 
-# Background subtractor
-MOG2_HISTORY        = 300   # frames to build background model
-MOG2_VAR_THRESHOLD  = 60    # lower = more sensitive; raise if noisy background
-MOG2_DETECT_SHADOWS = False
-
-MORPH_OPEN_KERNEL  = 3   # removes small noise blobs
-MORPH_CLOSE_KERNEL = 40  # fills holes inside the shot put blob
-
-# ROI tracking after initialization
-ROI_SIZE = 50  # pixels in process-space (width and height of ROI)
-ROI_PADDING = 20  # extra padding around predicted position
-MIN_ROI_SIZE = 100  # minimum ROI size when not initialized
-
-# Consistency check parameters
-CONSISTENCY_WINDOW = 3  # number of frames to check for consistency
-MAX_DISTANCE_VARIATION = 5  # maximum allowed variation in distances (pixels)
-MIN_CONSISTENT_DETECTIONS = 4  # REDUCED from 5 to 2 - faster ROI activation
-
-MIN_AREA            = 25    # px^2 — ignore tiny noise
-MAX_AREA            = 150   # px^2 — ignore huge regions
-MAX_PERIMETER       = 70    # px — ignore very large contours (athlete body)
-MIN_CIRCULARITY     = 0.68   # 1.0 = perfect circle; lower catches slight blur61
-MAX_ASPECT_RATIO    = 1.7    # width/height of bounding rect; rejects lines
-
-MAX_MISSED_FRAMES   = 8     # frames without detection before tracker resets
-TRAIL_LENGTH        = 60    # how many past positions to draw as trail
 
 def make_kalman():
     kf = cv2.KalmanFilter(4, 2)
