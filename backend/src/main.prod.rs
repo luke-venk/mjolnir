@@ -1,10 +1,10 @@
 use axum::Router;
 use axum_embed::ServeEmbed;
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
-use backend_lib::server::{ThrowSource, create_api_router, start_server};
-use rust_embed::Embed;
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{CameraId, Pipeline};
+use backend_lib::server::{ThrowSource, create_api_router, start_server};
+use rust_embed::Embed;
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
 

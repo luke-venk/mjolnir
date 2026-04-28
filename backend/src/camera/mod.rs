@@ -10,4 +10,4 @@ pub mod record;
 pub use cancelable_barrier::*;
 pub use cli_record::{RecordWithBothCamerasArgs, RecordWithOneCameraArgs};
 pub use cli_stream::StreamFromCamerasArgs;
-pub use config::{CameraIngestConfig, AtlasATP124SResolution};
+pub use config::{AtlasATP124SResolution, CameraIngestConfig};

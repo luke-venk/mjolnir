@@ -6,7 +6,6 @@ use opencv::core::{CV_8U, Mat, Scalar};
 #[derive(PartialEq, PartialOrd)]
 pub enum ComputerVisionStage {
     Undistortion,
-    IntensityNormalization,
     ForwardDownsampledCopy,
     Mog2,
     Contour,
@@ -41,9 +40,6 @@ pub fn generate_frame(
 
     if stage_to_prep_for > ComputerVisionStage::Undistortion {
         frame.set_undistorted_image(mat.clone()).unwrap();
-    }
-    if stage_to_prep_for > ComputerVisionStage::IntensityNormalization {
-        frame.set_intensity_normalized_image(mat.clone()).unwrap();
     }
     if stage_to_prep_for > ComputerVisionStage::ForwardDownsampledCopy {
         frame.set_downsampled_image(mat.clone()).unwrap();

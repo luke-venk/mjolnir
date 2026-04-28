@@ -30,11 +30,8 @@ pub struct Frame {
     /// is the convention for matrices.
     raw_full_resolution: (u32, u32),
 
-    /// The frame after lens undistortion is applied, before intensity normalization is applied.
+    /// The frame after lens undistortion is applied, before downsampling is applied.
     undistorted_image: OnceLock<Mat>,
-
-    /// The frame after intensity normalization is applied, before downsampling is applied.
-    intensity_normalized_image: OnceLock<Mat>,
 
     /// The frame after downsampling is applied, before Mog2 is applied.
     downsampled_image: OnceLock<Mat>,
@@ -49,7 +46,6 @@ impl Frame {
             raw_bytes_full_resolution: data,
             raw_full_resolution: resolution,
             undistorted_image: OnceLock::new(),
-            intensity_normalized_image: OnceLock::new(),
             downsampled_image: OnceLock::new(),
             context,
         }
@@ -71,16 +67,6 @@ impl Frame {
         self.undistorted_image
             .set(mat)
             .map_err(|_| "Undistorted image already set.".to_string())
-    }
-
-    pub fn intensity_normalized_image(&self) -> Option<&Mat> {
-        self.intensity_normalized_image.get()
-    }
-
-    pub fn set_intensity_normalized_image(&self, mat: Mat) -> Result<(), String> {
-        self.intensity_normalized_image
-            .set(mat)
-            .map_err(|_| "Intensity normalized image already set.".to_string())
     }
 
     pub fn downsampled_image(&self) -> Option<&Mat> {
@@ -109,14 +95,16 @@ pub enum CameraId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Context {
     camera_id: CameraId,
-    timestamp: u64,
+
+    /// The timestamp given to the buffer by the camera (i.e. buffer.timestamp()).
+    camera_buffer_timestamp: u64,
 }
 
 impl Context {
-    pub fn new(camera_id: CameraId, timestamp: u64) -> Self {
+    pub fn new(camera_id: CameraId, camera_buffer_timestamp: u64) -> Self {
         Self {
             camera_id,
-            timestamp,
+            camera_buffer_timestamp,
         }
     }
 
@@ -124,8 +112,8 @@ impl Context {
         self.camera_id
     }
 
-    pub fn timestamp(&self) -> u64 {
-        self.timestamp
+    pub fn camera_buffer_timestamp(&self) -> u64 {
+        self.camera_buffer_timestamp
     }
 }
 
@@ -134,16 +122,17 @@ mod tests {
     use super::*;
     use crate::camera::AtlasATP124SResolution;
     use crate::pipeline::test_utils::{ComputerVisionStage, generate_frame};
+    use rstest::rstest;
 
-    #[test]
+    #[rstest]
     fn test_context_constructor_and_getters() {
         let context = Context::new(CameraId::FieldLeft, 6767);
 
         assert_eq!(context.camera_id(), CameraId::FieldLeft);
-        assert_eq!(context.timestamp(), 6767);
+        assert_eq!(context.camera_buffer_timestamp(), 6767);
     }
 
-    #[test]
+    #[rstest]
     fn test_frame_constructor_and_getters() {
         let frame: Frame = generate_frame(
             21,
@@ -159,16 +148,7 @@ mod tests {
             // Access 1st element because 0th is pixel coordinate and 2nd is value.
             assert_eq!(pixel.1, 21u8);
         }
-        for pixel in frame
-            .intensity_normalized_image()
-            .unwrap()
-            .iter::<u8>()
-            .unwrap()
-        {
-            // Access 1st element because 0th is pixel coordinate and 2nd is value.
-            assert_eq!(pixel.1, 21u8);
-        }
         assert_eq!(frame.context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(frame.context().timestamp(), 1342);
+        assert_eq!(frame.context().camera_buffer_timestamp(), 1342);
     }
 }

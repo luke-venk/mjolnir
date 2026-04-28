@@ -1,9 +1,9 @@
 use axum::{Router, http::Method};
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
-use backend_lib::server::{ThrowSource, create_api_router, start_server};
-use tower_http::cors::{Any, CorsLayer};
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{CameraId, Pipeline};
+use backend_lib::server::{ThrowSource, create_api_router, start_server};
+use tower_http::cors::{Any, CorsLayer};
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
 

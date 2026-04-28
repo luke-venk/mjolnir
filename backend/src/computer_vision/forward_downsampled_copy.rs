@@ -15,7 +15,9 @@ const SIZE: Size = Size::new(DOWNSAMPLED_WIDTH_PX, DOWNSAMPLED_HEIGHT_PX);
 pub fn forward_downsampled_copy(frame: Frame) -> Frame {
     // Get the matrix acted on by the previous stage and define an output
     // matrix for the CV operation to write to.
-    let input_mat = frame.intensity_normalized_image().expect("Error: IntensityNormalization Mat hasn't been set yet.");
+    let input_mat = frame
+        .undistorted_image()
+        .expect("Error: Undistorted Mat hasn't been set yet.");
     let mut output_mat: Mat = Mat::default();
 
     // Perform resizing operation.
@@ -29,7 +31,9 @@ pub fn forward_downsampled_copy(frame: Frame) -> Frame {
     // Set the downsampled image to the result and return the frame.
     // Note: I know that we are throwing away the result but idk if I should
     // handle this now or not.
-    frame.set_downsampled_image(output_mat).expect("Error: Failed to set DownsampledImage Mat.");
+    frame
+        .set_downsampled_image(output_mat)
+        .expect("Error: Failed to set DownsampledImage Mat.");
     frame
 }
 

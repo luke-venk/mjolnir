@@ -36,17 +36,28 @@ mod tests {
     use super::*;
     use crate::camera::AtlasATP124SResolution;
     use crate::pipeline::test_utils::{ComputerVisionStage, generate_frame};
+    use rstest::rstest;
 
-    #[test]
+    #[rstest]
     fn test_can_send_frame_through_pipeline_stage() {
-        let frame_in = generate_frame(69, 1738, AtlasATP124SResolution::Full, ComputerVisionStage::ForwardDownsampledCopy);
+        let frame_in = generate_frame(
+            69,
+            1738,
+            AtlasATP124SResolution::Full,
+            ComputerVisionStage::ForwardDownsampledCopy,
+        );
 
         let (tx_in, rx_pipe) = crossbeam::channel::bounded::<Frame>(3);
         let (tx_pipe, rx_out) = crossbeam::channel::bounded::<Frame>(3);
 
         // Dummy function to just update value and increment timestamp.
         let my_function = |f: Frame| -> Frame {
-            generate_frame(67, f.context().timestamp() + 1, AtlasATP124SResolution::Full, ComputerVisionStage::ForwardDownsampledCopy)
+            generate_frame(
+                67,
+                f.context().camera_buffer_timestamp() + 1,
+                AtlasATP124SResolution::Full,
+                ComputerVisionStage::ForwardDownsampledCopy,
+            )
         };
 
         let pipeline_stage = PipelineStage::new(rx_pipe, tx_pipe, my_function);
@@ -55,7 +66,7 @@ mod tests {
         let frame_out = rx_out.recv().unwrap();
 
         // Assert that updated timestamp and data is as expected.
-        assert_eq!(frame_out.context().timestamp(), 1739);
+        assert_eq!(frame_out.context().camera_buffer_timestamp(), 1739);
         for &pixel in frame_out.raw_bytes_full_resolution() {
             assert_eq!(pixel, 67u8);
         }

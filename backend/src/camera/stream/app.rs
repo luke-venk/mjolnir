@@ -1,7 +1,7 @@
 // LiveViewApp implementation required for eframe to handle window creation
 // for our egui to render live streaming.
 use super::frame::FrameData;
-use backend_lib::camera::{CameraIngestConfig, AtlasATP124SResolution};
+use backend_lib::camera::{AtlasATP124SResolution, CameraIngestConfig};
 use eframe::egui;
 use eframe::egui::TextureHandle;
 use std::{
@@ -102,23 +102,42 @@ impl eframe::App for LiveViewApp {
                 // Slider for exposure time.
                 ui.label("Exposure time (µs):");
                 ui.spacing_mut().slider_width = 250.0;
-                ui.add(egui::Slider::new(
-                    &mut settings.exposure_time_us,
-                    CAMERA_EXPOSURE_TIME_MICROSECONDS_MIN..=CAMERA_EXPOSURE_TIME_MICROSECONDS_MAX,
-                ).logarithmic(true));
+                ui.add(
+                    egui::Slider::new(
+                        &mut settings.exposure_time_us,
+                        CAMERA_EXPOSURE_TIME_MICROSECONDS_MIN
+                            ..=CAMERA_EXPOSURE_TIME_MICROSECONDS_MAX,
+                    )
+                    .logarithmic(true),
+                );
 
                 ui.add_space(16.0);
 
                 // Slider for desired frame rate.
                 ui.label("Desired frame rate (Hz):");
                 ui.spacing_mut().slider_width = 100.0;
-                ui.add(egui::Slider::new(&mut settings.frame_rate_hz, CAMERA_FRAMES_PER_SECOND_MIN..=CAMERA_FRAMES_PER_SECOND_MAX));
+                ui.add(egui::Slider::new(
+                    &mut settings.frame_rate_hz,
+                    CAMERA_FRAMES_PER_SECOND_MIN..=CAMERA_FRAMES_PER_SECOND_MAX,
+                ));
 
                 // Button for resolution.
                 ui.label("Resolution:");
-                ui.selectable_value(&mut settings.resolution, AtlasATP124SResolution::Quarter, "Quarter");
-                ui.selectable_value(&mut settings.resolution, AtlasATP124SResolution::Half, "Half");
-                ui.selectable_value(&mut settings.resolution, AtlasATP124SResolution::Full, "Full");
+                ui.selectable_value(
+                    &mut settings.resolution,
+                    AtlasATP124SResolution::Quarter,
+                    "Quarter",
+                );
+                ui.selectable_value(
+                    &mut settings.resolution,
+                    AtlasATP124SResolution::Half,
+                    "Half",
+                );
+                ui.selectable_value(
+                    &mut settings.resolution,
+                    AtlasATP124SResolution::Full,
+                    "Full",
+                );
             });
             ui.add_space(8.0);
 
@@ -218,9 +237,7 @@ impl eframe::App for LiveViewApp {
         println!();
         println!(
             "bazel run //backend:record -- --resolution {} --exposure-us {} --frame-rate-hz {} --output-dir <output-dir> <stop condition>",
-            settings.resolution,
-            settings.exposure_time_us,
-            settings.frame_rate_hz,
+            settings.resolution, settings.exposure_time_us, settings.frame_rate_hz,
         );
     }
 }
