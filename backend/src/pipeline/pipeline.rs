@@ -1,6 +1,6 @@
 use super::PipelineStage;
 use crate::camera_ingest::ingest_frames;
-use crate::computer_vision::{contour, forward_downsampled_copy, mog2, undistortion};
+use crate::computer_vision::{ContourTracker, forward_downsampled_copy, mog2, undistortion};
 use crate::pipeline::{CameraId, Frame};
 use crate::schemas::ContourOutput;
 use crossbeam::channel::{Sender, bounded};
@@ -46,7 +46,11 @@ impl Pipeline {
         let handle_stage3 = PipelineStage::new(rx_stage3, tx_stage3, mog2).spawn();
 
         // Stage 4: Contour.
-        let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, contour).spawn();
+        let mut contour_tracker = ContourTracker::new();
+        let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, move |frame| {
+            contour_tracker.process_frame(frame)
+        })
+        .spawn();
 
         // Output: Pixel coordinates.
         // Spawn a thread to handle reporting pipeline outputs to math triangulation.
