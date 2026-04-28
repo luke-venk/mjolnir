@@ -4,7 +4,7 @@
 // frames from color to grayscale, but our cameras are already monochrome.
 use crate::pipeline::Frame;
 use opencv::core::{Mat, Size};
-use opencv::imgproc::{INTER_LINEAR, resize};
+use opencv::imgproc::{resize, INTER_LINEAR};
 use opencv::prelude::MatTraitConst;
 use opencv::prelude::MatTraitConstManual;
 
@@ -41,7 +41,7 @@ pub fn forward_downsampled_copy(frame: Frame) -> Frame {
 mod tests {
     use super::*;
     use crate::camera::AtlasATP124SResolution;
-    use crate::pipeline::test_utils::{ComputerVisionStage, generate_frame};
+    use crate::pipeline::test_utils::{generate_frame, ComputerVisionStage};
     use rstest::rstest;
 
     #[rstest]

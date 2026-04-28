@@ -123,6 +123,11 @@ pub fn main() {
 
     // Spawn 1st recording thread.
     let record_handle_1 = thread::spawn(move || {
+        let ptp_config = if args.common_args.enable_ptp {
+            Some(ptp_config_1)
+        } else {
+            None
+        };
         run_capture_thread(
             output_base_dir,
             &camera_ingest_config1,
@@ -134,16 +139,17 @@ pub fn main() {
             Some(addr),
             Some(configuration_barrier_1),
             Some(acquisition_barrier_1),
-            if args.common_args.enable_ptp {
-                Some(ptp_config_1)
-            } else {
-                None
-            },
+            ptp_config,
         );
     });
 
     // Spawn 2nd recording thread.
     let record_handle_2 = thread::spawn(move || {
+        let ptp_config = if args.common_args.enable_ptp {
+            Some(ptp_config_2)
+        } else {
+            None
+        };
         run_capture_thread(
             output_base_dir_clone,
             &camera_ingest_config2,
@@ -155,11 +161,7 @@ pub fn main() {
             None,
             Some(configuration_barrier_2),
             Some(acquisition_barrier_2),
-            if args.common_args.enable_ptp {
-                Some(ptp_config_2)
-            } else {
-                None
-            },
+            ptp_config,
         );
     });
 
