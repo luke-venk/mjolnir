@@ -17,11 +17,11 @@
 #define FFI_EXEC_TRAMPOLINE_TABLE 1
 
 /* Define this if you want to enable pax emulated trampolines (experimental)
- */
+   */
 /* #undef FFI_MMAP_EXEC_EMUTRAMP_PAX */
 
 /* Cannot use malloc on this target, so, we revert to alternative means */
-#undef FFI_MMAP_EXEC_WRIT
+/* #undef FFI_MMAP_EXEC_WRIT */
 
 /* Define this if you do not want support for the raw API. */
 /* #undef FFI_NO_RAW_API */
@@ -45,7 +45,7 @@
 /* #undef HAVE_AS_S390_ZARCH */
 
 /* Define if your assembler and linker support unaligned PC relative relocs.
- */
+   */
 /* #undef HAVE_AS_SPARC_UA_PCREL */
 
 /* Define if your assembler supports unwind section type. */
@@ -153,7 +153,7 @@
 #define SYMBOL_UNDERSCORE 1
 
 /* Define this if you are using Purify and want to suppress spurious messages.
- */
+   */
 /* #undef USING_PURIFY */
 
 /* Version number of package */
@@ -162,14 +162,15 @@
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */
 #if defined AC_APPLE_UNIVERSAL_BUILD
-#if defined __BIG_ENDIAN__
-#define WORDS_BIGENDIAN 1
-#endif
+# if defined __BIG_ENDIAN__
+#  define WORDS_BIGENDIAN 1
+# endif
 #else
-#ifndef WORDS_BIGENDIAN
+# ifndef WORDS_BIGENDIAN
 /* #  undef WORDS_BIGENDIAN */
+# endif
 #endif
-#endif
+
 
 #ifdef HAVE_HIDDEN_VISIBILITY_ATTRIBUTE
 #ifdef LIBFFI_ASM
@@ -179,7 +180,7 @@
 #define FFI_HIDDEN(name) .hidden name
 #endif
 #else
-#define FFI_HIDDEN __attribute__((visibility("hidden")))
+#define FFI_HIDDEN __attribute__ ((visibility ("hidden")))
 #endif
 #else
 #ifdef LIBFFI_ASM
@@ -188,3 +189,4 @@
 #define FFI_HIDDEN
 #endif
 #endif
+

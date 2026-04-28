@@ -12,13 +12,21 @@ filegroup(
     }),
 )
 
+genrule(
+    name = "libffi_patched_closures",
+    srcs = ["libffi/src/closures.c"],
+    outs = ["libffi/src/closures_patched.c"],
+    cmd = """sed 's/#  define FFI_MMAP_EXEC_WRIT 1/#  ifndef FFI_MMAP_EXEC_WRIT\\n#   define FFI_MMAP_EXEC_WRIT 1\\n#  endif/' $< > $@""",
+)
+
 cc_library(
     name = "libffi",
-    srcs = glob(
+    srcs = ["libffi/src/closures_patched.c"] + glob(
         ["libffi/src/*.c"],
         exclude = [
             "libffi/src/java_raw_api.c",
             "libffi/src/dlmalloc.c",
+            "libffi/src/closures.c",
         ],
     ) + select({
         "//:darwin_arm64": glob(
@@ -62,7 +70,10 @@ cc_library(
         "-O2",
         "-Wno-unknown-pragmas",
     ] + select({
-        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:linux": [
+            "-DFFI_MMAP_EXEC_WRIT=0",
+            "-D_GNU_SOURCE",
+        ],
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
         "//conditions:default": [],
     }),
@@ -377,6 +388,9 @@ cc_library(
             "glib/glib/gwin32.c",
             "glib/glib/win_iconv.c",
             "glib/glib/gutils-os2.c",
+            "glib/glib/gutilsprivate.c",
+            "glib/glib/gspawn-unsupported.c",
+            "glib/glib/gthread-posix.c",
         ],
     ) + [
         "libintl_stubs/intl_stubs.c",
@@ -389,6 +403,7 @@ cc_library(
     ]) + [
         "glib/glib/glib-visibility.h",
         "glib/glib/gthread-posix.c",
+        "glib/glib/gutilsprivate.c",
         "glib/glib/gversionmacros.h",
         "libintl_stubs/libintl.h",
         ":glib_generated_config",
@@ -926,6 +941,9 @@ cc_library(
             "glib/gio/gthreadedresolver.c",
             "glib/gio/gregistrysettingsbackend.c",
             "glib/gio/gwin32registrykey.c",
+            "glib/gio/gio-launch-desktop.c",
+            "glib/gio/gio-querymodules.c",
+            "glib/gio/gosxnetworkmonitor.c",
         ],
     ) + [
         ":generate_gdbus_daemon_sources",
@@ -933,7 +951,10 @@ cc_library(
         ":generate_xdp_dbus_sources",
     ] + [
         "glib/subprojects/gvdb/gvdb/gvdb-reader.c",
-    ],
+    ] + select({
+        "@platforms//os:macos": ["glib/gio/gosxnetworkmonitor.c"],
+        "//conditions:default": [],
+    }),
     hdrs = glob(["glib/gio/*.h"]) + [
         ":generate_gdbus_daemon_sources",
         ":generate_gio_enumtypes_h",
@@ -1063,6 +1084,119 @@ rust_library(
 )
 
 genrule(
+    name = "generate_libxml2_xmlversion_h",
+    srcs = ["libxml2/include/libxml/xmlversion.h.in"],
+    outs = ["libxml2/include/libxml/xmlversion.h"],
+    cmd = """sed \
+        -e 's/@VERSION@/2.13.5/g' \
+        -e 's/@LIBXML_VERSION_NUMBER@/20013005/g' \
+        -e 's/@LIBXML_VERSION_EXTRA@//g' \
+        -e 's/@WITH_THREADS@/1/g' \
+        -e 's/@WITH_THREAD_ALLOC@/0/g' \
+        -e 's/@WITH_OUTPUT@/1/g' \
+        -e 's/@WITH_PUSH@/1/g' \
+        -e 's/@WITH_READER@/1/g' \
+        -e 's/@WITH_PATTERN@/1/g' \
+        -e 's/@WITH_WRITER@/1/g' \
+        -e 's/@WITH_SAX1@/1/g' \
+        -e 's/@WITH_HTTP@/0/g' \
+        -e 's/@WITH_VALID@/1/g' \
+        -e 's/@WITH_HTML@/1/g' \
+        -e 's/@WITH_C14N@/1/g' \
+        -e 's/@WITH_CATALOG@/1/g' \
+        -e 's/@WITH_WINPATH@/0/g' \
+        -e 's/@WITH_XPATH@/1/g' \
+        -e 's/@WITH_XPTR@/1/g' \
+        -e 's/@WITH_XINCLUDE@/1/g' \
+        -e 's/@WITH_ICONV@/0/g' \
+        -e 's/@WITH_ICU@/0/g' \
+        -e 's/@WITH_ISO8859X@/1/g' \
+        -e 's/@WITH_DEBUG@/0/g' \
+        -e 's/@WITH_REGEXPS@/1/g' \
+        -e 's/@WITH_RELAXNG@/1/g' \
+        -e 's/@WITH_SCHEMAS@/1/g' \
+        -e 's/@WITH_SCHEMATRON@/1/g' \
+        -e 's/@WITH_MODULES@/0/g' \
+        -e 's/@MODULE_EXTENSION@//g' \
+        -e 's/@WITH_ZLIB@/1/g' \
+        $< > $@""",
+)
+
+genrule(
+    name = "generate_libxml2_config_h",
+    srcs = ["libxml2/config.h.cmake.in"],
+    outs = ["libxml2/config.h"],
+    cmd = """sed -e 's/#cmakedefine01 HAVE_DECL_GETENTROPY/#define HAVE_DECL_GETENTROPY 1/g' -e 's/#cmakedefine01 HAVE_DECL_GLOB/#define HAVE_DECL_GLOB 1/g' -e 's/#cmakedefine01 HAVE_DECL_MMAP/#define HAVE_DECL_MMAP 1/g' -e 's/#cmakedefine HAVE_FUNC_ATTRIBUTE_DESTRUCTOR 1/#define HAVE_FUNC_ATTRIBUTE_DESTRUCTOR 1/g' -e 's/#cmakedefine HAVE_DLOPEN 1/#define HAVE_DLOPEN 1/g' -e 's/#cmakedefine HAVE_LIBHISTORY.*$$/\\/\\/ HAVE_LIBHISTORY disabled/g' -e 's/#cmakedefine HAVE_LIBREADLINE.*$$/\\/\\/ HAVE_LIBREADLINE disabled/g' -e 's/#cmakedefine HAVE_SHLLOAD.*$$/\\/\\/ HAVE_SHLLOAD disabled/g' -e 's/#cmakedefine HAVE_STDINT_H 1/#define HAVE_STDINT_H 1/g' -e 's|#cmakedefine XML_SYSCONFDIR "@XML_SYSCONFDIR@"|#define XML_SYSCONFDIR "/etc"|g' -e 's/#cmakedefine XML_THREAD_LOCAL @XML_THREAD_LOCAL@/#define XML_THREAD_LOCAL _Thread_local/g' $< > $@""",
+)
+
+cc_library(
+    name = "libxml2_objects",
+    srcs = glob(
+        ["libxml2/*.c"],
+        exclude = [
+            "libxml2/xmllint.c",
+            "libxml2/xmlcatalog.c",
+            "libxml2/lintmain.c",
+            "libxml2/c14n.c",
+            "libxml2/runtest.c",
+            "libxml2/testapi.c",
+            "libxml2/testchar.c",
+            "libxml2/testdict.c",
+            "libxml2/testrecurse.c",
+            "libxml2/runsuite.c",
+            "libxml2/runxmlconf.c",
+            "libxml2/testModule.c",
+            "libxml2/testcatalog.c",
+            "libxml2/testparser.c",
+            "libxml2/testlimits.c",
+        ],
+    ),
+    hdrs = [
+        "libxml2/config.h",
+        "libxml2/include/libxml/xmlversion.h",
+        "libxml2/libxml.h",
+        "libxml2/timsort.h",
+    ] + glob([
+        "libxml2/codegen/*.inc",
+        "libxml2/include/libxml/*.h",
+        "libxml2/include/private/*.h",
+    ]),
+    copts = [
+        "-DLIBXML_STATIC",
+        "-Wno-unknown-pragmas",
+        "-fvisibility=hidden",
+        "-fno-strict-aliasing",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    includes = [
+        "libxml2",
+        "libxml2/include",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lm",
+            "-lpthread",
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-liconv",
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [":zlib"],
+)
+
+genrule(
     name = "generate_arvapi_h",
     srcs = ["aravis_generated_build_files/arvapi.h"],
     outs = ["aravis/src/arvapi.h"],
@@ -1135,6 +1269,10 @@ cc_library(
             "aravis/src/arvv4l2device.c",  # V4L2
             "aravis/src/arvv4l2stream.c",  # V4L2
             "aravis/src/arvv4l2misc.c",  # V4L2
+            "aravis/src/arvcameratest.c",  # test binary
+            "aravis/src/arvtool.c",  # CLI tool
+            "aravis/src/arvtest.c",  # test binary
+            "aravis/src/arvfakegvcamera.c",  # test binary
         ],
     ) + [
         ":generate_arvenumtypes_c",
@@ -1166,11 +1304,9 @@ cc_library(
     includes = [
         "aravis/src",
     ],
-    linkopts = [
-        "-lxml2",
-        "-Wl,-fatal_warnings",
-    ] + select({
+    linkopts = select({
         "@platforms//os:linux": [
+            "-Wl,-fatal-warnings",
             "-lrt",
             "-lm",
             "-lresolv",
@@ -1178,8 +1314,7 @@ cc_library(
             "-Wl,--gc-sections",
         ],
         "@platforms//os:macos": [
-            # I don't think this link flag is needed anymore but if there are issues add it back :)
-            # "-liconv",
+            "-Wl,-fatal_warnings",
             "-framework",
             "CoreFoundation",
             "-framework",
@@ -1195,6 +1330,7 @@ cc_library(
         ":glib_objects",
         ":gmodule",
         ":gobject",
+        ":libxml2_objects",
     ],
 )
 
