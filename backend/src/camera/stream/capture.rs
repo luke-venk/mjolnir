@@ -136,8 +136,8 @@ pub fn run_capture_thread(
                 if !data.is_empty() {
                     let frame = FrameData {
                         pixels: data,
-                        width: resolution.dimensions().0 as u32,
-                        height: resolution.dimensions().1 as u32,
+                        width: resolution.dimensions().0,
+                        height: resolution.dimensions().1,
                         received_at_ns,
                     };
 
