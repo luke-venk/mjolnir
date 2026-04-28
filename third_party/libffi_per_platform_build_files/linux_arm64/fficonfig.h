@@ -14,7 +14,7 @@
 #define FFI_EXEC_STATIC_TRAMP 1
 
 /* Cannot use PROT_EXEC on this target, so, we revert to alternative means */
-/* #undef FFI_EXEC_TRAMPOLINE_TABLE */
+#undef FFI_EXEC_TRAMPOLINE_TABLE
 
 /* Define this if you want to enable pax emulated trampolines (experimental)
  */
