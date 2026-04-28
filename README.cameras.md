@@ -50,13 +50,15 @@ bazel run //backend:stream -- --camera <camera> --resolution <resolution> --expo
 ```
 
 Example for Camera 224:
+
 ```
-bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
+bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution quarter --exposure-us 10000 --frame-rate-hz 10
 ```
 
 Example for Camera 242:
+
 ```
-bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 10000 --frame-rate-hz 10
+bazel run //backend:stream -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution quarter --exposure-us 10000 --frame-rate-hz 10
 ```
 
 ## Record from One Camera
@@ -66,13 +68,15 @@ This program just records footage from one camera and writes to disk.
 To run this program, run the following command:
 
 Example for Camera 224:
+
 ```
-bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution 720p --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out/ --max-duration-s 5 --throwaway-duration-s 5
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-224300917" --resolution full --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out/ --max-duration-s 5 --throwaway-duration-s 5
 ```
 
 Example for Camera 242:
+
 ```
-bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 720p --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out/ --max-duration-s 5 --throwaway-duration-s 5
+bazel run //backend:record_from_one -- --camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution full --exposure-us 10000 --frame-rate-hz 2 --output-dir ~/Downloads/camera_out/ --max-duration-s 5 --throwaway-duration-s 5
 ```
 
 ## Record from Both Cameras

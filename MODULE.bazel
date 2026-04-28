@@ -313,6 +313,10 @@ crate.spec(
     version = "2.0.113",
 )
 crate.spec(
+    package = "tiff",
+    version = "0.11.3",
+)
+crate.spec(
     features = ["full"],
     package = "tokio",
     version = "1.50.0",
