@@ -3,6 +3,7 @@ use crate::camera::RecordWithBothCamerasArgs;
 use crate::camera::RecordWithOneCameraArgs;
 use crate::camera::StreamFromCamerasArgs;
 use clap::ValueEnum;
+use std::fmt;
 
 /// Configuration for what specs we want to use while recording.
 #[derive(Debug, Clone)]
@@ -12,7 +13,7 @@ pub struct CameraIngestConfig {
     // Core capture settings.
     pub exposure_time_us: f64,
     pub frame_rate_hz: f64,
-    pub resolution: Resolution,
+    pub resolution: AtlasATP124SResolution,
 
     // System-level config.
     pub num_buffers: usize,
@@ -76,40 +77,48 @@ impl CameraIngestConfig {
     }
 }
 
-/// Different resolutions we might want to record with.
-#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
-pub enum Resolution {
-    #[value(name = "720p")]
-    HD,
-    #[value(name = "1080p")]
-    FullHD,
-    #[value(name = "4k")]
-    UHD4K,
+/// Different resolutions we might want to record with for the LUCID
+/// Vision Labs Atlas ATP124S cameras.
+/// See https://www.edmundoptics.com/p/lucid-vision-labst-atlas-atp124s-mc-sony-imx545-123mp-ip67-monochrome-camera/49821/.
+#[derive(Debug, Clone, Copy, ValueEnum, Eq, PartialEq, Hash, Default)]
+pub enum AtlasATP124SResolution {
+    #[value(name = "quarter")]
+    Quarter,
+
+    #[value(name = "half")]
+    Half,
+
+    #[value(name = "full")]
+    #[default]
+    Full,
 }
 
-impl Resolution {
-    pub fn dimensions(&self) -> (i32, i32) {
-        // Check https://www.edmundoptics.com/p/lucid-vision-labst-atlas-atp124s-mc-sony-imx545-123mp-ip67-monochrome-camera/49821/.
+impl AtlasATP124SResolution {
+    /// Note that the dimensions are width x height. This should not be confused
+    /// with rows x cols, which is in fact the opposite.
+    pub fn dimensions(&self) -> (u32, u32) {
         match self {
-            Resolution::HD => (1024, 750),
-            Resolution::FullHD => (2048, 1500),
-            Resolution::UHD4K => (4096, 3000),
+            AtlasATP124SResolution::Quarter => (1024, 750),
+            AtlasATP124SResolution::Half => (2048, 1500),
+            AtlasATP124SResolution::Full => (4096, 3000),
         }
     }
 
     pub fn binning(&self) -> i32 {
         match self {
-            Resolution::HD => 4,
-            Resolution::FullHD => 2,
-            Resolution::UHD4K => 1,
+            AtlasATP124SResolution::Quarter => 4,
+            AtlasATP124SResolution::Half => 2,
+            AtlasATP124SResolution::Full => 1,
         }
     }
+}
 
-    pub fn to_string(&self) -> String {
+impl fmt::Display for AtlasATP124SResolution {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Resolution::HD => "720p".to_string(),
-            Resolution::FullHD => "1080p".to_string(),
-            Resolution::UHD4K => "4k".to_string(),
+            AtlasATP124SResolution::Quarter => write!(f, "quarter"),
+            AtlasATP124SResolution::Half => write!(f, "half"),
+            AtlasATP124SResolution::Full => write!(f, "full"),
         }
     }
 }
