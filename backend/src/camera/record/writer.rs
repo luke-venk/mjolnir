@@ -34,8 +34,8 @@ pub fn sanitize_path_name(value: &str) -> String {
 pub struct Metadata {
     pub camera_id: String,
     pub frame_index: usize,
-    pub width: i32,
-    pub height: i32,
+    pub width: u32,
+    pub height: u32,
     pub payload_bytes: usize,
     pub system_timestamp_ns: u64,
     pub buffer_timestamp_ns: u64,
