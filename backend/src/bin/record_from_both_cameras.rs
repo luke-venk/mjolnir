@@ -15,29 +15,25 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Tool for users to record footage from both cameras using Aravis and
-/// store the frames to disk using the command line.
+/// store the frames to disk using the command-line.
+
 pub fn main() {
     println!("------------------------");
     println!("RECORDING FROM BOTH CAMERAS...");
     println!("------------------------\n");
 
+    // Store command line arguments for recording.
     let args: RecordWithBothCamerasArgs = RecordWithBothCamerasArgs::parse();
     args.common_args
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
-    let enable_ptp = args.common_args.enable_ptp;
-    let max_frames = args.common_args.max_frames;
-    let max_duration_s = args.common_args.max_duration_s;
-    let throwaway_duration_s = args.common_args.throwaway_duration_s;
-    let host_interface_addr = if enable_ptp {
-        let ip = resolve_iface_to_ip(args.interface.as_str()).unwrap_or_else(|err| {
-            panic!("failed to resolve interface: {:?} (pretty: {})", err, err);
-        });
-        Some(SocketAddr::new(ip, 0))
-    } else {
-        None
-    };
+    let ip = resolve_iface_to_ip(args.interface.as_str()).unwrap_or_else(|e| {
+        panic!("failed to resolve interface: {:?} (pretty: {})", e, e);
+    });
+    let addr = SocketAddr::new(ip, 0);
 
+    // Create output directory based on command-line argument, with timestamp
+    // so each recording session is stored in its own directory.
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Error: Failed to get system time.")
@@ -49,6 +45,8 @@ pub fn main() {
     // Find all cameras on the LAN.
     let aravis = initialize_aravis();
     let camera_ids = get_camera_ids(&aravis);
+
+    // Assert that the number of cameras connected is 2.
     if camera_ids.len() != 2 {
         eprintln!(
             "The number of cameras found on the network is {}, not 2. Please try again...",
@@ -57,43 +55,53 @@ pub fn main() {
         return;
     }
 
-    let left_config = CameraIngestConfig::from_record_both_args(camera_ids[0].clone(), args.clone());
-    left_config
+    // Parse command line arguments into camera ingest configs for each camera.
+    let camera_ingest_config1: CameraIngestConfig =
+        CameraIngestConfig::from_record_both_args(camera_ids[0].clone(), args.clone());
+    camera_ingest_config1
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
-    let right_config = CameraIngestConfig::from_record_both_args(camera_ids[1].clone(), args.clone());
-    right_config
+    let camera_ingest_config2: CameraIngestConfig =
+        CameraIngestConfig::from_record_both_args(camera_ids[1].clone(), args.clone());
+    camera_ingest_config2
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
-
     write_session_manifest(
         &output_base_dir,
         &SessionManifest {
-            left_camera_id: left_config.camera_id.clone(),
-            right_camera_id: right_config.camera_id.clone(),
+            left_camera_id: camera_ingest_config1.camera_id.clone(),
+            right_camera_id: camera_ingest_config2.camera_id.clone(),
         },
     );
 
+    // Create crossbeam channel so capture thread can send frames to
+    // write thread. Have a clone of the same sender, as well as the
+    // original sender, send to the receiver.
+    let (frame_tx1, frame_rx) = crossbeam::channel::bounded::<Frame>(100);
+    let frame_tx2 = frame_tx1.clone();
+
+    // Shared shutdown flag set by Ctrl+C handler.
     let shutdown = Arc::new(AtomicBool::new(false));
     let shutdown_clone1 = Arc::clone(&shutdown);
     let shutdown_clone2 = Arc::clone(&shutdown);
 
+    // So we can make capture threads wait until all have PTP enabled, and cancel a wait in the event of SIGINT
     let ptp_enable_barrier = CancelableBarrier::new(2);
     let ptp_enable_barrier_1 = ptp_enable_barrier.clone();
     let ptp_enable_barrier_2 = ptp_enable_barrier.clone();
-
+    // So we can make capture threads wait until all have applied their PTP configuration settings, and cancel a wait in the event of SIGINT
     let ptp_configure_barrier = CancelableBarrier::new(2);
     let ptp_configure_barrier_1 = ptp_configure_barrier.clone();
     let ptp_configure_barrier_2 = ptp_configure_barrier.clone();
-
+    // So we can make capture threads wait until all have achieved PTP lock, and cancel a wait in the event of SIGINT
     let ptp_lock_barrier = CancelableBarrier::new(2);
     let ptp_lock_barrier_1 = ptp_lock_barrier.clone();
     let ptp_lock_barrier_2 = ptp_lock_barrier.clone();
-
+    // So we can make capture threads wait until all have configuration beyond PTP (like exposure, resolution, etc), and cancel a wait in the event of SIGINT
     let configuration_barrier = CancelableBarrier::new(2);
     let configuration_barrier_1 = configuration_barrier.clone();
     let configuration_barrier_2 = configuration_barrier.clone();
-
+    // So we can make capture threads wait until all have started acquisition, and cancel a wait in the event of SIGINT
     let acquisition_barrier = CancelableBarrier::new(2);
     let acquisition_barrier_1 = acquisition_barrier.clone();
     let acquisition_barrier_2 = acquisition_barrier.clone();
@@ -109,55 +117,66 @@ pub fn main() {
     })
     .expect("Error setting Ctrl+C handler.");
 
-    let (frame_tx1, frame_rx) = crossbeam::channel::bounded::<Frame>(100);
-    let frame_tx2 = frame_tx1.clone();
-
-    let maybe_ptp_config_1 = enable_ptp.then_some(PtpConfig {
+    let ptp_config_1 = PtpConfig {
         is_slave: false,
         enable_barrier: ptp_enable_barrier_1,
         configure_barrier: ptp_configure_barrier_1,
         lock_barrier: ptp_lock_barrier_1,
-    });
-    let maybe_ptp_config_2 = enable_ptp.then_some(PtpConfig {
+    };
+    let ptp_config_2 = PtpConfig {
         is_slave: true,
         enable_barrier: ptp_enable_barrier_2,
         configure_barrier: ptp_configure_barrier_2,
         lock_barrier: ptp_lock_barrier_2,
-    });
+    };
 
+    // Spawn 1st recording thread.
     let record_handle_1 = thread::spawn(move || {
+        let ptp_config = if args.common_args.enable_ptp {
+            Some(ptp_config_1)
+        } else {
+            None
+        };
         run_capture_thread(
             Some(output_base_dir),
-            &left_config,
+            &camera_ingest_config1,
             frame_tx1,
-            max_frames,
-            max_duration_s,
-            throwaway_duration_s,
-            shutdown_clone1,
-            host_interface_addr,
+            args.common_args.max_frames,
+            args.common_args.max_duration_s,
+            args.common_args.throwaway_duration_s,
+            Arc::clone(&shutdown_clone1),
+            Some(addr),
             Some(configuration_barrier_1),
             Some(acquisition_barrier_1),
-            maybe_ptp_config_1,
+            ptp_config,
         );
     });
 
+    // Spawn 2nd recording thread.
     let record_handle_2 = thread::spawn(move || {
+        let ptp_config = if args.common_args.enable_ptp {
+            Some(ptp_config_2)
+        } else {
+            None
+        };
         run_capture_thread(
             Some(output_base_dir_clone),
-            &right_config,
+            &camera_ingest_config2,
             frame_tx2,
-            max_frames,
-            max_duration_s,
-            throwaway_duration_s,
-            shutdown_clone2,
+            args.common_args.max_frames,
+            args.common_args.max_duration_s,
+            args.common_args.throwaway_duration_s,
+            Arc::clone(&shutdown_clone2),
             None,
             Some(configuration_barrier_2),
             Some(acquisition_barrier_2),
-            maybe_ptp_config_2,
+            ptp_config,
         );
     });
 
+    // Spawn write thread.
     let writer_handle = thread::spawn(move || {
+        // Write incoming frames.
         for frame in frame_rx {
             let output_camera_dir = frame
                 .output_camera_dir
@@ -172,9 +191,13 @@ pub fn main() {
         }
     });
 
-    for handle in [record_handle_1, record_handle_2] {
+    // Prevent main thread from exiting until other threads have exited.
+    let record_handles = [record_handle_1, record_handle_2];
+    for handle in record_handles {
         handle.join().expect("Error: Recorder thread panicked.");
     }
+
+    // Prevent main thread from exiting before writing thread finishes.
     writer_handle
         .join()
         .expect("Error: Writer thread panicked.");

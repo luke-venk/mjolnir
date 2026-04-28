@@ -1,8 +1,9 @@
+pub mod frame;
 pub mod pipeline;
 pub mod pipeline_stage;
+#[cfg(test)]
+pub mod test_utils;
 
-pub use pipeline::{
-    Pipeline, start_camera_pipeline, start_recorded_footage_pipelines,
-    start_recording_camera_pipelines,
-};
+pub use frame::{CameraId, Context, Frame};
+pub use pipeline::{Pipeline, start_recorded_footage_pipelines, start_recording_camera_pipelines};
 pub use pipeline_stage::PipelineStage;

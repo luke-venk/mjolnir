@@ -1,9 +1,8 @@
-use crate::schemas::{Context, Frame};
+use crate::pipeline::Frame;
 
 pub fn undistortion(frame: Frame) -> Frame {
-    // TODO: implement actual logic
+    // TODO: Currently just passes the frame through this stage untouched.
+    // Please implement the actual undistortion logic.
 
-    let data = frame.data();
-    let new_timestamp = frame.context().timestamp() + 1;
-    Frame::new(data.to_vec(), Context::new(new_timestamp))
+    frame
 }

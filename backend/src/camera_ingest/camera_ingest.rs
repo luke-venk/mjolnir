@@ -8,21 +8,23 @@ use std::{
 
 use aravis::{BufferStatus, CameraExt, StreamExt};
 use crossbeam::channel::{Receiver, RecvTimeoutError, Sender};
+
 use crate::camera::CameraIngestConfig;
 use crate::camera::aravis_utils::{
     configure_camera, create_camera, create_stream_and_allocate_buffers, initialize_aravis,
 };
 use crate::camera::record::writer::Frame as RecordedFrame;
 use crate::camera_ingest::camera_ingest_helpers::{buffer_to_frame, forward_recorded_frame};
-use crate::schemas::Frame as PipelineFrame;
+use crate::pipeline::{CameraId, Frame as PipelineFrame};
 
-// Ingests frames straight from the cameras using the GigEVision API and sends them into the pipeline 
-// if we wanted it straight from recording (if we wanted to send frames straight from recording)
-pub fn ingest_frames(tx: Sender<PipelineFrame>, config: CameraIngestConfig) {
+// Ingests frames straight from the cameras using the GigEVision API and sends
+// them into the pipeline.
+pub fn ingest_frames(tx: Sender<PipelineFrame>, camera_id: CameraId, config: CameraIngestConfig) {
     config
         .validate()
         .unwrap_or_else(|err| panic!("invalid camera ingest config: {err}"));
 
+    let resolution = config.resolution.dimensions();
     let mut frames_sent = 0usize;
 
     initialize_aravis();
@@ -42,7 +44,7 @@ pub fn ingest_frames(tx: Sender<PipelineFrame>, config: CameraIngestConfig) {
 
         match buffer.status() {
             BufferStatus::Success => {
-                let frame = buffer_to_frame(&buffer);
+                let frame = buffer_to_frame(&buffer, camera_id, resolution);
                 if frame.data().is_empty() {
                     stream.push_buffer(buffer);
                     continue;
@@ -52,8 +54,10 @@ pub fn ingest_frames(tx: Sender<PipelineFrame>, config: CameraIngestConfig) {
                     stream.push_buffer(buffer);
                     break;
                 }
-                println!("camera_ingest: sent live frame {} into pipeline", frames_sent);
-
+                println!(
+                    "camera_ingest: sent live frame {} into pipeline",
+                    frames_sent
+                );
                 frames_sent += 1;
             }
             status => {
@@ -111,7 +115,7 @@ mod tests {
 
     use super::run_recording_ingest;
     use crate::camera::record::writer::{Frame as RecordedFrame, Metadata};
-    use crate::schemas::Frame as PipelineFrame;
+    use crate::pipeline::Frame as PipelineFrame;
 
     #[test]
     fn recording_ingest_routes_frames_by_camera() {
@@ -203,6 +207,8 @@ mod tests {
 
         shutdown.store(true, Ordering::SeqCst);
 
-        handle.join().expect("recording ingest should stop on shutdown");
+        handle
+            .join()
+            .expect("recording ingest should stop on shutdown");
     }
 }

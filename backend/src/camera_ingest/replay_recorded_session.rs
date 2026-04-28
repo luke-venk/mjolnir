@@ -1,17 +1,17 @@
+use crate::camera::record::writer::{
+    Frame as RecordedFrame, SESSION_MANIFEST_FILE_NAME, SessionManifest, read_recorded_frame,
+    read_session_manifest,
+};
+use crate::camera_ingest::camera_ingest_helpers::{
+    forward_recorded_frame, recorded_frame_sort_key,
+};
+use crate::pipeline::Frame as PipelineFrame;
+use crossbeam::channel::Sender;
 use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
 };
-use crossbeam::channel::Sender;
-use crate::camera::record::writer::{
-    Frame as RecordedFrame, SessionManifest, SESSION_MANIFEST_FILE_NAME,
-    read_recorded_frame, read_session_manifest,
-};
-use crate::camera_ingest::camera_ingest_helpers::{
-    forward_recorded_frame, recorded_frame_sort_key,
-};
-use crate::schemas::Frame as PipelineFrame;
 
 #[derive(Debug)]
 struct LoadedRecordedSession {
@@ -132,10 +132,7 @@ fn resolve_camera_mapping(
         return (manifest.left_camera_id, manifest.right_camera_id);
     }
 
-    println!(
-        "camera_ingest: no {} found",
-        SESSION_MANIFEST_FILE_NAME
-    );
+    println!("camera_ingest: no {} found", SESSION_MANIFEST_FILE_NAME);
     let mut ids = camera_ids.into_iter().collect::<Vec<_>>();
     ids.sort();
     (ids[0].clone(), ids[1].clone())
@@ -150,9 +147,9 @@ mod tests {
 
     use crossbeam::channel::bounded;
 
-    use super::replay_recorded_session;
-    use crate::camera::record::writer::{Metadata, SessionManifest, SESSION_MANIFEST_FILE_NAME};
-    use crate::schemas::Frame as PipelineFrame;
+    use super::{load_recorded_session, replay_recorded_session};
+    use crate::camera::record::writer::{Metadata, SESSION_MANIFEST_FILE_NAME, SessionManifest};
+    use crate::pipeline::{CameraId, Frame as PipelineFrame};
 
     #[test]
     fn replay_recorded_session_routes_frames_using_session_manifest() {
@@ -215,10 +212,119 @@ mod tests {
 
         assert_eq!(left_frames.len(), 1);
         assert_eq!(left_frames[0].data(), &[1, 2, 3, 4]);
+        assert_eq!(left_frames[0].context().camera_id(), CameraId::FieldLeft);
         assert_eq!(left_frames[0].context().timestamp(), 300);
         assert_eq!(right_frames.len(), 1);
         assert_eq!(right_frames[0].data(), &[5, 6, 7, 8]);
+        assert_eq!(right_frames[0].context().camera_id(), CameraId::FieldRight);
         assert_eq!(right_frames[0].context().timestamp(), 320);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn load_recorded_session_sorts_by_current_timestamp_rules_without_renumbering_indices() {
+        let temp_dir = env::temp_dir().join(format!(
+            "mjolnir_replay_order_test_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        let left_dir = temp_dir.join("camera-b");
+        let right_dir = temp_dir.join("camera-a");
+        fs::create_dir_all(&left_dir).expect("create left test dir");
+        fs::create_dir_all(&right_dir).expect("create right test dir");
+        fs::write(
+            temp_dir.join(SESSION_MANIFEST_FILE_NAME),
+            serde_json::to_vec_pretty(&SessionManifest {
+                left_camera_id: "camera-b".to_string(),
+                right_camera_id: "camera-a".to_string(),
+            })
+            .expect("serialize session manifest"),
+        )
+        .expect("write session manifest");
+
+        // Intentionally skip frame_index 0 and use mixed timestamp sources to
+        // prove we preserve original indices while sorting by the current
+        // timestamp-first replay rules.
+        write_test_recorded_frame(
+            &left_dir,
+            &Metadata {
+                camera_id: "camera-b".to_string(),
+                frame_index: 1,
+                width: 4,
+                height: 1,
+                payload_bytes: 4,
+                system_timestamp_ns: 300,
+                buffer_timestamp_ns: 200,
+                frame_id: 901,
+            },
+            &[1, 1, 1, 1],
+        );
+        write_test_recorded_frame(
+            &right_dir,
+            &Metadata {
+                camera_id: "camera-a".to_string(),
+                frame_index: 4,
+                width: 4,
+                height: 1,
+                payload_bytes: 4,
+                system_timestamp_ns: 500,
+                buffer_timestamp_ns: 150,
+                frame_id: 902,
+            },
+            &[2, 2, 2, 2],
+        );
+        write_test_recorded_frame(
+            &left_dir,
+            &Metadata {
+                camera_id: "camera-b".to_string(),
+                frame_index: 9,
+                width: 4,
+                height: 1,
+                payload_bytes: 4,
+                system_timestamp_ns: 250,
+                buffer_timestamp_ns: 0,
+                frame_id: 903,
+            },
+            &[3, 3, 3, 3],
+        );
+        write_test_recorded_frame(
+            &right_dir,
+            &Metadata {
+                camera_id: "camera-a".to_string(),
+                frame_index: 8,
+                width: 4,
+                height: 1,
+                payload_bytes: 4,
+                system_timestamp_ns: 0,
+                buffer_timestamp_ns: 0,
+                frame_id: 260,
+            },
+            &[4, 4, 4, 4],
+        );
+
+        let session = load_recorded_session(&temp_dir);
+        let ordered_indices = session
+            .frames
+            .iter()
+            .map(|frame| (frame.metadata.camera_id.clone(), frame.metadata.frame_index))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            ordered_indices,
+            vec![
+                ("camera-a".to_string(), 4),
+                ("camera-b".to_string(), 1),
+                ("camera-b".to_string(), 9),
+                ("camera-a".to_string(), 8),
+            ]
+        );
+        assert_eq!(session.frames[0].metadata.buffer_timestamp_ns, 150);
+        assert_eq!(session.frames[1].metadata.buffer_timestamp_ns, 200);
+        assert_eq!(session.frames[2].metadata.system_timestamp_ns, 250);
+        assert_eq!(session.frames[3].metadata.frame_id, 260);
 
         let _ = fs::remove_dir_all(temp_dir);
     }

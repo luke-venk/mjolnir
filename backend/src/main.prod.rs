@@ -1,15 +1,11 @@
 use axum::Router;
 use axum_embed::ServeEmbed;
+#[cfg(feature = "real_cameras")]
+use backend_lib::camera::parse_real_backend_args;
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
-use backend_lib::camera::aravis_utils::initialize_aravis;
-#[cfg(feature = "real_cameras")]
-use backend_lib::camera::discovery::get_camera_ids;
-#[cfg(feature = "real_cameras")]
-use backend_lib::camera::{CameraIngestConfig, parse_real_backend_args};
-#[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::{start_recorded_footage_pipelines, start_recording_camera_pipelines};
-use backend_lib::server::{create_api_router, start_server, ThrowSource};
+use backend_lib::pipeline::start_recorded_footage_pipelines;
+use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use rust_embed::Embed;
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
@@ -53,33 +49,14 @@ async fn main() {
     let args = parse_real_backend_args();
     args.validate().unwrap_or_else(|err| panic!("{err}"));
     let rolling_buffer_size: usize = 10;
-
-    if let Some(footage_dir) = args.feed_footage_dir {
-        println!(
-            "Starting real prod backend in recorded-footage replay mode from {}.",
-            footage_dir.display()
-        );
-        let _ = start_recorded_footage_pipelines(footage_dir, rolling_buffer_size);
-    } else {
-        // Start the 2 camera-ingest + pipeline flows (one for each camera).
-        let aravis = initialize_aravis();
-        let camera_ids = get_camera_ids(&aravis);
-        assert_eq!(
-            camera_ids.len(),
-            2,
-            "expected exactly 2 cameras for real prod mode, found {}",
-            camera_ids.len()
-        );
-
-        let left_config = CameraIngestConfig::from_real_args(camera_ids[0].clone(), &args);
-        let right_config = CameraIngestConfig::from_real_args(camera_ids[1].clone(), &args);
-        let _ = start_recording_camera_pipelines(
-            args.interface.as_deref(),
-            left_config,
-            right_config,
-            rolling_buffer_size,
-        );
-    }
+    let footage_dir = args
+        .feed_footage_dir
+        .expect("real prod mode now requires --feed-footage-dir");
+    println!(
+        "Starting real prod backend in recorded-footage replay mode from {}.",
+        footage_dir.display()
+    );
+    let _ = start_recorded_footage_pipelines(footage_dir, rolling_buffer_size);
 
     // Build the Axum router.
     let app = create_prod_app(ThrowSource::Camera);

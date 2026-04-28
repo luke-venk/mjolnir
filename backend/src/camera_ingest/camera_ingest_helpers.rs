@@ -4,10 +4,14 @@ use aravis::Buffer;
 
 use crate::camera::aravis_utils::copy_buffer_bytes;
 use crate::camera::record::writer::Frame as RecordedFrame;
-use crate::schemas::{Context, Frame as PipelineFrame};
+use crate::pipeline::{CameraId, Context, Frame as PipelineFrame};
 
 // Converts one successful Aravis buffer into the pipeline's frame type.
-pub fn buffer_to_frame(buffer: &Buffer) -> PipelineFrame {
+pub fn buffer_to_frame(
+    buffer: &Buffer,
+    camera_id: CameraId,
+    resolution: (u32, u32),
+) -> PipelineFrame {
     let data = copy_buffer_bytes(buffer);
     let timestamp = if buffer.system_timestamp() != 0 {
         buffer.system_timestamp()
@@ -17,11 +21,15 @@ pub fn buffer_to_frame(buffer: &Buffer) -> PipelineFrame {
         buffer.frame_id()
     };
 
-    PipelineFrame::new(data, Context::new(timestamp))
+    PipelineFrame::new(
+        data.into_boxed_slice(),
+        resolution,
+        Context::new(camera_id, timestamp),
+    )
 }
 
 // Converts one recorded frame payload into the pipeline's frame type.
-pub fn recorded_frame_to_frame(frame: RecordedFrame) -> PipelineFrame {
+pub fn recorded_frame_to_frame(frame: RecordedFrame, camera_id: CameraId) -> PipelineFrame {
     let timestamp = if frame.metadata.system_timestamp_ns != 0 {
         frame.metadata.system_timestamp_ns
     } else if frame.metadata.buffer_timestamp_ns != 0 {
@@ -29,8 +37,13 @@ pub fn recorded_frame_to_frame(frame: RecordedFrame) -> PipelineFrame {
     } else {
         frame.metadata.frame_id
     };
+    let resolution = (frame.metadata.width, frame.metadata.height);
 
-    PipelineFrame::new(frame.bytes, Context::new(timestamp))
+    PipelineFrame::new(
+        frame.bytes.into_boxed_slice(),
+        resolution,
+        Context::new(camera_id, timestamp),
+    )
 }
 
 pub fn recorded_frame_sort_key(frame: &RecordedFrame) -> (u64, u64, String, usize) {
@@ -64,12 +77,19 @@ pub fn forward_recorded_frame(
 ) -> bool {
     let source_camera_id = recorded_frame.metadata.camera_id.clone();
     let frame_index = recorded_frame.metadata.frame_index;
-    let pipeline_frame = recorded_frame_to_frame(recorded_frame);
-
     let (send_result, destination) = if source_camera_id == left_camera_id {
-        (left_tx.send(pipeline_frame), "left")
+        (
+            left_tx.send(recorded_frame_to_frame(recorded_frame, CameraId::FieldLeft)),
+            "left",
+        )
     } else if source_camera_id == right_camera_id {
-        (right_tx.send(pipeline_frame), "right")
+        (
+            right_tx.send(recorded_frame_to_frame(
+                recorded_frame,
+                CameraId::FieldRight,
+            )),
+            "right",
+        )
     } else {
         eprintln!("Received frame for unexpected camera {}.", source_camera_id);
         return true;
@@ -91,6 +111,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::camera::record::writer::{Frame as RecordedFrame, Metadata};
+    use crate::pipeline::CameraId;
 
     use crossbeam::channel::bounded;
 
@@ -114,9 +135,11 @@ mod tests {
             },
         };
 
-        let converted = recorded_frame_to_frame(frame);
+        let converted = recorded_frame_to_frame(frame, CameraId::FieldLeft);
 
         assert_eq!(converted.data(), &[1, 2, 3]);
+        assert_eq!(converted.raw_full_resolution(), (3, 1));
+        assert_eq!(converted.context().camera_id(), CameraId::FieldLeft);
         assert_eq!(converted.context().timestamp(), 123);
     }
 
@@ -138,7 +161,7 @@ mod tests {
             },
         };
 
-        let converted = recorded_frame_to_frame(frame);
+        let converted = recorded_frame_to_frame(frame, CameraId::FieldRight);
 
         assert_eq!(converted.context().timestamp(), 456);
     }
@@ -161,7 +184,7 @@ mod tests {
             },
         };
 
-        let converted = recorded_frame_to_frame(frame);
+        let converted = recorded_frame_to_frame(frame, CameraId::FieldLeft);
 
         assert_eq!(converted.context().timestamp(), 789);
     }
@@ -210,13 +233,8 @@ mod tests {
         let (left_tx, left_rx) = bounded(1);
         let (right_tx, right_rx) = bounded(1);
 
-        let forwarded = forward_recorded_frame(
-            frame,
-            "left-camera",
-            "right-camera",
-            &left_tx,
-            &right_tx,
-        );
+        let forwarded =
+            forward_recorded_frame(frame, "left-camera", "right-camera", &left_tx, &right_tx);
 
         assert!(forwarded);
         assert_eq!(left_rx.try_recv().unwrap().context().timestamp(), 123);

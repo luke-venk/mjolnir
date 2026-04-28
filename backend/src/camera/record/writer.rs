@@ -3,8 +3,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 use std::fs::{self, File, create_dir_all};
-use std::io::{BufWriter, Write};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use tiff::decoder::{Decoder, DecodingResult};
 use tiff::encoder::{TiffEncoder, colortype};
 
 pub const SESSION_MANIFEST_FILE_NAME: &str = "recording_session.json";
@@ -36,8 +37,8 @@ pub fn sanitize_path_name(value: &str) -> String {
 pub struct Metadata {
     pub camera_id: String,
     pub frame_index: usize,
-    pub width: i32,
-    pub height: i32,
+    pub width: u32,
+    pub height: u32,
     pub payload_bytes: usize,
     pub system_timestamp_ns: u64,
     pub buffer_timestamp_ns: u64,
@@ -111,9 +112,10 @@ pub fn read_session_manifest(output_base_dir: &Path) -> Option<SessionManifest> 
 
     let manifest_json = fs::read_to_string(&manifest_path)
         .unwrap_or_else(|err| panic!("Failed to read {}: {err}", manifest_path.display()));
-    Some(serde_json::from_str(&manifest_json).unwrap_or_else(|err| {
-        panic!("Failed to parse {}: {err}", manifest_path.display())
-    }))
+    Some(
+        serde_json::from_str(&manifest_json)
+            .unwrap_or_else(|err| panic!("Failed to parse {}: {err}", manifest_path.display())),
+    )
 }
 
 /// Reads one recorded frame payload and its metadata from disk.
@@ -127,7 +129,10 @@ pub fn read_recorded_frame(json_path: &Path) -> Frame {
         json_path
             .parent()
             .unwrap_or_else(|| {
-                panic!("Frame metadata {} has no parent directory", json_path.display())
+                panic!(
+                    "Frame metadata {} has no parent directory",
+                    json_path.display()
+                )
             })
             .to_path_buf(),
     );
@@ -148,6 +153,9 @@ fn read_recorded_frame_payload_bytes(json_path: &Path) -> Vec<u8> {
 
     for payload_path in &payload_paths {
         if payload_path.exists() {
+            if payload_path.extension().is_some_and(|ext| ext == "tiff") {
+                return read_tiff_payload_bytes(payload_path);
+            }
             return fs::read(payload_path)
                 .unwrap_or_else(|err| panic!("Failed to read {}: {err}", payload_path.display()));
         }
@@ -165,12 +173,34 @@ fn read_recorded_frame_payload_bytes(json_path: &Path) -> Vec<u8> {
     );
 }
 
+fn read_tiff_payload_bytes(tiff_path: &Path) -> Vec<u8> {
+    let file = File::open(tiff_path)
+        .unwrap_or_else(|err| panic!("Failed to open {}: {err}", tiff_path.display()));
+    let mut decoder = Decoder::new(BufReader::new(file)).unwrap_or_else(|err| {
+        panic!(
+            "Failed to create TIFF decoder for {}: {err}",
+            tiff_path.display()
+        )
+    });
+
+    match decoder
+        .read_image()
+        .unwrap_or_else(|err| panic!("Failed to decode {}: {err}", tiff_path.display()))
+    {
+        DecodingResult::U8(bytes) => bytes,
+        _ => panic!(
+            "Expected an 8-bit grayscale TIFF payload in {}.",
+            tiff_path.display()
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::{env, fs};
     use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{env, fs};
 
-    use super::{Metadata, read_recorded_frame};
+    use super::{Metadata, read_recorded_frame, write_to_disk};
 
     #[test]
     fn read_recorded_frame_supports_tiff_payloads() {
@@ -198,7 +228,7 @@ mod tests {
             serde_json::to_vec_pretty(&metadata).expect("serialize metadata"),
         )
         .expect("write metadata");
-        fs::write(temp_dir.join("frame_0000.tiff"), [7u8, 8u8]).expect("write tiff payload");
+        write_to_disk(&temp_dir, 0, &[7u8, 8u8], &metadata);
 
         let frame = read_recorded_frame(&json_path);
 
@@ -234,8 +264,8 @@ mod tests {
             serde_json::to_vec_pretty(&metadata).expect("serialize metadata"),
         )
         .expect("write metadata");
+        write_to_disk(&temp_dir, 0, &[7u8, 8u8], &metadata);
         fs::write(temp_dir.join("frame_0000.raw"), [1u8, 2u8]).expect("write raw payload");
-        fs::write(temp_dir.join("frame_0000.tiff"), [7u8, 8u8]).expect("write tiff payload");
 
         let frame = read_recorded_frame(&json_path);
 

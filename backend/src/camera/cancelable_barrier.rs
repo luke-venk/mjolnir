@@ -6,6 +6,7 @@ pub enum BarrierResult {
     Canceled,
 }
 
+#[derive(Debug)]
 struct CancelableBarrierState {
     count: usize,
     total: usize,
@@ -17,7 +18,7 @@ struct CancelableBarrierState {
 /// This way, we can exit cleanly when canceling operations by canceling blocking barriers on all threads.
 /// Without this struct, if we press Ctrl + C during a PTP sync, a thread may be out of sync and waiting indefinitely on barrier.
 /// In that case, the program would not exit.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CancelableBarrier {
     inner: Arc<(Mutex<CancelableBarrierState>, Condvar)>,
 }

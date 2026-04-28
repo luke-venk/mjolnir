@@ -152,6 +152,7 @@ rust_library(
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:if-addrs",
+        "@crates//:opencv",
         "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",

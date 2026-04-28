@@ -1,13 +1,11 @@
 use super::PipelineStage;
 use crate::camera::CameraIngestConfig;
-use crate::camera::record::{
-    CaptureStopConditions, DualCameraCapture, start_dual_camera_capture,
-};
-use crate::camera_ingest::{ingest_frames, replay_recorded_session, run_recording_ingest};
+use crate::camera::record::{CaptureStopConditions, DualCameraCapture, start_dual_camera_capture};
+use crate::camera_ingest::{replay_recorded_session, run_recording_ingest};
 use crate::computer_vision::{
     contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
 };
-use crate::schemas::{CameraId, Frame as PipelineFrame};
+use crate::pipeline::{CameraId, Frame as PipelineFrame};
 use crossbeam::channel::{Receiver, bounded};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -41,7 +39,6 @@ impl Pipeline {
         let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, mog2).spawn();
         let handle_stage5 = PipelineStage::new(rx_stage5, tx_stage5, contour).spawn();
 
-        //Checking if frames made it through full pipeline 
         let handle_output = thread::spawn(move || {
             for frame in rx_output.iter() {
                 println!(
@@ -73,21 +70,6 @@ impl Pipeline {
             let _ = handle.join();
         }
     }
-}
-
-// Starts one camera-ingest thread and one pipeline stage graph for a camera config.
-pub fn start_camera_pipeline(
-    camera_id: CameraId,
-    config: CameraIngestConfig,
-    capacity_per_channel: usize,
-) -> (JoinHandle<()>, Pipeline) {
-    let (tx_ingest, rx_stage1) = bounded::<PipelineFrame>(capacity_per_channel);
-    let ingest_handle = thread::spawn(move || {
-        ingest_frames(tx_ingest, config);
-    });
-    let pipeline = Pipeline::new(camera_id, rx_stage1, capacity_per_channel);
-
-    (ingest_handle, pipeline)
 }
 
 // Starts one replay thread and one left/right pipeline pair for recorded footage.
@@ -139,16 +121,20 @@ pub fn start_recording_camera_pipelines(
     let left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, capacity_per_channel);
     let right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, capacity_per_channel);
 
-    (capture_runtime, ingest_handle, left_pipeline, right_pipeline)
+    (
+        capture_runtime,
+        ingest_handle,
+        left_pipeline,
+        right_pipeline,
+    )
 }
-
-
 
 #[cfg(test)]
 mod tests {
     use std::env;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::Duration;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -156,28 +142,31 @@ mod tests {
     use crossbeam::channel::bounded;
 
     use super::Pipeline;
-    use crate::camera::record::writer::{Metadata, SessionManifest, SESSION_MANIFEST_FILE_NAME};
+    use crate::camera::record::writer::{Metadata, SESSION_MANIFEST_FILE_NAME, SessionManifest};
     use crate::camera_ingest::replay_recorded_session;
     use crate::computer_vision::{
         contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
     };
-    use crate::pipeline::PipelineStage;
-    use crate::schemas::{CameraId, Context, Frame as PipelineFrame};
+    use crate::pipeline::{CameraId, Context, Frame as PipelineFrame, PipelineStage};
 
     #[test]
     fn pipeline_new_starts_and_stops_after_input_channel_closes() {
         let (tx, rx) = bounded::<PipelineFrame>(2);
         let pipeline = Pipeline::new(CameraId::FieldLeft, rx, 2);
 
-        tx.send(PipelineFrame::new(vec![1, 2, 3, 4], Context::new(1)))
-            .expect("send pipeline frame");
+        tx.send(PipelineFrame::new(
+            vec![1, 2, 3, 4].into_boxed_slice(),
+            (2, 2),
+            Context::new(CameraId::FieldLeft, 1),
+        ))
+        .expect("send pipeline frame");
         drop(tx);
 
         pipeline.stop();
     }
 
     #[test]
-    fn recorded_session_replay_crosses_full_left_and_right_pipeline_graphs() {
+    fn recorded_session_replay_forwards_frames_into_left_and_right_pipeline_inputs() {
         let temp_dir = env::temp_dir().join(format!(
             "mjolnir_pipeline_replay_test_{}",
             SystemTime::now()
@@ -231,43 +220,141 @@ mod tests {
         let capacity = 4;
         let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity);
         let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity);
-        let (left_handles, left_output_rx) = spawn_test_pipeline_graph(left_rx, capacity);
-        let (right_handles, right_output_rx) = spawn_test_pipeline_graph(right_rx, capacity);
-        let replay_dir = temp_dir.clone();
+        replay_recorded_session(temp_dir.clone(), left_tx, right_tx);
 
-        let replay_handle = thread::spawn(move || {
-            replay_recorded_session(replay_dir, left_tx, right_tx);
-        });
+        let left_frames: Vec<_> = left_rx.try_iter().collect();
+        let right_frames: Vec<_> = right_rx.try_iter().collect();
 
-        let left_output = left_output_rx
-            .recv_timeout(Duration::from_secs(5))
-            .expect("left pipeline should produce one output frame");
-        let right_output = right_output_rx
-            .recv_timeout(Duration::from_secs(5))
-            .expect("right pipeline should produce one output frame");
-
-        replay_handle
-            .join()
-            .expect("recorded-session replay thread should complete");
-
-        assert_eq!(left_output.data(), &[1, 2, 3, 4]);
-        assert_eq!(left_output.context().timestamp(), 305);
-        assert_eq!(right_output.data(), &[5, 6, 7, 8]);
-        assert_eq!(right_output.context().timestamp(), 325);
-
-        for handle in left_handles.into_iter().chain(right_handles) {
-            handle
-                .join()
-                .expect("pipeline stage thread should complete");
-        }
-
-        assert!(left_output_rx.try_iter().next().is_none());
-        assert!(right_output_rx.try_iter().next().is_none());
+        assert_eq!(left_frames.len(), 1);
+        assert_eq!(left_frames[0].data(), &[1, 2, 3, 4]);
+        assert_eq!(left_frames[0].context().camera_id(), CameraId::FieldLeft);
+        assert_eq!(left_frames[0].context().timestamp(), 300);
+        assert_eq!(right_frames.len(), 1);
+        assert_eq!(right_frames[0].data(), &[5, 6, 7, 8]);
+        assert_eq!(right_frames[0].context().camera_id(), CameraId::FieldRight);
+        assert_eq!(right_frames[0].context().timestamp(), 320);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    
+    #[test]
+    fn recorded_session_replay_crosses_all_pipeline_stage_slots() {
+        let temp_dir = env::temp_dir().join(format!(
+            "mjolnir_pipeline_stage_travel_test_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        let left_dir = temp_dir.join("camera-b");
+        let right_dir = temp_dir.join("camera-a");
+        fs::create_dir_all(&left_dir).expect("create left test dir");
+        fs::create_dir_all(&right_dir).expect("create right test dir");
+        fs::write(
+            temp_dir.join(SESSION_MANIFEST_FILE_NAME),
+            serde_json::to_vec_pretty(&SessionManifest {
+                left_camera_id: "camera-b".to_string(),
+                right_camera_id: "camera-a".to_string(),
+            })
+            .expect("serialize session manifest"),
+        )
+        .expect("write session manifest");
+
+        write_test_recorded_frame(
+            &left_dir,
+            &Metadata {
+                camera_id: "camera-b".to_string(),
+                frame_index: 0,
+                width: 4,
+                height: 1,
+                payload_bytes: 4,
+                system_timestamp_ns: 300,
+                buffer_timestamp_ns: 200,
+                frame_id: 3,
+            },
+            &[1, 2, 3, 4],
+        );
+        write_test_recorded_frame(
+            &right_dir,
+            &Metadata {
+                camera_id: "camera-a".to_string(),
+                frame_index: 0,
+                width: 4,
+                height: 1,
+                payload_bytes: 4,
+                system_timestamp_ns: 320,
+                buffer_timestamp_ns: 210,
+                frame_id: 4,
+            },
+            &[5, 6, 7, 8],
+        );
+
+        let capacity = 4;
+        let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity);
+        let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity);
+        let travel_log = Arc::new(Mutex::new(Vec::<(CameraId, usize, u64)>::new()));
+        let (left_handles, left_output_rx) =
+            spawn_tracking_pipeline_graph(left_rx, capacity, Arc::clone(&travel_log));
+        let (right_handles, right_output_rx) =
+            spawn_tracking_pipeline_graph(right_rx, capacity, Arc::clone(&travel_log));
+
+        replay_recorded_session(temp_dir.clone(), left_tx, right_tx);
+
+        let left_output = left_output_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("left tracked pipeline should emit one frame");
+        let right_output = right_output_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("right tracked pipeline should emit one frame");
+
+        assert_eq!(left_output.context().camera_id(), CameraId::FieldLeft);
+        assert_eq!(left_output.context().timestamp(), 300);
+        assert_eq!(right_output.context().camera_id(), CameraId::FieldRight);
+        assert_eq!(right_output.context().timestamp(), 320);
+
+        for handle in left_handles.into_iter().chain(right_handles) {
+            handle
+                .join()
+                .expect("tracked pipeline stage thread should complete");
+        }
+
+        let entries = travel_log.lock().expect("travel log lock").clone();
+        let left_entries = entries
+            .iter()
+            .filter(|(camera_id, _, timestamp)| {
+                *camera_id == CameraId::FieldLeft && *timestamp == 300
+            })
+            .count();
+        let right_entries = entries
+            .iter()
+            .filter(|(camera_id, _, timestamp)| {
+                *camera_id == CameraId::FieldRight && *timestamp == 320
+            })
+            .count();
+
+        assert_eq!(left_entries, 5, "left frame should traverse all 5 stage slots");
+        assert_eq!(
+            right_entries, 5,
+            "right frame should traverse all 5 stage slots"
+        );
+        for stage_index in 1..=5 {
+            assert!(
+                entries.iter().any(|(camera_id, idx, timestamp)| {
+                    *camera_id == CameraId::FieldLeft && *idx == stage_index && *timestamp == 300
+                }),
+                "left frame should reach stage slot {stage_index}"
+            );
+            assert!(
+                entries.iter().any(|(camera_id, idx, timestamp)| {
+                    *camera_id == CameraId::FieldRight && *idx == stage_index && *timestamp == 320
+                }),
+                "right frame should reach stage slot {stage_index}"
+            );
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     #[test]
     #[ignore = "manual smoke test for pushing one local file's bytes through the full pipeline graph"]
     fn manual_local_file_crosses_full_pipeline_stage_graph() {
@@ -281,11 +368,13 @@ mod tests {
         let (handles, rx_output) = spawn_test_pipeline_graph(rx_stage1, capacity);
 
         let input_timestamp = 50u64;
-        tx_in.send(PipelineFrame::new(
-            file_bytes.clone(),
-            Context::new(input_timestamp),
-        ))
-        .expect("send manual file frame into pipeline");
+        tx_in
+            .send(PipelineFrame::new(
+                file_bytes.clone().into_boxed_slice(),
+                (file_bytes.len() as u32, 1),
+                Context::new(CameraId::FieldLeft, input_timestamp),
+            ))
+            .expect("send manual file frame into pipeline");
         drop(tx_in);
 
         let output_frame = rx_output
@@ -293,7 +382,7 @@ mod tests {
             .expect("pipeline should produce one output frame");
 
         assert_eq!(output_frame.data(), file_bytes.as_slice());
-        assert_eq!(output_frame.context().timestamp(), input_timestamp + 5);
+        assert_eq!(output_frame.context().timestamp(), input_timestamp);
 
         for handle in handles {
             handle
@@ -301,11 +390,23 @@ mod tests {
                 .expect("pipeline stage thread should complete");
         }
     }
+    fn write_test_recorded_frame(dir: &PathBuf, metadata: &Metadata, bytes: &[u8]) {
+        let frame_name = format!("frame_{:04}", metadata.frame_index);
+        fs::write(dir.join(format!("{frame_name}.raw")), bytes).expect("write frame raw");
+        fs::write(
+            dir.join(format!("{frame_name}.json")),
+            serde_json::to_vec_pretty(metadata).expect("serialize metadata"),
+        )
+        .expect("write frame metadata");
+    }
 
     fn spawn_test_pipeline_graph(
         rx_stage1: crossbeam::channel::Receiver<PipelineFrame>,
         capacity: usize,
-    ) -> (Vec<thread::JoinHandle<()>>, crossbeam::channel::Receiver<PipelineFrame>) {
+    ) -> (
+        Vec<thread::JoinHandle<()>>,
+        crossbeam::channel::Receiver<PipelineFrame>,
+    ) {
         let (tx_stage1, rx_stage2) = bounded::<PipelineFrame>(capacity);
         let (tx_stage2, rx_stage3) = bounded::<PipelineFrame>(capacity);
         let (tx_stage3, rx_stage4) = bounded::<PipelineFrame>(capacity);
@@ -323,13 +424,46 @@ mod tests {
         (handles, rx_output)
     }
 
-    fn write_test_recorded_frame(dir: &PathBuf, metadata: &Metadata, bytes: &[u8]) {
-        let frame_name = format!("frame_{:04}", metadata.frame_index);
-        fs::write(dir.join(format!("{frame_name}.raw")), bytes).expect("write frame raw");
-        fs::write(
-            dir.join(format!("{frame_name}.json")),
-            serde_json::to_vec_pretty(metadata).expect("serialize metadata"),
-        )
-        .expect("write frame metadata");
+    fn spawn_tracking_pipeline_graph(
+        rx_stage1: crossbeam::channel::Receiver<PipelineFrame>,
+        capacity: usize,
+        travel_log: Arc<Mutex<Vec<(CameraId, usize, u64)>>>,
+    ) -> (
+        Vec<thread::JoinHandle<()>>,
+        crossbeam::channel::Receiver<PipelineFrame>,
+    ) {
+        let (tx_stage1, rx_stage2) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage2, rx_stage3) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage3, rx_stage4) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage4, rx_stage5) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage5, rx_output) = bounded::<PipelineFrame>(capacity);
+
+        let make_stage = |stage_index: usize,
+                          rx: crossbeam::channel::Receiver<PipelineFrame>,
+                          tx: crossbeam::channel::Sender<PipelineFrame>| {
+            let stage_log = Arc::clone(&travel_log);
+            PipelineStage::new(rx, tx, move |frame: PipelineFrame| {
+                stage_log
+                    .lock()
+                    .expect("travel log lock")
+                    .push((
+                        frame.context().camera_id(),
+                        stage_index,
+                        frame.context().timestamp(),
+                    ));
+                frame
+            })
+            .spawn()
+        };
+
+        let handles = vec![
+            make_stage(1, rx_stage1, tx_stage1),
+            make_stage(2, rx_stage2, tx_stage2),
+            make_stage(3, rx_stage3, tx_stage3),
+            make_stage(4, rx_stage4, tx_stage4),
+            make_stage(5, rx_stage5, tx_stage5),
+        ];
+
+        (handles, rx_output)
     }
 }

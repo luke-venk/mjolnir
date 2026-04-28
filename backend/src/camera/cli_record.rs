@@ -1,4 +1,4 @@
-use crate::camera::Resolution;
+use crate::camera::AtlasATP124SResolution;
 use clap::Parser;
 
 /// The command line arguments we'd expect for recording, regardless of whether
@@ -8,8 +8,8 @@ use clap::Parser;
 #[command(about = "Records raw frames from Aravis camera(s) into an output directory.")]
 pub struct CommonRecordArgs {
     /// Resolution of the footage.
-    #[arg(long, value_enum, default_value_t = Resolution::UHD4K)]
-    pub resolution: Resolution,
+    #[arg(long, value_enum, default_value_t = AtlasATP124SResolution::Full)]
+    pub resolution: AtlasATP124SResolution,
 
     /// Exposure time in microseconds.
     #[arg(long = "exposure-us", default_value_t = 10000.0)]
@@ -47,7 +47,7 @@ pub struct CommonRecordArgs {
     pub throwaway_duration_s: f64,
 
     /// Whether to enable Precision Time Protocol if supported by the device.
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set, value_parser = clap::builder::BoolishValueParser::new())]
     pub enable_ptp: bool,
 }
 

@@ -1,4 +1,4 @@
-use if_addrs::{get_if_addrs, IfAddr};
+use if_addrs::{IfAddr, get_if_addrs};
 use std::fmt;
 use std::net::IpAddr;
 

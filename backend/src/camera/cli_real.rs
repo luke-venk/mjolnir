@@ -1,14 +1,13 @@
-use std::path::PathBuf;
-
-use crate::camera::Resolution;
+use crate::camera::AtlasATP124SResolution;
 use clap::Parser;
+use std::path::PathBuf;
 
 /// Optional arguments for real backend targets.
 #[derive(Parser, Debug, Clone)]
 #[command(name = "real_backend_args")]
-#[command(about = "Runs the real backend against live cameras or recorded footage.")]
+#[command(about = "Runs the real backend against recorded footage replay.")]
 pub struct RealBackendArgs {
-    /// Replay a folder produced by `//backend:record` instead of opening cameras.
+    /// Replay a folder produced by `//backend:record`.
     #[arg(long = "feed-footage-dir")]
     pub feed_footage_dir: Option<PathBuf>,
 
@@ -17,8 +16,8 @@ pub struct RealBackendArgs {
     pub interface: Option<String>,
 
     /// Resolution of the live capture path.
-    #[arg(long, value_enum, default_value_t = Resolution::UHD4K)]
-    pub resolution: Resolution,
+    #[arg(long, value_enum, default_value_t = AtlasATP124SResolution::Full)]
+    pub resolution: AtlasATP124SResolution,
 
     /// Exposure time in microseconds.
     #[arg(long = "exposure-us", default_value_t = 10000.0)]
@@ -43,10 +42,8 @@ pub struct RealBackendArgs {
 
 impl RealBackendArgs {
     pub fn validate(&self) -> Result<(), String> {
-        if self.feed_footage_dir.is_none() && self.enable_ptp && self.interface.is_none() {
-            return Err(
-                "A live real run with PTP enabled requires --interface <INTERFACE>.".to_string(),
-            );
+        if self.feed_footage_dir.is_none() {
+            return Err("This backend now requires --feed-footage-dir <SESSION_DIR>.".to_string());
         }
         Ok(())
     }

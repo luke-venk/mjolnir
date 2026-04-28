@@ -151,10 +151,10 @@ pub fn start_dual_camera_capture(
     }
 
     let host_interface_addr = if left_config.enable_ptp {
-        let interface = interface
-            .unwrap_or_else(|| panic!("An interface is required when PTP is enabled."));
-        let ip = crate::camera::ip_identifier::resolve_iface_to_ip(interface)
-            .unwrap_or_else(|err| {
+        let interface =
+            interface.unwrap_or_else(|| panic!("An interface is required when PTP is enabled."));
+        let ip =
+            crate::camera::ip_identifier::resolve_iface_to_ip(interface).unwrap_or_else(|err| {
                 panic!("failed to resolve interface: {:?} (pretty: {})", err, err);
             });
         Some(SocketAddr::new(ip, 0))
@@ -571,8 +571,8 @@ pub fn run_capture_thread(
 
     let _ = camera.stop_acquisition();
     if let Some(output_camera_dir) = output_camera_dir {
-        let total_capture_time_s = (start_time.elapsed().as_secs_f64() - throwaway_duration_s)
-            .max(0.0);
+        let total_capture_time_s =
+            (start_time.elapsed().as_secs_f64() - throwaway_duration_s).max(0.0);
         let frame_rate = if total_capture_time_s > 0.0 {
             frames_saved as f64 / total_capture_time_s
         } else {
