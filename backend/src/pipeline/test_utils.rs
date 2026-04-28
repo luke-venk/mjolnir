@@ -25,15 +25,15 @@ pub fn generate_frame(
     stage_to_prep_for: ComputerVisionStage,
 ) -> Frame {
     // Initialize frame.
-    let resolution: (i32, i32) = camera_resolution.dimensions();
+    let resolution: (u32, u32) = camera_resolution.dimensions();
     let context: Context = Context::new(CameraId::FieldLeft, timestamp);
     let data: Box<[u8]> = vec![value; (resolution.0 * resolution.1) as usize].into_boxed_slice();
     let frame: Frame = Frame::new(data, resolution, context);
 
     // Set matrix placeholder values and populate frame matrices.
     let mat: Mat = Mat::new_rows_cols_with_default(
-        resolution.1,
-        resolution.0,
+        resolution.1 as i32,
+        resolution.0 as i32,
         CV_8U,
         Scalar::all(value as f64),
     )

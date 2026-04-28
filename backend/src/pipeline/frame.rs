@@ -28,7 +28,7 @@ pub struct Frame {
     /// The (width, height) of pixels for the frame. Note that this shouldn't
     /// be confused with (rows, cols), which is in fact the opposite but
     /// is the convention for matrices.
-    raw_full_resolution: (i32, i32),
+    raw_full_resolution: (u32, u32),
 
     /// The frame after lens undistortion is applied, before intensity normalization is applied.
     undistorted_image: OnceLock<Mat>,
@@ -44,7 +44,7 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn new(data: Box<[u8]>, resolution: (i32, i32), context: Context) -> Self {
+    pub fn new(data: Box<[u8]>, resolution: (u32, u32), context: Context) -> Self {
         Self {
             raw_bytes_full_resolution: data,
             raw_full_resolution: resolution,
@@ -59,7 +59,7 @@ impl Frame {
         &self.raw_bytes_full_resolution
     }
 
-    pub fn raw_full_resolution(&self) -> (i32, i32) {
+    pub fn raw_full_resolution(&self) -> (u32, u32) {
         self.raw_full_resolution
     }
 
@@ -93,8 +93,8 @@ impl Frame {
             .map_err(|_| "Downsampled normalized image already set.".to_string())
     }
 
-    pub fn context(&self) -> Context {
-        self.context
+    pub fn context(&self) -> &Context {
+        &self.context
     }
 }
 

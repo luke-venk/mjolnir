@@ -96,7 +96,7 @@ pub enum AtlasATP124SResolution {
 impl AtlasATP124SResolution {
     /// Note that the dimensions are width x height. This should not be confused
     /// with rows x cols, which is in fact the opposite.
-    pub fn dimensions(&self) -> (i32, i32) {
+    pub fn dimensions(&self) -> (u32, u32) {
         match self {
             AtlasATP124SResolution::Quarter => (1024, 750),
             AtlasATP124SResolution::Half => (2048, 1500),
