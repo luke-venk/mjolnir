@@ -66,7 +66,6 @@ pub fn send_action_command(
     group_key: u32,
     group_mask: u32,
 ) {
-    println!("Sending action command!");
     // GigEV action command packet: 56 bytes total
     // Ref: GigE Vision spec section on Action Commands
     let mut packet = [0u8; 28];
@@ -245,6 +244,7 @@ pub fn run_capture_thread(
                     // Fill the camera pipeline if we are less than `lead_time_ns` ahead
                     if scheduled_until < (estimated_ptp + lead_time_ns) {
                         send_action_command(&socket, scheduled_until, 1, 1, 1);
+                        println!("Scheduling capture for {}ms", (scheduled_until - start_ns) / 1_000_000);
                         frames_pushed += 1;
                     } else {
                         // Sleep long enough to avoid pegging the CPU, short enough to keep lead
@@ -347,6 +347,7 @@ pub fn run_capture_thread(
         match buffer.status() {
             BufferStatus::Success => {
                 let elapsed_since_start = start_time.elapsed();
+                let buffer_timestamp_ns = buffer.timestamp();
 
                 // If we still haven't saved the number of frames required for Mog2 to
                 // build the background model, continue writing to disk and inform the
@@ -367,12 +368,23 @@ pub fn run_capture_thread(
                         countdown_timer = Instant::now();
                     }
                 } else {
-                    println!(
-                        "Frame {} received at {:.2}s for {}.",
-                        frames_saved,
-                        elapsed_since_start.as_secs_f64(),
-                        camera_id,
-                    );
+                    if let Some(start_ns) = first_frame_ptp_ns {
+                        println!(
+                            "Frame {} captured at {}ms and received at {:.2}s for {}.",
+                            frames_saved,
+                            (buffer_timestamp_ns - start_ns) / 1_000_000,
+                            elapsed_since_start.as_secs_f64(),
+                            camera_id,
+                        );
+                    } else {
+                        println!(
+                            "Frame {} captured at {}ms and received at {:.2}s for {}.",
+                            frames_saved,
+                            buffer_timestamp_ns / 1_000_000,
+                            elapsed_since_start.as_secs_f64(),
+                            camera_id,
+                        );
+                    }
                 }
 
                 // Take the buffer from the stream and store its information, and then
@@ -380,7 +392,6 @@ pub fn run_capture_thread(
                 // starve.
                 let data = copy_buffer_bytes(&buffer);
                 let system_timestamp_ns = buffer.system_timestamp();
-                let buffer_timestamp_ns = buffer.timestamp();
                 let frame_id = buffer.frame_id();
                 stream.push_buffer(buffer);
 
