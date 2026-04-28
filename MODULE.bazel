@@ -237,7 +237,7 @@ crate.spec(
 crate.annotation(
     build_script_data = ["@@//third_party:libclang_filegroup"],
     build_script_env = {
-        "OPENCV_LINK_LIBS": "opencv_core,opencv_imgproc,opencv_imgcodecs,opencv_calib3d,opencv_features2d,opencv_flann,opencv_dnn",
+        "OPENCV_LINK_LIBS": "opencv_core,opencv_imgproc,opencv_imgcodecs,opencv_calib3d,opencv_features2d,opencv_flann",
         "OPENCV_PACKAGE_NAME": "opencv4",
         "LIBCLANG_PATH": "$(execpath @@//third_party:libclang_filegroup)",
         "DYLD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
