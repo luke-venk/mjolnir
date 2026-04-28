@@ -89,10 +89,12 @@ bazel run //backend:record -- --resolution <resolution> --exposure-us <exposure>
 
 You can alternatively specify `--max-frames <max_frames>` instead of max duration.
 
+`--left-camera` and `--right-camera` let you explicitly choose which discovered camera ID is treated as the left-field camera pipeline and which is treated as the right-field camera pipeline.
+
 Example:
 
 ```
-bazel run //backend:record -- --resolution 4k --exposure-us 10000 --frame-rate-hz 30 --output-dir ~/Downloads/camera_out/test --max-duration-s 10 --throwaway-duration-s 3 --interface en8
+bazel run //backend:record -- --left-camera "Lucid Vision Labs-ATP124S-M-224300917" --right-camera "Lucid Vision Labs-ATP124S-M-242700635" --resolution 4k --exposure-us 10000 --frame-rate-hz 30 --output-dir ~/Downloads/camera_out/test --max-duration-s 10 --throwaway-duration-s 3 --interface en8
 ```
 
 The `interface` bit tells the binary which network interface the cameras are on so that we make our UDP socket broadcasts from the correct interface. You must have already configured an IP address on the specified network address. You can view your network interfaces via `ifconfig` and set a static IP on an interface in your network settings. On Mac, this is at `System Settings > Network > <the interface>`.

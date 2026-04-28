@@ -1,4 +1,4 @@
-use crate::pipeline::{CameraId, Frame};
+use crate::pipeline::{CameraId, Context, Frame};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PixelCenter {
@@ -66,10 +66,10 @@ impl From<Frame> for ContourOutput {
             frame.context().camera_id(),
             frame.context().camera_buffer_timestamp(),
             frame.context().detected().unwrap_or(false),
-            match (frame.context().cx(), frame.context().cy()) {
-                (Some(cx), Some(cy)) => Some(PixelCenter::new(cx, cy)),
-                _ => None,
-            },
+            frame
+                .context()
+                .centroid()
+                .map(|(cx, cy)| PixelCenter::new(cx, cy)),
         );
 
         let _ = frame.clear_undistorted_image();
@@ -160,7 +160,7 @@ mod tests {
             Context::new(CameraId::FieldLeft, 99),
         );
         frame.context_mut().set_detected(Some(true));
-        frame.context_mut().set_centroid(Some(7.0), Some(8.0));
+        frame.context_mut().set_centroid(Some((7.0, 8.0)));
 
         frame.set_undistorted_image(opencv::core::Mat::default()).unwrap();
         frame.set_downsampled_image(opencv::core::Mat::default()).unwrap();

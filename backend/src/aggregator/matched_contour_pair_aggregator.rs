@@ -1,5 +1,8 @@
-use crate::pipeline::CameraId;
-use crate::schemas::{ContourOutput, MatchedContourPair};
+//! Groups contour outputs by left and right camera, then matches temporally
+//! adjacent observations into `MatchedContourPair` values for downstream
+//! aggregation and trajectory preparation.
+
+use crate::pipeline::{CameraId, ContourOutput, MatchedContourPair};
 use crossbeam::channel::{Receiver, Sender};
 use std::collections::VecDeque;
 use std::thread::{self, JoinHandle};

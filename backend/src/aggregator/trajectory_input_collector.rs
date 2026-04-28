@@ -1,4 +1,8 @@
-use crate::schemas::MatchedContourPair;
+//! Collects matched left/right contour observations and converts sufficiently
+//! complete sequences into `OptimizeTrajectoryInput` values suitable for
+//! trajectory optimization.
+
+use crate::pipeline::MatchedContourPair;
 use nalgebra::Vector2;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -126,7 +130,7 @@ fn median_dt_seconds(usable_pairs: &[&MatchedContourPair]) -> Option<f64> {
 mod tests {
     use super::*;
     use crate::pipeline::CameraId;
-    use crate::schemas::{ContourOutput, MatchedContourPair, PixelCenter};
+    use crate::pipeline::{ContourOutput, MatchedContourPair, PixelCenter};
 
     fn make_pair(
         timestamp_ns: u64,

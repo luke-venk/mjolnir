@@ -1,18 +1,18 @@
 use axum::{Router, http::Method};
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
-use backend_lib::aggregation_coordinator::{AggregationCommand, AggregationCoordinator};
+use backend_lib::aggregator::{AggregationCommand, AggregationCoordinator};
 #[cfg(feature = "real_cameras")]
 use backend_lib::camera::CvBackendCameraArgs;
 #[cfg(feature = "real_cameras")]
-use backend_lib::matched_contour_pair_aggregator::MatchedContourPairAggregator;
+use backend_lib::aggregator::MatchedContourPairAggregator;
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{CameraId, Pipeline};
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 #[cfg(feature = "real_cameras")]
-use backend_lib::schemas::{ContourOutput, MatchedContourPair};
+use backend_lib::pipeline::{ContourOutput, MatchedContourPair};
 #[cfg(feature = "real_cameras")]
-use backend_lib::trajectory_input_collector::OptimizeTrajectoryInput;
+use backend_lib::aggregator::OptimizeTrajectoryInput;
 #[cfg(feature = "real_cameras")]
 use clap::Parser;
 use tower_http::cors::{Any, CorsLayer};

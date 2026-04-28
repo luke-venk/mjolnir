@@ -1,5 +1,9 @@
-use crate::schemas::MatchedContourPair;
-use crate::trajectory_input_collector::{OptimizeTrajectoryInput, TrajectoryInputCollector};
+//! Coordinates time-windowed collection of matched left/right contour pairs and
+//! emits `OptimizeTrajectoryInput` once a throw window has ended and sufficient
+//! observations have been gathered.
+
+use crate::aggregator::{OptimizeTrajectoryInput, TrajectoryInputCollector};
+use crate::pipeline::MatchedContourPair;
 use crossbeam::channel::{Receiver, Sender, select};
 use std::collections::VecDeque;
 use std::thread::{self, JoinHandle};
@@ -31,7 +35,8 @@ impl AggregationCoordinator {
         let handle = thread::spawn(move || {
             let mut collector = TrajectoryInputCollector::new();
             let mut active_window: Option<ActiveWindow> = None;
-            let mut lookback_buffer: VecDeque<MatchedContourPair> = VecDeque::with_capacity(lookback_capacity);
+            let mut lookback_buffer: VecDeque<MatchedContourPair> =
+                VecDeque::with_capacity(lookback_capacity);
 
             loop {
                 select! {
@@ -104,7 +109,7 @@ impl AggregationCoordinator {
 mod tests {
     use super::*;
     use crate::pipeline::CameraId;
-    use crate::schemas::{ContourOutput, PixelCenter};
+    use crate::pipeline::{ContourOutput, PixelCenter};
 
     fn make_pair(
         timestamp_ns: u64,
