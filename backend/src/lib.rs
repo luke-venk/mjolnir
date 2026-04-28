@@ -5,3 +5,4 @@ pub mod computer_vision;
 pub mod pipeline;
 pub mod server;
 pub mod throws;
+pub mod triangulation;

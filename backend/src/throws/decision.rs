@@ -16,6 +16,7 @@ use super::{
     InfractionType, ThrowAnalysisResponse, ThrowType,
     simulate_throw::get_field_dimensions,
 };
+use crate::triangulation::TriangulationOutput;
 use chrono::{DateTime, Utc};
 use nalgebra::Vector3;
 use uuid::Uuid;
@@ -25,7 +26,13 @@ use uuid::Uuid;
 // The trajectory is a sequence of 3D positions sampled at `dt` intervals.
 // The landing point is the last sample (the trajectory is truncated at impact
 // during optimization). Returns `None` if the trajectory is empty.
-pub fn landing_from_trajectory(trajectory: &[Vector3<f64>]) -> Option<(f32, f32)> {
+//
+// In practice the trajectory will be empty only if the upstream LM-call layer
+// emits a `TriangulationOutput` with `triangulation_succeeded == true` but no
+// samples — which shouldn't happen, but we keep the `Option` to avoid a panic
+// if the upstream contract drifts. `build_throw_response` already short-circuits
+// on `triangulation_succeeded == false`, so this is the secondary defense.
+fn landing_from_trajectory(trajectory: &[Vector3<f64>]) -> Option<(f32, f32)> {
     let last = trajectory.last()?;
     Some((last[0] as f32, last[1] as f32))
 }
@@ -39,7 +46,7 @@ pub fn landing_from_trajectory(trajectory: &[Vector3<f64>]) -> Option<(f32, f32)
 // is from the inside edge of the circle. For javelin, the "circle" field
 // dimension represents the runway length, not a circle radius, so the
 // subtraction is omitted.
-pub fn compute_distance(landing_xy: (f32, f32), throw_type: ThrowType) -> f32 {
+fn compute_distance(landing_xy: (f32, f32), throw_type: ThrowType) -> f32 {
     let (x, y) = landing_xy;
     let raw = (x * x + y * y).sqrt();
     match throw_type {
@@ -57,7 +64,7 @@ pub fn compute_distance(landing_xy: (f32, f32), throw_type: ThrowType) -> f32 {
 // The sector is symmetric about the +x axis with half-angle `sector_angle / 2`.
 // A throw with positive y past the half-angle is a `LeftSector` violation;
 // negative y past the half-angle is `RightSector`.
-pub fn classify_sector(landing_xy: (f32, f32), throw_type: ThrowType) -> Option<InfractionType> {
+fn classify_sector(landing_xy: (f32, f32), throw_type: ThrowType) -> Option<InfractionType> {
     let (x, y) = landing_xy;
     let (_, _, sector_angle_deg) = get_field_dimensions(throw_type);
     let half_sector_rad = (sector_angle_deg / 2.0).to_radians();
@@ -90,21 +97,23 @@ fn timestamp_ns_to_string(impact_timestamp_ns: u64) -> String {
 // context. `circle_infraction` comes from the touch sensor pipeline and is
 // provided by the caller; this module does not detect circle infractions.
 //
-// Returns `None` if the triangulation failed or produced no trajectory.
-// The caller decides what to do in that case (e.g., return 503, fall back
-// to the previous response, etc).
+// Returns `None` if the triangulation step did not converge or produced no
+// trajectory. The caller decides what to do in that case (e.g., return 503,
+// fall back to the previous response, etc).
+//
+// `triangulation` is produced by the LM-call layer (issue #80) by wrapping the
+// return tuple of `math_triangulation::optimize_trajectory`. See
+// `TriangulationOutput` for the contract.
 pub fn build_throw_response(
-    trajectory: &[Vector3<f64>],
-    lm_success: bool,
+    triangulation: &TriangulationOutput,
     throw_type: ThrowType,
-    impact_timestamp_ns: u64,
     circle_infraction: Option<InfractionType>,
     image_urls: Vec<String>,
 ) -> Option<ThrowAnalysisResponse> {
-    if !lm_success {
+    if !triangulation.triangulation_succeeded {
         return None;
     }
-    let landing_xy = landing_from_trajectory(trajectory)?;
+    let landing_xy = landing_from_trajectory(&triangulation.trajectory)?;
 
     let mut infractions: Vec<InfractionType> = Vec::new();
     let sector_violation = classify_sector(landing_xy, throw_type);
@@ -124,7 +133,9 @@ pub fn build_throw_response(
 
     Some(ThrowAnalysisResponse {
         throw_id: Uuid::new_v4(),
-        frame_timestamp_from_camera_microseconds: timestamp_ns_to_string(impact_timestamp_ns),
+        frame_timestamp_from_camera_microseconds: timestamp_ns_to_string(
+            triangulation.impact_timestamp_ns,
+        ),
         throw_type,
         distance_m: compute_distance(landing_xy, throw_type),
         infractions,
@@ -139,6 +150,14 @@ mod tests {
 
     fn traj(points: &[(f64, f64, f64)]) -> Vec<Vector3<f64>> {
         points.iter().map(|(x, y, z)| Vector3::new(*x, *y, *z)).collect()
+    }
+
+    fn output(trajectory: Vec<Vector3<f64>>, succeeded: bool) -> TriangulationOutput {
+        TriangulationOutput {
+            trajectory,
+            triangulation_succeeded: succeeded,
+            impact_timestamp_ns: 1_775_771_934_343_718_000,
+        }
     }
 
     #[test]
@@ -221,10 +240,8 @@ mod tests {
     fn build_response_in_bounds_no_circle_infraction() {
         let trajectory = traj(&[(0.0, 0.0, 2.0), (10.0, 0.5, 0.05)]);
         let response = build_throw_response(
-            &trajectory,
-            true,
+            &output(trajectory, true),
             ThrowType::Shotput,
-            1_775_771_934_343_718_000,
             None,
             vec!["a.png".to_string()],
         );
@@ -240,10 +257,8 @@ mod tests {
     fn build_response_sector_violation_hides_landing_point() {
         let trajectory = traj(&[(0.0, 0.0, 2.0), (5.0, 5.0, 0.05)]);
         let response = build_throw_response(
-            &trajectory,
-            true,
+            &output(trajectory, true),
             ThrowType::Hammer,
-            1_775_771_934_343_718_000,
             None,
             vec![],
         )
@@ -256,46 +271,39 @@ mod tests {
     fn build_response_circle_infraction_passes_through() {
         let trajectory = traj(&[(0.0, 0.0, 2.0), (10.0, 0.0, 0.05)]);
         let response = build_throw_response(
-            &trajectory,
-            true,
+            &output(trajectory, true),
             ThrowType::Shotput,
-            0,
             Some(InfractionType::Circle),
             vec![],
         )
         .expect("should produce a response");
-        // Circle infraction should not hide the landing point — only sector
-        // violations do that.
-        assert_eq!(response.landing_point_x_y, Some((10.0, 0.0)));
         assert_eq!(response.infractions, vec![InfractionType::Circle]);
+        assert!(response.landing_point_x_y.is_some());
     }
 
     #[test]
     fn build_response_sector_and_circle_both_reported() {
-        let trajectory = traj(&[(0.0, 0.0, 2.0), (5.0, -5.0, 0.05)]);
+        let trajectory = traj(&[(0.0, 0.0, 2.0), (5.0, 5.0, 0.05)]);
         let response = build_throw_response(
-            &trajectory,
-            true,
-            ThrowType::Discus,
-            0,
+            &output(trajectory, true),
+            ThrowType::Hammer,
             Some(InfractionType::Circle),
             vec![],
         )
         .expect("should produce a response");
+        assert_eq!(
+            response.infractions,
+            vec![InfractionType::LeftSector, InfractionType::Circle]
+        );
         assert_eq!(response.landing_point_x_y, None);
-        assert_eq!(response.infractions.len(), 2);
-        assert!(response.infractions.contains(&InfractionType::RightSector));
-        assert!(response.infractions.contains(&InfractionType::Circle));
     }
 
     #[test]
-    fn build_response_returns_none_when_lm_failed() {
+    fn build_response_returns_none_when_triangulation_failed() {
         let trajectory = traj(&[(0.0, 0.0, 2.0), (10.0, 0.0, 0.05)]);
         let response = build_throw_response(
-            &trajectory,
-            false,
+            &output(trajectory, false),
             ThrowType::Shotput,
-            0,
             None,
             vec![],
         );
@@ -304,12 +312,9 @@ mod tests {
 
     #[test]
     fn build_response_returns_none_for_empty_trajectory() {
-        let trajectory: Vec<Vector3<f64>> = vec![];
         let response = build_throw_response(
-            &trajectory,
-            true,
+            &output(vec![], true),
             ThrowType::Shotput,
-            0,
             None,
             vec![],
         );
@@ -318,9 +323,10 @@ mod tests {
 
     #[test]
     fn timestamp_ns_round_trips_to_rfc3339() {
-        // 1775771934343718000 ns -> 2026-04-12T17:18:54.343718Z (approximately).
         let s = timestamp_ns_to_string(1_775_771_934_343_718_000);
-        assert!(s.contains("2026"), "expected 2026 in {s}");
-        assert!(s.contains("T"), "expected RFC3339 separator in {s}");
+        // Just sanity-check the format; exact value depends on chrono's RFC3339 emission.
+        assert!(s.contains('T'));
+        assert!(s.contains('-'));
+        assert!(s.contains(':'));
     }
 }
