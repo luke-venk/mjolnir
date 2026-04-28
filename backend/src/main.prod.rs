@@ -1,13 +1,13 @@
 use axum::Router;
 use axum_embed::ServeEmbed;
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
-#[cfg(feature = "real")]
+#[cfg(feature = "real_cameras")]
 use backend_lib::camera::aravis_utils::initialize_aravis;
-#[cfg(feature = "real")]
+#[cfg(feature = "real_cameras")]
 use backend_lib::camera::discovery::get_camera_ids;
-#[cfg(feature = "real")]
+#[cfg(feature = "real_cameras")]
 use backend_lib::camera::{CameraIngestConfig, parse_real_backend_args};
-#[cfg(feature = "real")]
+#[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{start_recorded_footage_pipelines, start_recording_camera_pipelines};
 use backend_lib::server::{create_api_router, start_server, ThrowSource};
 use rust_embed::Embed;
@@ -33,9 +33,9 @@ pub fn create_prod_app(throw_source: ThrowSource) -> Router {
     create_api_router(throw_source, infractions_rx).fallback_service(serve_assets)
 }
 
-// The "fake" configuration will not start the CV pipelines, and will point the
+// Lacking a "real_cameras" feature flag will not start the CV pipelines, and will point the
 // `analyze-throw` route to simulated throw data.
-#[cfg(feature = "fake")]
+#[cfg(not(feature = "real_cameras"))]
 #[tokio::main]
 async fn main() {
     // Build the Axum router.
@@ -45,9 +45,9 @@ async fn main() {
     start_server(app, "0.0.0.0:5001").await;
 }
 
-// The "real" configuration will start the CV pipelines, and will point the
+// The "real_cameras" configuration will start the CV pipelines, and will point the
 // `analyze-throw` route to the processed throw data from the pipelines.
-#[cfg(feature = "real")]
+#[cfg(feature = "real_cameras")]
 #[tokio::main]
 async fn main() {
     let args = parse_real_backend_args();

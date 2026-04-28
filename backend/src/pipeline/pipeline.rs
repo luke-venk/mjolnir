@@ -142,15 +142,22 @@ pub fn start_recording_camera_pipelines(
     (capture_runtime, ingest_handle, left_pipeline, right_pipeline)
 }
 
+
+
 #[cfg(test)]
 mod tests {
     use std::env;
     use std::fs;
+    use std::path::PathBuf;
+    use std::thread;
     use std::time::Duration;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use crossbeam::channel::bounded;
 
     use super::Pipeline;
+    use crate::camera::record::writer::{Metadata, SessionManifest, SESSION_MANIFEST_FILE_NAME};
+    use crate::camera_ingest::replay_recorded_session;
     use crate::computer_vision::{
         contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
     };
@@ -170,31 +177,112 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "manual smoke test for pushing a local frame file through the full pipeline stage graph"]
-    fn manual_file_frame_crosses_full_pipeline_stage_graph() {
-        let frame_path = env::var("MJOLNIR_PIPELINE_TEST_FRAME")
-            .expect("set MJOLNIR_PIPELINE_TEST_FRAME to a local frame file path");
-        let frame_bytes = fs::read(&frame_path)
-            .unwrap_or_else(|err| panic!("failed to read {}: {err}", frame_path));
+    fn recorded_session_replay_crosses_full_left_and_right_pipeline_graphs() {
+        let temp_dir = env::temp_dir().join(format!(
+            "mjolnir_pipeline_replay_test_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        let left_dir = temp_dir.join("camera-b");
+        let right_dir = temp_dir.join("camera-a");
+        fs::create_dir_all(&left_dir).expect("create left test dir");
+        fs::create_dir_all(&right_dir).expect("create right test dir");
+        fs::write(
+            temp_dir.join(SESSION_MANIFEST_FILE_NAME),
+            serde_json::to_vec_pretty(&SessionManifest {
+                left_camera_id: "camera-b".to_string(),
+                right_camera_id: "camera-a".to_string(),
+            })
+            .expect("serialize session manifest"),
+        )
+        .expect("write session manifest");
 
-        let (tx_in, rx_stage1) = bounded::<PipelineFrame>(2);
-        let (tx_stage1, rx_stage2) = bounded::<PipelineFrame>(2);
-        let (tx_stage2, rx_stage3) = bounded::<PipelineFrame>(2);
-        let (tx_stage3, rx_stage4) = bounded::<PipelineFrame>(2);
-        let (tx_stage4, rx_stage5) = bounded::<PipelineFrame>(2);
-        let (tx_stage5, rx_output) = bounded::<PipelineFrame>(2);
+        write_test_recorded_frame(
+            &left_dir,
+            &Metadata {
+                camera_id: "camera-b".to_string(),
+                frame_index: 0,
+                width: 4,
+                height: 1,
+                payload_bytes: 4,
+                system_timestamp_ns: 300,
+                buffer_timestamp_ns: 200,
+                frame_id: 3,
+            },
+            &[1, 2, 3, 4],
+        );
+        write_test_recorded_frame(
+            &right_dir,
+            &Metadata {
+                camera_id: "camera-a".to_string(),
+                frame_index: 0,
+                width: 4,
+                height: 1,
+                payload_bytes: 4,
+                system_timestamp_ns: 320,
+                buffer_timestamp_ns: 210,
+                frame_id: 4,
+            },
+            &[5, 6, 7, 8],
+        );
 
-        let handles = vec![
-            PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn(),
-            PipelineStage::new(rx_stage2, tx_stage2, intensity_normalization).spawn(),
-            PipelineStage::new(rx_stage3, tx_stage3, forward_downsampled_copy).spawn(),
-            PipelineStage::new(rx_stage4, tx_stage4, mog2).spawn(),
-            PipelineStage::new(rx_stage5, tx_stage5, contour).spawn(),
-        ];
+        let capacity = 4;
+        let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity);
+        let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity);
+        let (left_handles, left_output_rx) = spawn_test_pipeline_graph(left_rx, capacity);
+        let (right_handles, right_output_rx) = spawn_test_pipeline_graph(right_rx, capacity);
+        let replay_dir = temp_dir.clone();
+
+        let replay_handle = thread::spawn(move || {
+            replay_recorded_session(replay_dir, left_tx, right_tx);
+        });
+
+        let left_output = left_output_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("left pipeline should produce one output frame");
+        let right_output = right_output_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("right pipeline should produce one output frame");
+
+        replay_handle
+            .join()
+            .expect("recorded-session replay thread should complete");
+
+        assert_eq!(left_output.data(), &[1, 2, 3, 4]);
+        assert_eq!(left_output.context().timestamp(), 305);
+        assert_eq!(right_output.data(), &[5, 6, 7, 8]);
+        assert_eq!(right_output.context().timestamp(), 325);
+
+        for handle in left_handles.into_iter().chain(right_handles) {
+            handle
+                .join()
+                .expect("pipeline stage thread should complete");
+        }
+
+        assert!(left_output_rx.try_iter().next().is_none());
+        assert!(right_output_rx.try_iter().next().is_none());
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    
+    #[test]
+    #[ignore = "manual smoke test for pushing one local file's bytes through the full pipeline graph"]
+    fn manual_local_file_crosses_full_pipeline_stage_graph() {
+        let file_path = env::var("MJOLNIR_PIPELINE_TEST_FILE")
+            .expect("set MJOLNIR_PIPELINE_TEST_FILE to a local file path");
+        let file_bytes = fs::read(&file_path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", file_path));
+
+        let capacity = 2;
+        let (tx_in, rx_stage1) = bounded::<PipelineFrame>(capacity);
+        let (handles, rx_output) = spawn_test_pipeline_graph(rx_stage1, capacity);
 
         let input_timestamp = 50u64;
         tx_in.send(PipelineFrame::new(
-            frame_bytes.clone(),
+            file_bytes.clone(),
             Context::new(input_timestamp),
         ))
         .expect("send manual file frame into pipeline");
@@ -204,18 +292,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("pipeline should produce one output frame");
 
-        println!(
-            "pipeline test: loaded {} ({} bytes)",
-            frame_path,
-            frame_bytes.len()
-        );
-        println!(
-            "pipeline test: input timestamp {}, output timestamp {}",
-            input_timestamp,
-            output_frame.context().timestamp()
-        );
-
-        assert_eq!(output_frame.data(), frame_bytes.as_slice());
+        assert_eq!(output_frame.data(), file_bytes.as_slice());
         assert_eq!(output_frame.context().timestamp(), input_timestamp + 5);
 
         for handle in handles {
@@ -223,5 +300,36 @@ mod tests {
                 .join()
                 .expect("pipeline stage thread should complete");
         }
+    }
+
+    fn spawn_test_pipeline_graph(
+        rx_stage1: crossbeam::channel::Receiver<PipelineFrame>,
+        capacity: usize,
+    ) -> (Vec<thread::JoinHandle<()>>, crossbeam::channel::Receiver<PipelineFrame>) {
+        let (tx_stage1, rx_stage2) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage2, rx_stage3) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage3, rx_stage4) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage4, rx_stage5) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage5, rx_output) = bounded::<PipelineFrame>(capacity);
+
+        let handles = vec![
+            PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn(),
+            PipelineStage::new(rx_stage2, tx_stage2, intensity_normalization).spawn(),
+            PipelineStage::new(rx_stage3, tx_stage3, forward_downsampled_copy).spawn(),
+            PipelineStage::new(rx_stage4, tx_stage4, mog2).spawn(),
+            PipelineStage::new(rx_stage5, tx_stage5, contour).spawn(),
+        ];
+
+        (handles, rx_output)
+    }
+
+    fn write_test_recorded_frame(dir: &PathBuf, metadata: &Metadata, bytes: &[u8]) {
+        let frame_name = format!("frame_{:04}", metadata.frame_index);
+        fs::write(dir.join(format!("{frame_name}.raw")), bytes).expect("write frame raw");
+        fs::write(
+            dir.join(format!("{frame_name}.json")),
+            serde_json::to_vec_pretty(metadata).expect("serialize metadata"),
+        )
+        .expect("write frame metadata");
     }
 }

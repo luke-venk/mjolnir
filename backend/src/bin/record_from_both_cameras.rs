@@ -27,7 +27,8 @@ pub fn main() {
         .unwrap_or_else(|err| panic!("{err}"));
     let enable_ptp = args.common_args.enable_ptp;
     let max_frames = args.common_args.max_frames;
-    let max_duration = args.common_args.max_duration;
+    let max_duration_s = args.common_args.max_duration_s;
+    let throwaway_duration_s = args.common_args.throwaway_duration_s;
     let host_interface_addr = if enable_ptp {
         let ip = resolve_iface_to_ip(args.interface.as_str()).unwrap_or_else(|err| {
             panic!("failed to resolve interface: {:?} (pretty: {})", err, err);
@@ -45,6 +46,7 @@ pub fn main() {
     let output_base_dir_clone = output_base_dir.clone();
     ensure_dir(&output_base_dir);
 
+    // Find all cameras on the LAN.
     let aravis = initialize_aravis();
     let camera_ids = get_camera_ids(&aravis);
     if camera_ids.len() != 2 {
@@ -129,7 +131,8 @@ pub fn main() {
             &left_config,
             frame_tx1,
             max_frames,
-            max_duration,
+            max_duration_s,
+            throwaway_duration_s,
             shutdown_clone1,
             host_interface_addr,
             Some(configuration_barrier_1),
@@ -144,7 +147,8 @@ pub fn main() {
             &right_config,
             frame_tx2,
             max_frames,
-            max_duration,
+            max_duration_s,
+            throwaway_duration_s,
             shutdown_clone2,
             None,
             Some(configuration_barrier_2),

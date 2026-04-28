@@ -108,18 +108,8 @@ crate = use_extension(
 
 # Add external Rust dependencies here.
 crate.spec(
-    default_features = False,
-    package = "aravis",
-    version = "0.11.1",
-)
-crate.spec(
     package = "argmin",
     version = "0.9.0",
-)
-crate.spec(
-    default_features = False,
-    package = "aravis-sys",
-    version = "0.11.1",
 )
 crate.spec(
     package = "axum",
@@ -128,6 +118,10 @@ crate.spec(
 crate.spec(
     package = "axum-embed",
     version = "0.1.0",
+)
+crate.spec(
+    package = "bitflags",
+    version = "2.11.1",
 )
 crate.spec(
     package = "chrono",
@@ -159,8 +153,34 @@ crate.spec(
     version = "0.34.1",
 )
 crate.spec(
-    package = "glib",
-    version = "=0.20.10",
+    package = "futures-channel",
+    version = "0.3",
+)
+crate.spec(
+    default_features = False,
+    package = "futures-core",
+    version = "0.3",
+)
+crate.spec(
+    package = "futures-executor",
+    version = "0.3",
+)
+crate.spec(
+    package = "futures-io",
+    version = "0.3",
+)
+crate.spec(
+    default_features = False,
+    package = "futures-task",
+    version = "0.3",
+)
+crate.spec(
+    package = "futures-util",
+    version = "0.3",
+)
+crate.spec(
+    package = "heck",
+    version = "0.5",
 )
 crate.spec(
     package = "http-body-util",
@@ -169,6 +189,45 @@ crate.spec(
 crate.spec(
     package = "if-addrs",
     version = "0.15.0",
+)
+
+# Have to override features, 'avif' feature is default and breaks compilation.
+crate.spec(
+    default_features = False,
+    features = [
+        "rayon",
+        "bmp",
+        "exr",
+        "ff",
+        "gif",
+        "hdr",
+        "ico",
+        "jpeg",
+        "png",
+        "pnm",
+        "qoi",
+        "tga",
+        "tiff",
+        "webp",
+    ],
+    package = "image",
+    version = "0.25.10",
+)
+crate.spec(
+    package = "levenberg-marquardt",
+    version = "0.15.0",
+)
+crate.spec(
+    package = "libc",
+    version = "0.2.185",
+)
+crate.spec(
+    package = "memchr",
+    version = "2.8.0",
+)
+crate.spec(
+    package = "nalgebra",
+    version = "0.34.1",
 )
 crate.spec(
     features = ["clang-runtime"],
@@ -182,18 +241,27 @@ crate.annotation(
         "OPENCV_PACKAGE_NAME": "opencv4",
         "LIBCLANG_PATH": "$(execpath @@//third_party:libclang_filegroup)",
         "DYLD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
+        "LD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
     },
     build_script_link_deps = ["@@//third_party:opencv"],
     crate = "opencv",
     deps = ["@@//third_party:opencv"],
 )
 crate.spec(
-    package = "levenberg-marquardt",
-    version = "0.15.0",
+    package = "pin-project-lite",
+    version = "0.2.17",
 )
 crate.spec(
-    package = "nalgebra",
-    version = "0.34.1",
+    package = "proc-macro2",
+    version = "1.0",
+)
+crate.spec(
+    package = "proc-macro-crate",
+    version = "3.5",
+)
+crate.spec(
+    package = "quote",
+    version = "1.0",
 )
 crate.spec(
     package = "rand",
@@ -229,6 +297,20 @@ crate.spec(
 crate.spec(
     package = "serialport",
     version = "4.9.0",
+)
+crate.spec(
+    features = [
+        "union",
+        "const_generics",
+        "const_new",
+    ],
+    package = "smallvec",
+    version = "1.15",
+)
+crate.spec(
+    features = ["full"],
+    package = "syn",
+    version = "2.0.113",
 )
 crate.spec(
     features = ["full"],

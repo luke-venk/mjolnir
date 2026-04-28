@@ -49,22 +49,17 @@ export function circleFieldDimsForThrowType(throwType: ThrowType) {
   }
 }
 
-export const infractionSchema = z
-  .object({
-    type: z.enum(Infraction),
-    confidence: z.number().min(0).max(1),
-  })
-  .strict();
-
 export const throwEventSchema = z
   .object({
     throwId: z.uuid(),
-    frameTimestampFromCameraMicroseconds: z.string().refine((val) => !isNaN(Date.parse(val)), {
-      message: "Invalid timestamp",
-    }),
+    frameTimestampFromCameraMicroseconds: z
+      .string()
+      .refine((val) => !isNaN(Date.parse(val)), {
+        message: "Invalid timestamp",
+      }),
     throwType: z.enum(ThrowType),
     distanceM: z.number().nonnegative(),
-    infractions: z.array(infractionSchema),
+    infractions: z.array(z.enum(Infraction)),
     images: z.array(z.url()),
     landingPointXY: z.tuple([z.number(), z.number()]).optional(),
   })

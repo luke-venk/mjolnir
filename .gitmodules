@@ -1,3 +1,24 @@
+[submodule "third_party/aravis"]
+	path = third_party/aravis
+	url = https://github.com/aravisproject/aravis
+[submodule "third_party/libffi"]
+	path = third_party/libffi
+	url = https://github.com/libffi/libffi
+[submodule "third_party/zlib"]
+	path = third_party/zlib
+	url = https://github.com/madler/zlib
+[submodule "third_party/pcre2"]
+	path = third_party/pcre2
+	url = https://github.com/PCRE2Project/pcre2.git
+[submodule "third_party/glib"]
+	path = third_party/glib
+	url = https://gitlab.gnome.org/GNOME/glib.git
 [submodule "third_party/opencv"]
 	path = third_party/opencv
 	url = https://github.com/opencv/opencv
+[submodule "third_party/aravis-rs"]
+	path = third_party/aravis-rs
+	url = https://github.com/robohouse-delft/aravis-rs
+[submodule "third_party/gtk-rs-core"]
+	path = third_party/gtk-rs-core
+	url = https://github.com/gtk-rs/gtk-rs-core

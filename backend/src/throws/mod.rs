@@ -3,7 +3,6 @@ pub mod simulate_throw;
 pub mod throw_analysis;
 pub mod throw_type;
 
-pub use infractions::Infraction;
 pub use infractions::InfractionType;
 pub use throw_analysis::ThrowAnalysisResponse;
 pub use throw_type::GetThrowTypeResponse;
