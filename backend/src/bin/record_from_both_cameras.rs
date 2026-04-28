@@ -134,7 +134,11 @@ pub fn main() {
             Some(addr),
             Some(configuration_barrier_1),
             Some(acquisition_barrier_1),
-            Some(ptp_config_1),
+            if args.common_args.enable_ptp {
+                Some(ptp_config_1)
+            } else {
+                None
+            },
         );
     });
 
@@ -151,7 +155,11 @@ pub fn main() {
             None,
             Some(configuration_barrier_2),
             Some(acquisition_barrier_2),
-            Some(ptp_config_2),
+            if args.common_args.enable_ptp {
+                Some(ptp_config_2)
+            } else {
+                None
+            },
         );
     });
 

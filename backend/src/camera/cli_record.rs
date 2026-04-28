@@ -47,7 +47,7 @@ pub struct CommonRecordArgs {
     pub throwaway_duration_s: f64,
 
     /// Whether to enable Precision Time Protocol if supported by the device.
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set, value_parser = clap::builder::BoolishValueParser::new())]
     pub enable_ptp: bool,
 }
 
