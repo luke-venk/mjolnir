@@ -23,3 +23,6 @@ bazel-mjolnir
 *.csv
 *.jpg
 *.png
+
+# Test artifacts produced by scripts/test_pr78.sh (logs, captured PGMs).
+.pr78-test-logs/
