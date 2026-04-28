@@ -125,7 +125,8 @@ fn median_dt_seconds(usable_pairs: &[&MatchedContourPair]) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schemas::{CameraId, ContourOutput, Context, MatchedContourPair, PixelCenter};
+    use crate::pipeline::CameraId;
+    use crate::schemas::{ContourOutput, MatchedContourPair, PixelCenter};
 
     fn make_pair(
         timestamp_ns: u64,
@@ -133,11 +134,16 @@ mod tests {
         right_center: Option<(f64, f64)>,
     ) -> MatchedContourPair {
         let left = ContourOutput::new(
-            Context::new(CameraId::FieldLeft, 0, timestamp_ns, timestamp_ns),
+            CameraId::FieldLeft,
+            timestamp_ns,
+            left_center.is_some(),
             left_center.map(|(cx, cy)| PixelCenter::new(cx, cy)),
         );
+
         let right = ContourOutput::new(
-            Context::new(CameraId::FieldRight, 0, timestamp_ns, timestamp_ns),
+            CameraId::FieldRight,
+            timestamp_ns,
+            right_center.is_some(),
             right_center.map(|(cx, cy)| PixelCenter::new(cx, cy)),
         );
 

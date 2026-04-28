@@ -1,4 +1,5 @@
-use crate::schemas::{CameraId, ContourOutput, MatchedContourPair};
+use crate::pipeline::CameraId;
+use crate::schemas::{ContourOutput, MatchedContourPair};
 use crossbeam::channel::{Receiver, Sender};
 use std::collections::VecDeque;
 use std::thread::{self, JoinHandle};
@@ -18,14 +19,14 @@ impl MatchedContourPairAggregator {
             let mut right_queue = VecDeque::new();
 
             for contour_output in output_rx.iter() {
-                match contour_output.context().camera_id() {
+                match contour_output.camera_id() {
                     CameraId::FieldLeft => left_queue.push_back(contour_output),
                     CameraId::FieldRight => right_queue.push_back(contour_output),
                 }
 
                 while let (Some(left), Some(right)) = (left_queue.front(), right_queue.front()) {
-                    let left_ts = left.context().buffer_timestamp_ns();
-                    let right_ts = right.context().buffer_timestamp_ns();
+                    let left_ts = left.camera_buffer_timestamp();
+                    let right_ts = right.camera_buffer_timestamp();
                     let delta = left_ts.abs_diff(right_ts);
 
                     if delta <= expected_frame_interval_ns {

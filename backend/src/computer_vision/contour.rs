@@ -1,8 +1,9 @@
 use crate::pipeline::Frame;
 
-pub fn contour(frame: Frame) -> Frame {
-    // TODO: Currently just passes the frame through this stage untouched.
-    // Please implement the actual contour logic.
-
+pub fn contour(mut frame: Frame) -> Frame {
+    // TODO: implement actual contour logic.
+    // For now, mark that contour ran, with no detection result.
+    frame.context_mut().set_detected(Some(false));
+    frame.context_mut().set_centroid(None, None);
     frame
 }

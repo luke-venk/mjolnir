@@ -1,4 +1,4 @@
-use crate::schemas::Context;
+use crate::pipeline::{CameraId, Frame};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PixelCenter {
@@ -22,17 +22,33 @@ impl PixelCenter {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContourOutput {
-    context: Context,
+    camera_id: CameraId,
+    camera_buffer_timestamp: u64,
+    detected: bool,
     center_px: Option<PixelCenter>,
 }
 
 impl ContourOutput {
-    pub fn new(context: Context, center_px: Option<PixelCenter>) -> Self {
-        Self { context, center_px }
+    pub fn new(
+        camera_id: CameraId,
+        camera_buffer_timestamp: u64,
+        detected: bool,
+        center_px: Option<PixelCenter>,
+    ) -> Self {
+        Self {
+            camera_id,
+            camera_buffer_timestamp,
+            detected,
+            center_px,
+        }
     }
 
-    pub fn context(&self) -> &Context {
-        &self.context
+    pub fn camera_id(&self) -> CameraId {
+        self.camera_id
+    }
+
+    pub fn camera_buffer_timestamp(&self) -> u64 {
+        self.camera_buffer_timestamp
     }
 
     pub fn center_px(&self) -> Option<&PixelCenter> {
@@ -40,7 +56,26 @@ impl ContourOutput {
     }
 
     pub fn detected(&self) -> bool {
-        self.center_px.is_some()
+        self.detected
+    }
+}
+
+impl From<Frame> for ContourOutput {
+    fn from(frame: Frame) -> Self {
+        let contour_output = Self::new(
+            frame.context().camera_id(),
+            frame.context().camera_buffer_timestamp(),
+            frame.context().detected().unwrap_or(false),
+            match (frame.context().cx(), frame.context().cy()) {
+                (Some(cx), Some(cy)) => Some(PixelCenter::new(cx, cy)),
+                _ => None,
+            },
+        );
+
+        let _ = frame.clear_undistorted_image();
+        let _ = frame.clear_downsampled_image();
+
+        contour_output
     }
 }
 
@@ -64,8 +99,8 @@ impl MatchedContourPair {
     }
 
     pub fn pair_timestamp_ns(&self) -> u64 {
-        let left_ts = self.left.context().buffer_timestamp_ns();
-        let right_ts = self.right.context().buffer_timestamp_ns();
+        let left_ts = self.left.camera_buffer_timestamp();
+        let right_ts = self.right.camera_buffer_timestamp();
         (left_ts / 2) + (right_ts / 2) + ((left_ts % 2 + right_ts % 2) / 2)
     }
 }
@@ -73,12 +108,14 @@ impl MatchedContourPair {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schemas::CameraId;
+    use crate::pipeline::CameraId;
 
     #[test]
     fn test_contour_output_detected_when_center_present() {
         let output = ContourOutput::new(
-            Context::new(CameraId::FieldLeft, 3, 1000, 2000),
+            CameraId::FieldLeft,
+            2000,
+            true,
             Some(PixelCenter::new(123.0, 456.0)),
         );
 
@@ -90,7 +127,7 @@ mod tests {
 
     #[test]
     fn test_contour_output_not_detected_when_center_absent() {
-        let output = ContourOutput::new(Context::new(CameraId::FieldRight, 4, 1001, 2001), None);
+        let output = ContourOutput::new(CameraId::FieldRight, 2001, false, None);
 
         assert!(!output.detected());
         assert!(output.center_px().is_none());
@@ -99,20 +136,39 @@ mod tests {
     #[test]
     fn test_matched_contour_pair_constructor_and_getters() {
         let left = ContourOutput::new(
-            Context::new(CameraId::FieldLeft, 1, 100, 110),
+            CameraId::FieldLeft,
+            110,
+            true,
             Some(PixelCenter::new(10.0, 20.0)),
         );
-        let right = ContourOutput::new(
-            Context::new(CameraId::FieldRight, 2, 200, 210),
-            None,
-        );
+        let right = ContourOutput::new(CameraId::FieldRight, 210, false, None);
 
         let pair = MatchedContourPair::new(left, right);
 
-        assert_eq!(pair.left().context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(pair.right().context().camera_id(), CameraId::FieldRight);
+        assert_eq!(pair.left().camera_id(), CameraId::FieldLeft);
+        assert_eq!(pair.right().camera_id(), CameraId::FieldRight);
         assert!(pair.left().detected());
         assert!(!pair.right().detected());
         assert_eq!(pair.pair_timestamp_ns(), 160);
+    }
+
+    #[test]
+    fn test_contour_output_from_frame_preserves_context() {
+        let mut frame = Frame::new(
+            vec![1, 2, 3, 4].into_boxed_slice(),
+            (2, 2),
+            Context::new(CameraId::FieldLeft, 99),
+        );
+        frame.context_mut().set_detected(Some(true));
+        frame.context_mut().set_centroid(Some(7.0), Some(8.0));
+
+        frame.set_undistorted_image(opencv::core::Mat::default()).unwrap();
+        frame.set_downsampled_image(opencv::core::Mat::default()).unwrap();
+
+        let output = ContourOutput::from(frame);
+        assert!(output.detected());
+        let center = output.center_px().expect("expected center");
+        assert_eq!(center.cx_px(), 7.0);
+        assert_eq!(center.cy_px(), 8.0);
     }
 }
