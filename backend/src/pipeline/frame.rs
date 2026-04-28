@@ -121,7 +121,7 @@ impl Context {
 mod tests {
     use super::*;
     use crate::camera::AtlasATP124SResolution;
-    use crate::pipeline::test_utils::{ComputerVisionStage, generate_frame};
+    use crate::pipeline::test_utils::{generate_frame, ComputerVisionStage};
     use rstest::rstest;
 
     #[rstest]
