@@ -18,6 +18,7 @@ cc_library(
         ["libffi/src/*.c"],
         exclude = [
             "libffi/src/java_raw_api.c",
+            "libffi/src/dlmalloc.c",
         ],
     ) + select({
         "//:darwin_arm64": glob(
@@ -53,7 +54,6 @@ cc_library(
         "libffi/include/ffi_common.h",
         "libffi/include/tramp.h",
     ],
-    textual_hdrs = ["libffi/src/dlmalloc.c"],
     copts = [
         "-fvisibility=hidden",
         "-ffunction-sections",
@@ -393,11 +393,6 @@ cc_library(
         ":glib_generated_config",
         ":glib_generated_glibconfig",
     ],
-    textual_hdrs = [
-        "glib/glib/gstdio-private.c",
-        "glib/glib/gthread-posix.c",
-        "glib/glib/gutilsprivate.c",
-    ],
     copts = [
         "-DHAVE_LIBMOUNT=0",
         "-Wno-unknown-pragmas",
@@ -570,10 +565,6 @@ cc_library(
         "glib/gmodule/gmodule.h",
         "glib/gmodule/gmodule-dl.c",
         "glib/gmodule/gmodule-visibility.h",
-    ],
-    textual_hdrs = [
-        "glib/gmodule/gmodule-ar.c",
-        "glib/gmodule/gmodule-dl.c",
     ],
     copts = [
         "-Wno-unknown-pragmas",
@@ -1163,7 +1154,6 @@ cc_library(
         "-ffunction-sections",
         "-fdata-sections",
         "-O2",
-        "-I/usr/include/libxml2",
     ] + select({
         "@platforms//os:linux": [
             "-pthread",
@@ -1338,9 +1328,6 @@ cmake(
         "WITH_V4L": "OFF",
         "WITH_1394": "OFF",
         "WITH_EIGEN": "OFF",
-        "WITH_ITT": "OFF",
-        "WITH_OPENCL": "OFF",
-        "WITH_CAROTENE": "OFF",
         # Enable only the core modules
         "BUILD_opencv_core": "ON",
         "BUILD_opencv_imgproc": "ON",
@@ -1348,8 +1335,8 @@ cmake(
         "BUILD_opencv_calib3d": "ON",
         "BUILD_opencv_features2d": "ON",
         "BUILD_opencv_flann": "ON",
+        "BUILD_opencv_dnn": "ON",
         # Disable everything else
-        "BUILD_opencv_dnn": "OFF",
         "BUILD_opencv_highgui": "OFF",
         "BUILD_opencv_videoio": "OFF",
         "BUILD_opencv_video": "OFF",
@@ -1369,6 +1356,7 @@ cmake(
         "libopencv_calib3d.a",
         "libopencv_features2d.a",
         "libopencv_flann.a",
+        "libopencv_dnn.a",
     ],
     visibility = ["//visibility:public"],
 )
