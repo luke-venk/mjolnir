@@ -46,6 +46,7 @@ cc_library(
             exclude = [
                 "libffi/src/x86/win64_intel.S",
                 "libffi/src/x86/win64.S",
+                "libffi/src/x86/sysv_intel.S",
             ],
         ),
     }),
