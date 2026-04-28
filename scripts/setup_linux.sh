@@ -30,12 +30,12 @@ sudo apt install -y \
   python3-opencv \
   docker.io
 
-echo "Starting Docker..."
-sudo systemctl enable docker
-sudo systemctl start docker
+# echo "Starting Docker..."
+# sudo systemctl enable docker
+# sudo systemctl start docker
 
-echo "Adding user to docker group..."
-sudo usermod -aG docker $USER
+# echo "Adding user to docker group..."
+# sudo usermod -aG docker $USER
 
 echo "Installing pyenv..."
 if [ ! -d "$HOME/.pyenv" ]; then
@@ -101,9 +101,19 @@ fi
 
 echo "Installing Bazelisk..."
 if ! command -v bazel >/dev/null 2>&1; then
-    curl -L "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64" -o bazel
-    chmod +x bazel
-    sudo mv bazel /usr/local/bin/bazel
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    aarch64|arm64)
+      BZL_ARCH="arm64"
+      ;;
+    *)
+      BZL_ARCH="amd64"
+      ;;
+  esac
+  
+  curl -L "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-$BZL_ARCH" -o bazel
+  chmod +x bazel
+  sudo mv bazel /usr/local/bin/bazel
 fi
 
 echo "Generating Rust project..."
