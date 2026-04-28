@@ -1,31 +1,34 @@
-use crate::pipeline::Frame;
 use crossbeam::channel::{Receiver, Sender};
 use std::thread;
 
-pub struct PipelineStage<F>
+pub struct PipelineStage<In, Out, F>
 where
-    F: Fn(Frame) -> Frame + Send + 'static,
+    In: Send + 'static,
+    Out: Send + 'static,
+    F: Fn(In) -> Out + Send + 'static,
 {
-    rx: Receiver<Frame>,
-    tx: Sender<Frame>,
+    rx: Receiver<In>,
+    tx: Sender<Out>,
     function: F,
 }
 
-impl<F> PipelineStage<F>
+impl<In, Out, F> PipelineStage<In, Out, F>
 where
-    F: Fn(Frame) -> Frame + Send + 'static,
+    In: Send + 'static,
+    Out: Send + 'static,
+    F: Fn(In) -> Out + Send + 'static,
 {
-    pub fn new(rx: Receiver<Frame>, tx: Sender<Frame>, function: F) -> Self {
+    pub fn new(rx: Receiver<In>, tx: Sender<Out>, function: F) -> Self {
         Self { rx, tx, function }
     }
 
     pub fn spawn(self) -> thread::JoinHandle<()> {
         thread::spawn(move || {
-            for frame_in in self.rx.iter() {
-                let frame_out = (self.function)(frame_in);
+            for input in self.rx.iter() {
+                let output = (self.function)(input);
                 self.tx
-                    .send(frame_out)
-                    .expect("Error sending processed frame to next stage.");
+                    .send(output)
+                    .expect("Error sending processed pipeline output to next stage.");
             }
         })
     }
@@ -34,29 +37,24 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::camera::AtlasATP124SResolution;
-    use crate::pipeline::test_utils::{ComputerVisionStage, generate_frame};
-    use rstest::rstest;
+    use crate::pipeline::{CameraId, Context, Frame};
 
-    #[rstest]
-    fn test_can_send_frame_through_pipeline_stage() {
-        let frame_in = generate_frame(
-            69,
-            1738,
-            AtlasATP124SResolution::Full,
-            ComputerVisionStage::ForwardDownsampledCopy,
+    #[test]
+    fn test_can_send_frame_through_homogeneous_pipeline_stage() {
+        let frame_in = Frame::new(
+            vec![6, 9, 6, 9].into_boxed_slice(),
+            (2, 2),
+            Context::new(CameraId::FieldLeft, 1738),
         );
 
         let (tx_in, rx_pipe) = crossbeam::channel::bounded::<Frame>(3);
         let (tx_pipe, rx_out) = crossbeam::channel::bounded::<Frame>(3);
 
-        // Dummy function to just update value and increment timestamp.
         let my_function = |f: Frame| -> Frame {
-            generate_frame(
-                67,
-                f.context().camera_buffer_timestamp() + 1,
-                AtlasATP124SResolution::Full,
-                ComputerVisionStage::ForwardDownsampledCopy,
+            Frame::new(
+                vec![6, 7, 6, 7].into_boxed_slice(),
+                (2, 2),
+                *f.context(),
             )
         };
 
@@ -65,10 +63,29 @@ mod tests {
         tx_in.send(frame_in).unwrap();
         let frame_out = rx_out.recv().unwrap();
 
-        // Assert that updated timestamp and data is as expected.
-        assert_eq!(frame_out.context().camera_buffer_timestamp(), 1739);
-        for &pixel in frame_out.raw_bytes_full_resolution() {
-            assert_eq!(pixel, 67u8);
-        }
+        assert_eq!(frame_out.raw_bytes_full_resolution().as_ref(), &[6, 7, 6, 7]);
+        assert_eq!(frame_out.context().camera_id(), CameraId::FieldLeft);
+        assert_eq!(frame_out.context().camera_buffer_timestamp(), 1738);
+    }
+
+    #[test]
+    fn test_can_send_frame_through_heterogeneous_pipeline_stage() {
+        let frame_in = Frame::new(
+            vec![6, 9, 6, 9].into_boxed_slice(),
+            (2, 2),
+            Context::new(CameraId::FieldRight, 88),
+        );
+
+        let (tx_in, rx_pipe) = crossbeam::channel::bounded::<Frame>(3);
+        let (tx_pipe, rx_out) = crossbeam::channel::bounded::<usize>(3);
+
+        let my_function = |f: Frame| -> usize { f.raw_bytes_full_resolution().len() };
+
+        let pipeline_stage = PipelineStage::new(rx_pipe, tx_pipe, my_function);
+        let _ = pipeline_stage.spawn();
+        tx_in.send(frame_in).unwrap();
+        let output = rx_out.recv().unwrap();
+
+        assert_eq!(output, 4);
     }
 }

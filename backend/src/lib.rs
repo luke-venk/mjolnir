@@ -1,7 +1,11 @@
+pub mod aggregation_coordinator;
 pub mod camera;
 pub mod camera_ingest;
 pub mod circle_infractions_ingest;
 pub mod computer_vision;
+pub mod matched_contour_pair_aggregator;
 pub mod pipeline;
+pub mod schemas;
 pub mod server;
 pub mod throws;
+pub mod trajectory_input_collector;
