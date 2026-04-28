@@ -48,21 +48,6 @@ rust_library(
 )
 
 rust_library(
-<<<<<<< HEAD
-    name = "backend_lib_fake",
-    # The source code should exclude anything related to CV, pipeline,
-    # cameras, triangulation, etc. So just include the bare minimum
-    # to simulate throws.
-    srcs = glob([
-        "src/server/**/*.rs",
-        "src/throws/**/*.rs",
-        "src/**/lib.rs",
-        # Technically it doesn't make sense to include circle infractions
-        # code in fake lib, but will break if not included. Spin off ticket?
-        "src/circle_infractions_ingest/**/*.rs",
-    ]),
-    crate_features = ["fake"],
-=======
     name = "backend_lib_real_cameras",
     srcs = glob(
         ["src/**/*.rs"],
@@ -153,7 +138,6 @@ rust_library(
             "src/camera/stream/**/*.rs",
         ],
     ),
->>>>>>> origin/main
     crate_name = "backend_lib",
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
@@ -387,12 +371,7 @@ rust_binary(
 # Unit tests to test the backend library.
 rust_test(
     name = "tests",
-<<<<<<< HEAD
-    crate = ":backend_lib",
-    crate_features = ["real"],
-=======
     crate = ":backend_lib_all_real",
->>>>>>> origin/main
     deps = [
         "@crates//:http-body-util",
         "@crates//:rstest",
