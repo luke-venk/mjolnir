@@ -1,14 +1,12 @@
-use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use axum::Router;
 use axum_embed::ServeEmbed;
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
+use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use rust_embed::Embed;
+#[cfg(feature = "real_cameras")]
+use backend_lib::pipeline::{CameraId, Pipeline};
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
-#[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::Pipeline;
-#[cfg(feature = "real_cameras")]
-use backend_lib::schemas::CameraId;
 
 // The env var `EMBEDDED_FRONTEND_DIR` is where Bazel placed the frontend
 // static exports, so rust_embed can embed those into this binary.
@@ -26,8 +24,7 @@ pub fn create_prod_app(throw_source: ThrowSource) -> Router {
 
     // Use the fallback service so any request that isn't one of the
     // API's routes will be directed to the frontend static exports.
-    create_api_router(throw_source, infractions_rx)
-        .fallback_service(serve_assets)
+    create_api_router(throw_source, infractions_rx).fallback_service(serve_assets)
 }
 
 // Lacking a "real_cameras" feature flag will not start the CV pipelines, and will point the
@@ -54,9 +51,7 @@ async fn main() {
 
     // Build the Axum router.
     let app = create_prod_app(ThrowSource::Camera);
-    
+
     // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
-
-    // TODO(#7): Implement Clean Shutdown.
 }

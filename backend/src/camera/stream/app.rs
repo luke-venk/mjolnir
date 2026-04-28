@@ -1,7 +1,7 @@
 // LiveViewApp implementation required for eframe to handle window creation
 // for our egui to render live streaming.
 use super::frame::FrameData;
-use backend_lib::camera::{CameraIngestConfig, Resolution};
+use backend_lib::camera::{CameraIngestConfig, AtlasATP124SResolution};
 use eframe::egui;
 use eframe::egui::TextureHandle;
 use std::{
@@ -116,9 +116,9 @@ impl eframe::App for LiveViewApp {
 
                 // Button for resolution.
                 ui.label("Resolution:");
-                ui.selectable_value(&mut settings.resolution, Resolution::HD, "720p");
-                ui.selectable_value(&mut settings.resolution, Resolution::FullHD, "1080p");
-                ui.selectable_value(&mut settings.resolution, Resolution::UHD4K, "4k");
+                ui.selectable_value(&mut settings.resolution, AtlasATP124SResolution::Quarter, "Quarter");
+                ui.selectable_value(&mut settings.resolution, AtlasATP124SResolution::Half, "Half");
+                ui.selectable_value(&mut settings.resolution, AtlasATP124SResolution::Full, "Full");
             });
             ui.add_space(8.0);
 
@@ -218,7 +218,7 @@ impl eframe::App for LiveViewApp {
         println!();
         println!(
             "bazel run //backend:record -- --resolution {} --exposure-us {} --frame-rate-hz {} --output-dir <output-dir> <stop condition>",
-            settings.resolution.to_string(),
+            settings.resolution,
             settings.exposure_time_us,
             settings.frame_rate_hz,
         );

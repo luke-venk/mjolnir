@@ -3,9 +3,7 @@ use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use tower_http::cors::{Any, CorsLayer};
 #[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::Pipeline;
-#[cfg(feature = "real_cameras")]
-use backend_lib::schemas::CameraId;
+use backend_lib::pipeline::{CameraId, Pipeline};
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
 
@@ -52,6 +50,4 @@ async fn main() {
 
     // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
-
-    // TODO(#7): Implement Clean Shutdown.
 }

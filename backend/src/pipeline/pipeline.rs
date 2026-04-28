@@ -3,8 +3,7 @@ use crate::camera_ingest::ingest_frames;
 use crate::computer_vision::{
     contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
 };
-use crate::pipeline::Frame;
-use crate::schemas::CameraId;
+use crate::pipeline::{CameraId, Frame};
 use crossbeam::channel::bounded;
 use std::thread::{self, JoinHandle};
 
