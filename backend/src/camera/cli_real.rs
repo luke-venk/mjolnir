@@ -38,6 +38,17 @@ pub struct RealBackendArgs {
     /// Whether to enable Precision Time Protocol while reading real cameras.
     #[arg(long, default_value_t = true)]
     pub enable_ptp: bool,
+
+    /// Override the camera ID assigned to FieldLeft. If only one of
+    /// --left-camera-id / --right-camera-id is given, the other is inferred
+    /// from the available pool (live: discovered cameras; replay: cameras
+    /// present in the recorded session).
+    #[arg(long = "left-camera-id")]
+    pub left_camera_id: Option<String>,
+
+    /// Override the camera ID assigned to FieldRight. See --left-camera-id.
+    #[arg(long = "right-camera-id")]
+    pub right_camera_id: Option<String>,
 }
 
 impl RealBackendArgs {

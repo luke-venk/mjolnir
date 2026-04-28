@@ -49,6 +49,18 @@ pub struct CommonRecordArgs {
     /// Whether to enable Precision Time Protocol if supported by the device.
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set, value_parser = clap::builder::BoolishValueParser::new())]
     pub enable_ptp: bool,
+
+    /// Override the camera ID assigned to FieldLeft when recording. The chosen
+    /// assignment is written into recording_session.json so replay reproduces
+    /// it. If only one of --left-camera-id / --right-camera-id is given, the
+    /// other is inferred from the discovered cameras.
+    #[arg(long = "left-camera-id")]
+    pub left_camera_id: Option<String>,
+
+    /// Override the camera ID assigned to FieldRight when recording. See
+    /// --left-camera-id.
+    #[arg(long = "right-camera-id")]
+    pub right_camera_id: Option<String>,
 }
 
 impl CommonRecordArgs {

@@ -75,12 +75,20 @@ impl Pipeline {
 // Starts one replay thread and one left/right pipeline pair for recorded footage.
 pub fn start_recorded_footage_pipelines(
     footage_dir: PathBuf,
+    cli_left_camera_id: Option<String>,
+    cli_right_camera_id: Option<String>,
     capacity_per_channel: usize,
 ) -> (JoinHandle<()>, Pipeline, Pipeline) {
     let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity_per_channel);
     let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity_per_channel);
     let replay_handle = thread::spawn(move || {
-        replay_recorded_session(footage_dir, left_tx, right_tx);
+        replay_recorded_session(
+            footage_dir,
+            cli_left_camera_id,
+            cli_right_camera_id,
+            left_tx,
+            right_tx,
+        );
     });
     let left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, capacity_per_channel);
     let right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, capacity_per_channel);
@@ -220,7 +228,7 @@ mod tests {
         let capacity = 4;
         let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity);
         let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity);
-        replay_recorded_session(temp_dir.clone(), left_tx, right_tx);
+        replay_recorded_session(temp_dir.clone(), None, None, left_tx, right_tx);
 
         let left_frames: Vec<_> = left_rx.try_iter().collect();
         let right_frames: Vec<_> = right_rx.try_iter().collect();
@@ -298,7 +306,7 @@ mod tests {
         let (right_handles, right_output_rx) =
             spawn_tracking_pipeline_graph(right_rx, capacity, Arc::clone(&travel_log));
 
-        replay_recorded_session(temp_dir.clone(), left_tx, right_tx);
+        replay_recorded_session(temp_dir.clone(), None, None, left_tx, right_tx);
 
         let left_output = left_output_rx
             .recv_timeout(Duration::from_secs(5))

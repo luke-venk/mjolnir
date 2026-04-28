@@ -52,7 +52,12 @@ async fn main() {
         "Starting real dev backend in recorded-footage replay mode from {}.",
         footage_dir.display()
     );
-    let _ = start_recorded_footage_pipelines(footage_dir, rolling_buffer_size);
+    let _ = start_recorded_footage_pipelines(
+        footage_dir,
+        args.left_camera_id,
+        args.right_camera_id,
+        rolling_buffer_size,
+    );
 
     // Build the Axum router.
     let app = create_dev_app(ThrowSource::Camera);

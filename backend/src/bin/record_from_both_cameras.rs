@@ -5,7 +5,10 @@ use backend_lib::camera::record::run_capture_thread;
 use backend_lib::camera::record::writer::{
     Frame, SessionManifest, ensure_dir, write_session_manifest, write_to_disk,
 };
-use backend_lib::camera::{CameraIngestConfig, CancelableBarrier, RecordWithBothCamerasArgs};
+use backend_lib::camera::{
+    AssignmentInputs, CameraIngestConfig, CancelableBarrier, RecordWithBothCamerasArgs,
+    resolve_camera_assignment,
+};
 use clap::Parser;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -55,22 +58,39 @@ pub fn main() {
         return;
     }
 
-    // Parse command line arguments into camera ingest configs for each camera.
-    let camera_ingest_config1: CameraIngestConfig =
-        CameraIngestConfig::from_record_both_args(camera_ids[0].clone(), args.clone());
+    // Resolve which physical camera ID acts as FieldLeft / FieldRight, then
+    // build configs and persist the assignment so replay can reproduce it.
+    let assignment = resolve_camera_assignment(AssignmentInputs {
+        cli_left: args.common_args.left_camera_id.clone(),
+        cli_right: args.common_args.right_camera_id.clone(),
+        manifest: None,
+        available_camera_ids: &camera_ids,
+    });
+    println!(
+        "camera_ingest: recording with left={} right={}",
+        assignment.left_camera_id, assignment.right_camera_id
+    );
+
+    let camera_ingest_config1: CameraIngestConfig = CameraIngestConfig::from_record_both_args(
+        assignment.left_camera_id.clone(),
+        args.clone(),
+    );
     camera_ingest_config1
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
-    let camera_ingest_config2: CameraIngestConfig =
-        CameraIngestConfig::from_record_both_args(camera_ids[1].clone(), args.clone());
+    let camera_ingest_config2: CameraIngestConfig = CameraIngestConfig::from_record_both_args(
+        assignment.right_camera_id.clone(),
+        args.clone(),
+    );
     camera_ingest_config2
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
+
     write_session_manifest(
         &output_base_dir,
         &SessionManifest {
-            left_camera_id: camera_ingest_config1.camera_id.clone(),
-            right_camera_id: camera_ingest_config2.camera_id.clone(),
+            left_camera_id: assignment.left_camera_id,
+            right_camera_id: assignment.right_camera_id,
         },
     );
 
