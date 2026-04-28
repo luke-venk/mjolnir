@@ -1,15 +1,11 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 # -----------------------------------------------------------------------------
-# BACKEND LIBRARY
+# BACKEND LIBRARIES
 # -----------------------------------------------------------------------------
 
-# Define a library that compiles the source code and can be used by
-# both the dev/prod and fake/real binaries. Can be optimized using
-# command line arguments.
-
 rust_library(
-    name = "backend_lib",
+    name = "backend_lib_all_real",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = [
@@ -20,36 +16,39 @@ rust_library(
             "src/camera/stream/**/*.rs",
         ],
     ),
-    crate_features = ["real"],
+    crate_features = [
+        "real_circle_sensors",
+        "real_cameras",
+    ],
+    crate_name = "backend_lib",
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
     }),
     deps = [
-        "@crates//:aravis",
-        "@crates//:aravis-sys",
-        "@crates//:argmin",
+        "//third_party:aravis",
+        "//third_party:aravis_sys",
+        "//third_party:glib",
         "@crates//:axum",
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
-        "@crates//:eframe",
-        "@crates//:glib",
         "@crates//:if-addrs",
         "@crates//:levenberg-marquardt",
         "@crates//:nalgebra",
         "@crates//:opencv",
         "@crates//:rand",
-        "@crates//:rand_distr",
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:serialport",
+        "@crates//:tiff",
         "@crates//:tokio",
         "@crates//:uuid",
     ],
 )
 
 rust_library(
+<<<<<<< HEAD
     name = "backend_lib_fake",
     # The source code should exclude anything related to CV, pipeline,
     # cameras, triangulation, etc. So just include the bare minimum
@@ -63,24 +62,117 @@ rust_library(
         "src/circle_infractions_ingest/**/*.rs",
     ]),
     crate_features = ["fake"],
+=======
+    name = "backend_lib_real_cameras",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/bin/",
+            "src/main.*.rs",
+            # Exclude following code that contains egui and eframe.
+            # See ticket #30 for more information.
+            "src/camera/stream/**/*.rs",
+        ],
+    ),
+    crate_features = ["real_cameras"],
     crate_name = "backend_lib",
     rustc_flags = select({
         "//:release": ["-Cstrip=debuginfo"],
         "//conditions:default": [],
     }),
     deps = [
-        "@crates//:aravis",
-        "@crates//:aravis-sys",
+        "//third_party:aravis",
+        "//third_party:aravis_sys",
+        "//third_party:glib",
         "@crates//:axum",
         "@crates//:chrono",
         "@crates//:clap",
         "@crates//:crossbeam",
-        "@crates//:eframe",
-        "@crates//:glib",
         "@crates//:if-addrs",
+        "@crates//:levenberg-marquardt",
+        "@crates//:nalgebra",
+        "@crates//:opencv",
         "@crates//:rand",
         "@crates//:serde",
         "@crates//:serde_json",
+        "@crates//:tiff",
+        "@crates//:tokio",
+        "@crates//:uuid",
+    ],
+)
+
+rust_library(
+    name = "backend_lib_real_circle_sensors",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/bin/",
+            "src/main.*.rs",
+            # Exclude following code that contains egui and eframe.
+            # See ticket #30 for more information.
+            "src/camera/stream/**/*.rs",
+        ],
+    ),
+    crate_features = ["real_circle_sensors"],
+    crate_name = "backend_lib",
+    rustc_flags = select({
+        "//:release": ["-Cstrip=debuginfo"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//third_party:aravis",
+        "//third_party:aravis_sys",
+        "//third_party:glib",
+        "@crates//:axum",
+        "@crates//:chrono",
+        "@crates//:clap",
+        "@crates//:crossbeam",
+        "@crates//:if-addrs",
+        "@crates//:levenberg-marquardt",
+        "@crates//:nalgebra",
+        "@crates//:opencv",
+        "@crates//:rand",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:serialport",
+        "@crates//:tiff",
+        "@crates//:tokio",
+        "@crates//:uuid",
+    ],
+)
+
+rust_library(
+    name = "backend_lib_all_fake",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/bin/",
+            "src/main.*.rs",
+            # Exclude following code that contains egui and eframe.
+            # See ticket #30 for more information.
+            "src/camera/stream/**/*.rs",
+        ],
+    ),
+>>>>>>> origin/main
+    crate_name = "backend_lib",
+    rustc_flags = select({
+        "//:release": ["-Cstrip=debuginfo"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//third_party:aravis",
+        "//third_party:aravis_sys",
+        "//third_party:glib",
+        "@crates//:axum",
+        "@crates//:chrono",
+        "@crates//:clap",
+        "@crates//:crossbeam",
+        "@crates//:if-addrs",
+        "@crates//:opencv",
+        "@crates//:rand",
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:tiff",
         "@crates//:tokio",
         "@crates//:uuid",
     ],
@@ -100,8 +192,8 @@ rust_library(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib",
-        "@crates//:aravis",
+        ":backend_lib_real_cameras",
+        "//third_party:aravis",
         "@crates//:crossbeam",
         "@crates//:eframe",
         "@crates//:egui",
@@ -109,7 +201,7 @@ rust_library(
 )
 
 # -----------------------------------------------------------------------------
-# MAIN BINARY
+# MAIN BINARIES
 # -----------------------------------------------------------------------------
 
 # Note, the main reason for splitting into dev and prod
@@ -128,11 +220,10 @@ rust_library(
 # origin, CORS is needed. It will not have any embedded assets.
 
 rust_binary(
-    name = "dev_fake",
+    name = "dev_all_fake",
     srcs = ["src/main.dev.rs"],
-    crate_features = ["fake"],
     deps = [
-        ":backend_lib_fake",
+        ":backend_lib_all_fake",
         "@crates//:axum",
         "@crates//:tokio",
         "@crates//:tower-http",
@@ -140,11 +231,34 @@ rust_binary(
 )
 
 rust_binary(
-    name = "dev_real",
+    name = "dev_real_cameras",
     srcs = ["src/main.dev.rs"],
-    crate_features = ["real"],
+    crate_features = ["real_cameras"],
     deps = [
-        ":backend_lib",
+        ":backend_lib_real_cameras",
+        "@crates//:axum",
+        "@crates//:tokio",
+        "@crates//:tower-http",
+    ],
+)
+
+rust_binary(
+    name = "dev_real_circle_sensors",
+    srcs = ["src/main.dev.rs"],
+    deps = [
+        ":backend_lib_real_circle_sensors",
+        "@crates//:axum",
+        "@crates//:tokio",
+        "@crates//:tower-http",
+    ],
+)
+
+rust_binary(
+    name = "dev_all_real",
+    srcs = ["src/main.dev.rs"],
+    crate_features = ["real_cameras"],
+    deps = [
+        ":backend_lib_all_real",
         "@crates//:axum",
         "@crates//:tokio",
         "@crates//:tower-http",
@@ -157,10 +271,9 @@ rust_binary(
 # serve using axum_embed.
 
 rust_binary(
-    name = "prod_fake",
+    name = "prod_all_fake",
     srcs = ["src/main.prod.rs"],
     compile_data = ["//frontend:static_exports"],
-    crate_features = ["fake"],
     # At compile-time, this env var tells our source code exactly where
     # Bazel placed the frontend outputs, so rust-embed can embed it
     # into the binary directly.
@@ -176,7 +289,62 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib_fake",
+        ":backend_lib_all_fake",
+        "@crates//:axum",
+        "@crates//:axum-embed",
+        "@crates//:rust-embed",
+        "@crates//:tokio",
+    ],
+)
+
+rust_binary(
+    name = "prod_real_cameras",
+    srcs = ["src/main.prod.rs"],
+    compile_data = ["//frontend:static_exports"],
+    crate_features = ["real_cameras"],
+    # At compile-time, this env var tells our source code exactly where
+    # Bazel placed the frontend outputs, so rust-embed can embed it
+    # into the binary directly.
+    rustc_env = {
+        "EMBEDDED_FRONTEND_DIR": "$(execpath //frontend:static_exports)",
+    },
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Cpanic=abort",
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":backend_lib_real_cameras",
+        "@crates//:axum",
+        "@crates//:axum-embed",
+        "@crates//:rust-embed",
+        "@crates//:tokio",
+    ],
+)
+
+rust_binary(
+    name = "prod_real_circle_sensors",
+    srcs = ["src/main.prod.rs"],
+    compile_data = ["//frontend:static_exports"],
+    # At compile-time, this env var tells our source code exactly where
+    # Bazel placed the frontend outputs, so rust-embed can embed it
+    # into the binary directly.
+    rustc_env = {
+        "EMBEDDED_FRONTEND_DIR": "$(execpath //frontend:static_exports)",
+    },
+    rustc_flags = ["-Cstrip=symbols"] + select({
+        "//:release": [
+            "-Cpanic=abort",
+            "-Ccodegen-units=1",
+            "-Copt-level=3",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":backend_lib_real_circle_sensors",
         "@crates//:axum",
         "@crates//:axum-embed",
         "@crates//:rust-embed",
@@ -189,10 +357,10 @@ rust_binary(
 # it will embed the frontend's static exports using rust-embed and
 # serve using axum_embed.
 rust_binary(
-    name = "prod_real",
+    name = "prod_all_real",
     srcs = ["src/main.prod.rs"],
     compile_data = ["//frontend:static_exports"],
-    crate_features = ["real"],
+    crate_features = ["real_cameras"],
     # At compile-time, this env var tells our source code exactly where
     # Bazel placed the frontend outputs, so rust-embed can embed it
     # into the binary directly.
@@ -208,7 +376,7 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib",
+        ":backend_lib_all_real",
         "@crates//:axum",
         "@crates//:axum-embed",
         "@crates//:rust-embed",
@@ -219,8 +387,12 @@ rust_binary(
 # Unit tests to test the backend library.
 rust_test(
     name = "tests",
+<<<<<<< HEAD
     crate = ":backend_lib",
     crate_features = ["real"],
+=======
+    crate = ":backend_lib_all_real",
+>>>>>>> origin/main
     deps = [
         "@crates//:http-body-util",
         "@crates//:rstest",
@@ -244,7 +416,7 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib",
+        ":backend_lib_real_cameras",
     ],
 )
 
@@ -259,7 +431,7 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib",
+        ":backend_lib_real_cameras",
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:ctrlc",
@@ -277,7 +449,7 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib",
+        ":backend_lib_real_cameras",
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:ctrlc",
@@ -295,7 +467,7 @@ rust_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":backend_lib",
+        ":backend_lib_real_cameras",
         ":stream_lib",
         "@crates//:clap",
         "@crates//:crossbeam",

@@ -1,4 +1,4 @@
-use crate::camera::Resolution;
+use crate::camera::AtlasATP124SResolution;
 use clap::Parser;
 
 /// The command line arguments we'd expect for the cameras to live stream.
@@ -10,8 +10,8 @@ pub struct StreamFromCamerasArgs {
     pub camera_id: String,
 
     // Resolution to start with.
-    #[arg(long, value_enum, default_value_t = Resolution::HD)]
-    pub resolution: Resolution,
+    #[arg(long, value_enum, default_value_t = AtlasATP124SResolution::Quarter)]
+    pub resolution: AtlasATP124SResolution,
 
     // Exposure time to start with (microseconds).
     #[arg(long = "exposure-us", default_value_t = 10000.0)]
