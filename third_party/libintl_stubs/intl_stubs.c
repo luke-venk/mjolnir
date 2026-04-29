@@ -20,11 +20,13 @@ const gchar *g_dngettext(const gchar *domain, const gchar *m1, const gchar *m2, 
 const gchar *g_dcgettext(const gchar *domain, const gchar *msgid, int category) { return msgid; }
 
 /* --- macOS Platform Stubs --- */
+#ifdef __APPLE__
 void load_user_special_dirs_macos(gchar **special_dirs) { /* No-op */ }
 const gchar *g_content_type_get_icon_impl(const gchar *type) { return NULL; }
 const gchar *g_content_type_get_symbolic_icon_impl(const gchar *type) { return NULL; }
 const gchar *g_content_type_from_mime_type_impl(const gchar *mime) { return NULL; }
 const gchar *g_content_type_guess_impl(const gchar *filename, const guchar *data, size_t data_size, int *result_uncertain) { return NULL; }
+#endif
 
 /* --- GIO Internal Stubs --- */
 int glib_get_sandbox_type(void) { return 0; }

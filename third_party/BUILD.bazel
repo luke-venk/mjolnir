@@ -726,6 +726,18 @@ rust_library(
     ],
 )
 
+cc_library(
+    name = "xdgmime",
+    srcs = glob(["glib/gio/xdgmime/*.c"]),
+    hdrs = glob(["glib/gio/xdgmime/*.h"]),
+    copts = [
+        "-DXDG_PREFIX=_gio_xdg",
+        "-D_GNU_SOURCE",
+        "-Wno-unknown-pragmas",
+    ],
+    includes = ["glib/gio/xdgmime"],
+)
+
 generate_visibility_header(
     name = "gio_visibility",
     out = "glib/gio/gio-visibility.h",
@@ -781,6 +793,8 @@ GIO_ENUM_HEADERS = glob(
         "glib/gio/gnetworkmonitorportal.h",
         "glib/gio/gportalsupport.h",
         "glib/gio/gmemorymonitorbase.h",
+        "glib/gio/gmemorymonitorpoll.h",
+        "glib/gio/gmemorymonitorpsi.h",
     ],
 )
 
@@ -903,6 +917,22 @@ genrule(
     """,
 )
 
+genrule(
+    name = "patch_giomodule",
+    srcs = ["glib/gio/giomodule.c"],
+    outs = ["glib/gio/giomodule_patched.c"],
+    cmd = """sed \
+        -e '/g_inotify_file_monitor_get_type/d' \
+        -e '/_g_network_monitor_netlink_get_type/d' \
+        -e '/_g_network_monitor_nm_get_type/d' \
+        -e '/g_memory_monitor_psi_get_type/d' \
+        -e '/g_memory_monitor_poll_get_type/d' \
+        -e '/g_desktop_app_info_lookup_get_type/d' \
+        -e '/G_TYPE_DESKTOP_APP_INFO_LOOKUP/d' \
+        -e '/G_DESKTOP_APP_INFO_LOOKUP_EXTENSION_POINT_NAME/d' \
+        $< > $@""",
+)
+
 cc_library(
     name = "gio_objects",
     srcs = glob(
@@ -938,21 +968,26 @@ cc_library(
             "glib/gio/gmemorymonitorportal.c",
             "glib/gio/gmemorymonitordbus.c",
             "glib/gio/gmemorymonitorwin32.c",
+            "glib/gio/gmemorymonitorpoll.c",
+            "glib/gio/gmemorymonitorpsi.c",
             "glib/gio/gthreadedresolver.c",
             "glib/gio/gregistrysettingsbackend.c",
             "glib/gio/gwin32registrykey.c",
             "glib/gio/gio-launch-desktop.c",
             "glib/gio/gio-querymodules.c",
             "glib/gio/gosxnetworkmonitor.c",
+            "glib/gio/giomodule.c",
         ],
     ) + [
         ":generate_gdbus_daemon_sources",
         ":generate_gio_enumtypes_c",
         ":generate_xdp_dbus_sources",
+        ":patch_giomodule",
     ] + [
         "glib/subprojects/gvdb/gvdb/gvdb-reader.c",
     ] + select({
         "@platforms//os:macos": ["glib/gio/gosxnetworkmonitor.c"],
+        "@platforms//os:linux": ["glib/gio/gcontenttype-fdo.c"],
         "//conditions:default": [],
     }),
     hdrs = glob(["glib/gio/*.h"]) + [
@@ -1014,6 +1049,7 @@ cc_library(
         ":glib_objects",
         ":gmodule",
         ":gobject",
+        ":xdgmime",
     ],
 )
 
@@ -1485,6 +1521,7 @@ cmake(
         "BUILD_opencv_photo": "OFF",
         "BUILD_opencv_stitching": "OFF",
         "BUILD_opencv_gapi": "OFF",
+        "WITH_KLEIDICV": "OFF",  # disable on ARM so I can test build
     },
     generate_args = ["-GNinja"],
     lib_source = ":opencv_srcs",
@@ -1497,5 +1534,12 @@ cmake(
         "libopencv_features2d.a",
         "libopencv_flann.a",
     ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "opencv_dir",
+    srcs = [":opencv"],
+    output_group = "gen_dir",
     visibility = ["//visibility:public"],
 )

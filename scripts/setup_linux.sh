@@ -62,8 +62,9 @@ if [ ! -d "$HOME/.nvm" ]; then
 fi
 
 export NVM_DIR="$HOME/.nvm"
-# shellcheck disable=SC1090
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+set +e
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+set -e
 
 echo "Installing rustup..."
 if ! command -v rustup >/dev/null 2>&1; then
