@@ -2,13 +2,13 @@
 // a performant manner so frames aren't dropped.
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
-use std::fs::{self, File, create_dir_all};
+use std::fs::{self, create_dir_all, File};
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tiff::decoder::{Decoder, DecodingResult};
-use tiff::encoder::{TiffEncoder, colortype};
+use tiff::encoder::{colortype, TiffEncoder};
 
 const RECORDED_FRAME_PAYLOAD_EXTENSIONS: [&str; 2] = ["tiff", "raw"];
 
