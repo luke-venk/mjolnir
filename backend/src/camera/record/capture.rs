@@ -8,7 +8,6 @@ use crate::camera::{BarrierResult, CancelableBarrier};
 use crate::computer_vision::mog2::MOG2_HISTORY_FRAMES;
 use aravis::{BufferStatus, Camera, CameraExt, StreamExt};
 use aravis_sys::arv_camera_get_integer;
-use crossbeam::channel::{Receiver, bounded};
 use glib::translate::*; // To convert high-level types to raw pointers
 use std::ffi::CString;
 use std::net::{SocketAddr, UdpSocket};
@@ -16,26 +15,7 @@ use std::path::PathBuf;
 use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct CaptureStopConditions {
-    pub max_frames: Option<usize>,
-    pub max_duration_s: Option<f64>,
-}
-
-pub struct DualCameraCapture {
-    handles: Vec<JoinHandle<()>>,
-}
-
-impl DualCameraCapture {
-    pub fn join(self) {
-        for handle in self.handles {
-            handle.join().expect("Error: Recorder thread panicked.");
-        }
-    }
-}
 
 // Need both cams to agree on the next timestamp to start recording at
 // They're on separate threads and this code architecture doesn't make it easy for them to talk to each other
@@ -136,133 +116,9 @@ pub fn send_action_command(
         .expect("Failed to send action command.");
 }
 
-pub fn start_dual_camera_capture(
-    output_base_dir: Option<PathBuf>,
-    interface: Option<&str>,
-    left_config: CameraIngestConfig,
-    right_config: CameraIngestConfig,
-    stop_conditions: CaptureStopConditions,
-    shutdown: Arc<AtomicBool>,
-    channel_capacity: usize,
-) -> (Receiver<Frame>, DualCameraCapture) {
-    if left_config.enable_ptp != right_config.enable_ptp {
-        panic!("Both cameras must agree on whether PTP is enabled.");
-    }
-
-    let host_interface_addr = if left_config.enable_ptp {
-        let interface =
-            interface.unwrap_or_else(|| panic!("An interface is required when PTP is enabled."));
-        let ip =
-            crate::camera::ip_identifier::resolve_iface_to_ip(interface).unwrap_or_else(|err| {
-                panic!("failed to resolve interface: {:?} (pretty: {})", err, err);
-            });
-        Some(SocketAddr::new(ip, 0))
-    } else {
-        None
-    };
-
-    let (frame_tx1, frame_rx) = bounded::<Frame>(channel_capacity);
-    let frame_tx2 = frame_tx1.clone();
-
-    let ptp_enable_barrier = CancelableBarrier::new(2);
-    let ptp_enable_barrier_1 = ptp_enable_barrier.clone();
-    let ptp_enable_barrier_2 = ptp_enable_barrier.clone();
-    let ptp_enable_barrier_cancel = ptp_enable_barrier.clone();
-
-    let ptp_configure_barrier = CancelableBarrier::new(2);
-    let ptp_configure_barrier_1 = ptp_configure_barrier.clone();
-    let ptp_configure_barrier_2 = ptp_configure_barrier.clone();
-    let ptp_configure_barrier_cancel = ptp_configure_barrier.clone();
-
-    let ptp_lock_barrier = CancelableBarrier::new(2);
-    let ptp_lock_barrier_1 = ptp_lock_barrier.clone();
-    let ptp_lock_barrier_2 = ptp_lock_barrier.clone();
-    let ptp_lock_barrier_cancel = ptp_lock_barrier.clone();
-
-    let configuration_barrier = CancelableBarrier::new(2);
-    let configuration_barrier_1 = configuration_barrier.clone();
-    let configuration_barrier_2 = configuration_barrier.clone();
-    let configuration_barrier_cancel = configuration_barrier.clone();
-
-    let acquisition_barrier = CancelableBarrier::new(2);
-    let acquisition_barrier_1 = acquisition_barrier.clone();
-    let acquisition_barrier_2 = acquisition_barrier.clone();
-    let acquisition_barrier_cancel = acquisition_barrier.clone();
-
-    let shutdown_for_cancel = Arc::clone(&shutdown);
-    let cancel_handle = thread::spawn(move || {
-        while !shutdown_for_cancel.load(Ordering::SeqCst) {
-            thread::sleep(Duration::from_millis(50));
-        }
-
-        ptp_enable_barrier_cancel.cancel();
-        ptp_configure_barrier_cancel.cancel();
-        ptp_lock_barrier_cancel.cancel();
-        configuration_barrier_cancel.cancel();
-        acquisition_barrier_cancel.cancel();
-    });
-
-    let maybe_ptp_config_1 = left_config.enable_ptp.then_some(PtpConfig {
-        is_slave: false,
-        enable_barrier: ptp_enable_barrier_1,
-        configure_barrier: ptp_configure_barrier_1,
-        lock_barrier: ptp_lock_barrier_1,
-    });
-    let maybe_ptp_config_2 = right_config.enable_ptp.then_some(PtpConfig {
-        is_slave: true,
-        enable_barrier: ptp_enable_barrier_2,
-        configure_barrier: ptp_configure_barrier_2,
-        lock_barrier: ptp_lock_barrier_2,
-    });
-
-    let shutdown_clone1 = Arc::clone(&shutdown);
-    let shutdown_clone2 = Arc::clone(&shutdown);
-    let output_base_dir_1 = output_base_dir.clone();
-    let output_base_dir_2 = output_base_dir;
-
-    let record_handle_1 = thread::spawn(move || {
-        run_capture_thread(
-            output_base_dir_1,
-            &left_config,
-            frame_tx1,
-            stop_conditions.max_frames,
-            stop_conditions.max_duration_s,
-            0.0,
-            shutdown_clone1,
-            host_interface_addr,
-            Some(configuration_barrier_1),
-            Some(acquisition_barrier_1),
-            maybe_ptp_config_1,
-        );
-    });
-
-    let record_handle_2 = thread::spawn(move || {
-        run_capture_thread(
-            output_base_dir_2,
-            &right_config,
-            frame_tx2,
-            stop_conditions.max_frames,
-            stop_conditions.max_duration_s,
-            0.0,
-            shutdown_clone2,
-            None,
-            Some(configuration_barrier_2),
-            Some(acquisition_barrier_2),
-            maybe_ptp_config_2,
-        );
-    });
-
-    (
-        frame_rx,
-        DualCameraCapture {
-            handles: vec![cancel_handle, record_handle_1, record_handle_2],
-        },
-    )
-}
-
 /// Records stream from a single camera.
 pub fn run_capture_thread(
-    output_base_dir: Option<PathBuf>,
+    output_base_dir: PathBuf,
     config: &CameraIngestConfig,
     frame_tx: crossbeam::channel::Sender<Frame>,
     max_frames: Option<usize>,
@@ -278,11 +134,8 @@ pub fn run_capture_thread(
 
     // Ensure output directory exists.
     let camera_id = config.camera_id.clone();
-    let output_camera_dir = output_base_dir.map(|base_dir| {
-        let output_camera_dir = base_dir.join(sanitize_path_name(&camera_id));
-        ensure_dir(&output_camera_dir);
-        output_camera_dir
-    });
+    let output_camera_dir = output_base_dir.join(sanitize_path_name(&camera_id));
+    ensure_dir(&output_camera_dir);
 
     // Create Aravis camera, apply configuration, start stream, and queue buffers.
     let camera = match create_camera(&camera_id) {
@@ -556,7 +409,7 @@ pub fn run_capture_thread(
                     output_camera_dir: output_camera_dir.clone(),
                     frame_index: frames_saved,
                     bytes: data,
-                    metadata,
+                    metadata: metadata,
                 };
                 frame_tx.send(frame).expect(
                     "Error: Failed to send frame from recording capture thread to write thread.",
@@ -581,36 +434,27 @@ pub fn run_capture_thread(
     // Stop acquisition.
     shutdown.store(true, Ordering::SeqCst);
     let _ = camera.stop_acquisition();
-    if let Some(output_camera_dir) = output_camera_dir {
-        // Compute how much time has passed since recording has started.
-        // Then, report metrics.
-        if let Some(record_start) = recording_start_time {
-            let total_capture_time_s: f64 = record_start.elapsed().as_secs_f64();
-            let effective_frame_rate: f64 = frames_saved as f64 / total_capture_time_s;
-            let delivery_rate: f64 =
-                frames_saved as f64 / (frames_saved + frames_dropped) as f64;
 
-            println!("Finished recording from camera {}.", config.camera_id,);
-            println!();
-            println!(
-                "Saved {} frame(s) and dropped {} frames(s) in {:.3} seconds.",
-                frames_saved, frames_dropped, total_capture_time_s,
-            );
-            println!(
-                "The effective frame rate was {:.3} FPS (requested {:.3} FPS). Delivery rate was {:.1}%.",
-                effective_frame_rate,
-                config.frame_rate_hz,
-                delivery_rate * 100.0,
-            );
-            println!();
-            println!("Wrote files into {}.", output_camera_dir.display());
-        } else {
-            println!("Recording was cancelled before any frames were written.");
-        }
-    } else {
+    // Compute how much time has passed since recording has started.
+    // Then, report metrics.
+    if let Some(record_start) = recording_start_time {
+        let total_capture_time_s: f64 = record_start.elapsed().as_secs_f64();
+        let effective_frame_rate: f64 = frames_saved as f64 / total_capture_time_s;
+        let delivery_rate: f64 = frames_saved as f64 / (frames_saved + frames_dropped) as f64;
+
+        println!("Finished recording from camera {}.", config.camera_id,);
+        println!();
         println!(
-            "Finished capturing from camera {}. Forwarded {} frame(s).",
-            config.camera_id, frames_saved
+            "Saved {} frame(s) and dropped {} frames(s) in {:.3} seconds.",
+            frames_saved, frames_dropped, total_capture_time_s,
         );
+        println!(
+            "The effective frame rate was {:.3} FPS (requested {:.3} FPS). Delivery rate was {:.1}%.",
+            effective_frame_rate, config.frame_rate_hz, delivery_rate * 100.0,
+        );
+        println!();
+        println!("Wrote files into {}.", output_camera_dir.display());
+    } else {
+        println!("Recording was cancelled before any frames were written.");
     }
 }

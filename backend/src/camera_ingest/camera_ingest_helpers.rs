@@ -1,34 +1,9 @@
 use crossbeam::channel::Sender;
 
-use aravis::Buffer;
-
-use crate::camera::aravis_utils::copy_buffer_bytes;
 use crate::camera::record::writer::Frame as RecordedFrame;
 use crate::pipeline::{CameraId, Context, Frame as PipelineFrame};
 
-// Converts one successful Aravis buffer into the pipeline's frame type.
-pub fn buffer_to_frame(
-    buffer: &Buffer,
-    camera_id: CameraId,
-    resolution: (u32, u32),
-) -> PipelineFrame {
-    let data = copy_buffer_bytes(buffer);
-    let timestamp = if buffer.system_timestamp() != 0 {
-        buffer.system_timestamp()
-    } else if buffer.timestamp() != 0 {
-        buffer.timestamp()
-    } else {
-        buffer.frame_id()
-    };
-
-    PipelineFrame::new(
-        data.into_boxed_slice(),
-        resolution,
-        Context::new(camera_id, timestamp),
-    )
-}
-
-// Converts one recorded frame payload into the pipeline's frame type.
+/// Converts one recorded frame payload into the pipeline's frame type.
 pub fn recorded_frame_to_frame(frame: RecordedFrame, camera_id: CameraId) -> PipelineFrame {
     let timestamp = if frame.metadata.system_timestamp_ns != 0 {
         frame.metadata.system_timestamp_ns
@@ -46,6 +21,10 @@ pub fn recorded_frame_to_frame(frame: RecordedFrame, camera_id: CameraId) -> Pip
     )
 }
 
+/// Sort key used to interleave the two cameras' recorded frames in the
+/// timestamp order they were captured. Prefers `buffer_timestamp_ns`, then
+/// `system_timestamp_ns`, then `frame_id`. The trailing fields are
+/// tie-breakers so the ordering is deterministic.
 pub fn recorded_frame_sort_key(frame: &RecordedFrame) -> (u64, u64, String, usize) {
     let primary_timestamp = if frame.metadata.buffer_timestamp_ns != 0 {
         frame.metadata.buffer_timestamp_ns
@@ -68,31 +47,21 @@ pub fn recorded_frame_sort_key(frame: &RecordedFrame) -> (u64, u64, String, usiz
     )
 }
 
+/// Sends one recorded frame into the pipeline matching `camera_id` (which is
+/// determined upstream by which subdirectory the frame was loaded from).
+/// Returns `false` if the destination channel has been dropped.
 pub fn forward_recorded_frame(
+    camera_id: CameraId,
     recorded_frame: RecordedFrame,
-    left_camera_id: &str,
-    right_camera_id: &str,
     left_tx: &Sender<PipelineFrame>,
     right_tx: &Sender<PipelineFrame>,
 ) -> bool {
-    let source_camera_id = recorded_frame.metadata.camera_id.clone();
     let frame_index = recorded_frame.metadata.frame_index;
-    let (send_result, destination) = if source_camera_id == left_camera_id {
-        (
-            left_tx.send(recorded_frame_to_frame(recorded_frame, CameraId::FieldLeft)),
-            "left",
-        )
-    } else if source_camera_id == right_camera_id {
-        (
-            right_tx.send(recorded_frame_to_frame(
-                recorded_frame,
-                CameraId::FieldRight,
-            )),
-            "right",
-        )
-    } else {
-        eprintln!("Received frame for unexpected camera {}.", source_camera_id);
-        return true;
+    let pipeline_frame = recorded_frame_to_frame(recorded_frame, camera_id);
+
+    let send_result = match camera_id {
+        CameraId::FieldLeft => left_tx.send(pipeline_frame),
+        CameraId::FieldRight => right_tx.send(pipeline_frame),
     };
 
     if send_result.is_err() {
@@ -100,30 +69,35 @@ pub fn forward_recorded_frame(
     }
 
     println!(
-        "camera_ingest: forwarded recorded frame {} from {} into {} pipeline",
-        frame_index, source_camera_id, destination
+        "camera_ingest: forwarded recorded frame {} into {:?} pipeline",
+        frame_index, camera_id
     );
     true
 }
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use crate::camera::record::writer::{Frame as RecordedFrame, Metadata};
     use crate::pipeline::CameraId;
 
     use crossbeam::channel::bounded;
+    use std::path::PathBuf;
 
     use super::{forward_recorded_frame, recorded_frame_sort_key, recorded_frame_to_frame};
 
+    fn make_frame(metadata: Metadata, bytes: Vec<u8>) -> RecordedFrame {
+        RecordedFrame {
+            output_camera_dir: PathBuf::new(),
+            frame_index: metadata.frame_index,
+            bytes,
+            metadata,
+        }
+    }
+
     #[test]
     fn recorded_frame_to_frame_prefers_system_timestamp() {
-        let frame = RecordedFrame {
-            output_camera_dir: Some(PathBuf::new()),
-            frame_index: 3,
-            bytes: vec![1, 2, 3],
-            metadata: Metadata {
+        let frame = make_frame(
+            Metadata {
                 camera_id: "camera-a".to_string(),
                 frame_index: 3,
                 width: 3,
@@ -133,23 +107,21 @@ mod tests {
                 buffer_timestamp_ns: 456,
                 frame_id: 789,
             },
-        };
+            vec![1, 2, 3],
+        );
 
         let converted = recorded_frame_to_frame(frame, CameraId::FieldLeft);
 
-        assert_eq!(converted.data(), &[1, 2, 3]);
+        assert_eq!(converted.raw_bytes_full_resolution().as_ref(), &[1, 2, 3]);
         assert_eq!(converted.raw_full_resolution(), (3, 1));
         assert_eq!(converted.context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(converted.context().timestamp(), 123);
+        assert_eq!(converted.context().camera_buffer_timestamp(), 123);
     }
 
     #[test]
     fn recorded_frame_to_frame_falls_back_to_buffer_timestamp() {
-        let frame = RecordedFrame {
-            output_camera_dir: Some(PathBuf::new()),
-            frame_index: 1,
-            bytes: vec![9, 8, 7],
-            metadata: Metadata {
+        let frame = make_frame(
+            Metadata {
                 camera_id: "camera-b".to_string(),
                 frame_index: 1,
                 width: 3,
@@ -159,20 +131,18 @@ mod tests {
                 buffer_timestamp_ns: 456,
                 frame_id: 789,
             },
-        };
+            vec![9, 8, 7],
+        );
 
         let converted = recorded_frame_to_frame(frame, CameraId::FieldRight);
 
-        assert_eq!(converted.context().timestamp(), 456);
+        assert_eq!(converted.context().camera_buffer_timestamp(), 456);
     }
 
     #[test]
     fn recorded_frame_to_frame_falls_back_to_frame_id() {
-        let frame = RecordedFrame {
-            output_camera_dir: Some(PathBuf::new()),
-            frame_index: 2,
-            bytes: vec![4, 5, 6],
-            metadata: Metadata {
+        let frame = make_frame(
+            Metadata {
                 camera_id: "camera-c".to_string(),
                 frame_index: 2,
                 width: 3,
@@ -182,20 +152,18 @@ mod tests {
                 buffer_timestamp_ns: 0,
                 frame_id: 789,
             },
-        };
+            vec![4, 5, 6],
+        );
 
         let converted = recorded_frame_to_frame(frame, CameraId::FieldLeft);
 
-        assert_eq!(converted.context().timestamp(), 789);
+        assert_eq!(converted.context().camera_buffer_timestamp(), 789);
     }
 
     #[test]
     fn recorded_frame_sort_key_prefers_buffer_then_system_then_frame_id() {
-        let frame = RecordedFrame {
-            output_camera_dir: Some(PathBuf::new()),
-            frame_index: 7,
-            bytes: vec![],
-            metadata: Metadata {
+        let frame = make_frame(
+            Metadata {
                 camera_id: "camera-z".to_string(),
                 frame_index: 7,
                 width: 0,
@@ -205,7 +173,8 @@ mod tests {
                 buffer_timestamp_ns: 22,
                 frame_id: 11,
             },
-        };
+            vec![],
+        );
 
         assert_eq!(
             recorded_frame_sort_key(&frame),
@@ -214,13 +183,10 @@ mod tests {
     }
 
     #[test]
-    fn forward_recorded_frame_routes_by_camera_id() {
-        let frame = RecordedFrame {
-            output_camera_dir: Some(PathBuf::new()),
-            frame_index: 1,
-            bytes: vec![1, 2, 3],
-            metadata: Metadata {
-                camera_id: "left-camera".to_string(),
+    fn forward_recorded_frame_routes_to_pipeline_matching_camera_id() {
+        let left_frame = make_frame(
+            Metadata {
+                camera_id: "anything".to_string(),
                 frame_index: 1,
                 width: 3,
                 height: 1,
@@ -229,15 +195,45 @@ mod tests {
                 buffer_timestamp_ns: 0,
                 frame_id: 0,
             },
-        };
+            vec![1, 2, 3],
+        );
         let (left_tx, left_rx) = bounded(1);
         let (right_tx, right_rx) = bounded(1);
 
-        let forwarded =
-            forward_recorded_frame(frame, "left-camera", "right-camera", &left_tx, &right_tx);
-
-        assert!(forwarded);
-        assert_eq!(left_rx.try_recv().unwrap().context().timestamp(), 123);
+        assert!(forward_recorded_frame(
+            CameraId::FieldLeft,
+            left_frame,
+            &left_tx,
+            &right_tx,
+        ));
+        assert_eq!(left_rx.try_recv().unwrap().context().camera_buffer_timestamp(), 123);
         assert!(right_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn forward_recorded_frame_returns_false_when_destination_channel_is_dropped() {
+        let frame = make_frame(
+            Metadata {
+                camera_id: "anything".to_string(),
+                frame_index: 0,
+                width: 1,
+                height: 1,
+                payload_bytes: 1,
+                system_timestamp_ns: 1,
+                buffer_timestamp_ns: 0,
+                frame_id: 0,
+            },
+            vec![1],
+        );
+        let (left_tx, _left_rx) = bounded(1);
+        let (right_tx, right_rx) = bounded(1);
+        drop(right_rx);
+
+        assert!(!forward_recorded_frame(
+            CameraId::FieldRight,
+            frame,
+            &left_tx,
+            &right_tx,
+        ));
     }
 }

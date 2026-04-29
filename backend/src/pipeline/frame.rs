@@ -1,5 +1,5 @@
-use crate::camera::CancelableBarrier;
 use opencv::core::Mat;
+use opencv::prelude::MatTraitConstManual;
 use std::sync::OnceLock;
 
 /// The frame contains all the information that is needed associated with a specific
@@ -36,36 +36,19 @@ pub struct Frame {
     /// The frame after downsampling is applied, before Mog2 is applied.
     downsampled_image: OnceLock<Mat>,
 
-    /// Optional cross-pipeline synchronization primitive attached to this frame.
-    cancellable_barrier: Option<CancelableBarrier>,
-
     /// Frame metadata like timestamps.
     context: Context,
 }
 
 impl Frame {
     pub fn new(data: Box<[u8]>, resolution: (u32, u32), context: Context) -> Self {
-        Self::new_with_cancellable_barrier(data, resolution, context, None)
-    }
-
-    pub fn new_with_cancellable_barrier(
-        data: Box<[u8]>,
-        resolution: (u32, u32),
-        context: Context,
-        cancellable_barrier: Option<CancelableBarrier>,
-    ) -> Self {
         Self {
             raw_bytes_full_resolution: data,
             raw_full_resolution: resolution,
             undistorted_image: OnceLock::new(),
             downsampled_image: OnceLock::new(),
-            cancellable_barrier,
             context,
         }
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.raw_bytes_full_resolution
     }
 
     pub fn raw_bytes_full_resolution(&self) -> &Box<[u8]> {
@@ -94,10 +77,6 @@ impl Frame {
         self.downsampled_image
             .set(mat)
             .map_err(|_| "Downsampled normalized image already set.".to_string())
-    }
-
-    pub fn cancellable_barrier(&self) -> Option<&CancelableBarrier> {
-        self.cancellable_barrier.as_ref()
     }
 
     pub fn context(&self) -> &Context {
@@ -136,18 +115,13 @@ impl Context {
     pub fn camera_buffer_timestamp(&self) -> u64 {
         self.camera_buffer_timestamp
     }
-
-    pub fn timestamp(&self) -> u64 {
-        self.camera_buffer_timestamp
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::camera::AtlasATP124SResolution;
-    use crate::pipeline::test_utils::{ComputerVisionStage, generate_frame};
-    use opencv::prelude::MatTraitConstManual;
+    use crate::pipeline::test_utils::{generate_frame, ComputerVisionStage};
     use rstest::rstest;
 
     #[rstest]
@@ -167,7 +141,6 @@ mod tests {
             ComputerVisionStage::ForwardDownsampledCopy,
         );
 
-        assert_eq!(frame.data(), frame.raw_bytes_full_resolution().as_ref());
         for &pixel in frame.raw_bytes_full_resolution() {
             assert_eq!(pixel, 21u8);
         }
@@ -177,7 +150,5 @@ mod tests {
         }
         assert_eq!(frame.context().camera_id(), CameraId::FieldLeft);
         assert_eq!(frame.context().camera_buffer_timestamp(), 1342);
-        assert_eq!(frame.context().timestamp(), 1342);
-        assert!(frame.cancellable_barrier().is_none());
     }
 }

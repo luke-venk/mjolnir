@@ -49,43 +49,19 @@ pub struct CommonRecordArgs {
     /// Whether to enable Precision Time Protocol if supported by the device.
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set, value_parser = clap::builder::BoolishValueParser::new())]
     pub enable_ptp: bool,
-
-    /// Override the camera ID assigned to FieldLeft when recording. The chosen
-    /// assignment is written into recording_session.json so replay reproduces
-    /// it. If only one of --left-camera-id / --right-camera-id is given, the
-    /// other is inferred from the discovered cameras.
-    #[arg(long = "left-camera-id")]
-    pub left_camera_id: Option<String>,
-
-    /// Override the camera ID assigned to FieldRight when recording. See
-    /// --left-camera-id.
-    #[arg(long = "right-camera-id")]
-    pub right_camera_id: Option<String>,
 }
 
 impl CommonRecordArgs {
     /// Ensure that at least one stop condition was provided.
     pub fn validate(&self) -> Result<(), String> {
         if self.max_frames.is_none() && self.max_duration_s.is_none() {
-            return Err(
+            Err(
                 "You must provide at least one stopping condition: --max-frames or --max-duration"
                     .to_string(),
-            );
+            )
+        } else {
+            Ok(())
         }
-
-        if self.max_frames == Some(0) {
-            return Err("max_frames must be > 0".to_string());
-        }
-
-        if self.max_duration_s == Some(0.0) {
-            return Err("max_duration_s must be > 0".to_string());
-        }
-
-        if self.max_duration_s.is_some_and(|seconds| seconds < 0.0) {
-            return Err("max_duration_s must be > 0".to_string());
-        }
-
-        Ok(())
     }
 }
 

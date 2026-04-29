@@ -5,5 +5,5 @@ pub mod pipeline_stage;
 pub mod test_utils;
 
 pub use frame::{CameraId, Context, Frame};
-pub use pipeline::{Pipeline, start_recorded_footage_pipelines, start_recording_camera_pipelines};
+pub use pipeline::{Pipeline, start_recorded_footage_pipelines};
 pub use pipeline_stage::PipelineStage;

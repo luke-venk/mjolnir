@@ -1,15 +1,9 @@
 use super::PipelineStage;
-use crate::camera::CameraIngestConfig;
-use crate::camera::record::{CaptureStopConditions, DualCameraCapture, start_dual_camera_capture};
-use crate::camera_ingest::{replay_recorded_session, run_recording_ingest};
-use crate::computer_vision::{
-    contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
-};
+use crate::camera_ingest::replay_recorded_session;
+use crate::computer_vision::{contour, forward_downsampled_copy, mog2, undistortion};
 use crate::pipeline::{CameraId, Frame as PipelineFrame};
 use crossbeam::channel::{Receiver, bounded};
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::thread::{self, JoinHandle};
 
 pub struct Pipeline {
@@ -28,23 +22,20 @@ impl Pipeline {
         let (tx_stage1, rx_stage2) = bounded::<PipelineFrame>(capacity_per_channel);
         let (tx_stage2, rx_stage3) = bounded::<PipelineFrame>(capacity_per_channel);
         let (tx_stage3, rx_stage4) = bounded::<PipelineFrame>(capacity_per_channel);
-        let (tx_stage4, rx_stage5) = bounded::<PipelineFrame>(capacity_per_channel);
-        let (tx_stage5, rx_output) = bounded::<PipelineFrame>(capacity_per_channel);
+        let (tx_stage4, rx_output) = bounded::<PipelineFrame>(capacity_per_channel);
 
         let handle_stage1 = PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn();
         let handle_stage2 =
-            PipelineStage::new(rx_stage2, tx_stage2, intensity_normalization).spawn();
-        let handle_stage3 =
-            PipelineStage::new(rx_stage3, tx_stage3, forward_downsampled_copy).spawn();
-        let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, mog2).spawn();
-        let handle_stage5 = PipelineStage::new(rx_stage5, tx_stage5, contour).spawn();
+            PipelineStage::new(rx_stage2, tx_stage2, forward_downsampled_copy).spawn();
+        let handle_stage3 = PipelineStage::new(rx_stage3, tx_stage3, mog2).spawn();
+        let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, contour).spawn();
 
         let handle_output = thread::spawn(move || {
             for frame in rx_output.iter() {
                 println!(
                     "pipeline: {:?} produced output frame at timestamp {}",
                     camera_id,
-                    frame.context().timestamp()
+                    frame.context().camera_buffer_timestamp()
                 );
                 // TODO: forward results to output.
             }
@@ -57,7 +48,6 @@ impl Pipeline {
                 handle_stage2,
                 handle_stage3,
                 handle_stage4,
-                handle_stage5,
                 handle_output,
             ],
         }
@@ -75,66 +65,17 @@ impl Pipeline {
 // Starts one replay thread and one left/right pipeline pair for recorded footage.
 pub fn start_recorded_footage_pipelines(
     footage_dir: PathBuf,
-    cli_left_camera_id: Option<String>,
-    cli_right_camera_id: Option<String>,
     capacity_per_channel: usize,
 ) -> (JoinHandle<()>, Pipeline, Pipeline) {
     let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity_per_channel);
     let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity_per_channel);
     let replay_handle = thread::spawn(move || {
-        replay_recorded_session(
-            footage_dir,
-            cli_left_camera_id,
-            cli_right_camera_id,
-            left_tx,
-            right_tx,
-        );
+        replay_recorded_session(footage_dir, left_tx, right_tx);
     });
     let left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, capacity_per_channel);
     let right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, capacity_per_channel);
 
     (replay_handle, left_pipeline, right_pipeline)
-}
-
-pub fn start_recording_camera_pipelines(
-    interface: Option<&str>,
-    left_config: CameraIngestConfig,
-    right_config: CameraIngestConfig,
-    capacity_per_channel: usize,
-) -> (DualCameraCapture, JoinHandle<()>, Pipeline, Pipeline) {
-    let left_camera_id = left_config.camera_id.clone();
-    let right_camera_id = right_config.camera_id.clone();
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let (frame_rx, capture_runtime) = start_dual_camera_capture(
-        None,
-        interface,
-        left_config,
-        right_config,
-        CaptureStopConditions::default(),
-        Arc::clone(&shutdown),
-        capacity_per_channel,
-    );
-    let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity_per_channel);
-    let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity_per_channel);
-    let ingest_handle = thread::spawn(move || {
-        run_recording_ingest(
-            frame_rx,
-            left_camera_id,
-            right_camera_id,
-            left_tx,
-            right_tx,
-            shutdown,
-        );
-    });
-    let left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, capacity_per_channel);
-    let right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, capacity_per_channel);
-
-    (
-        capture_runtime,
-        ingest_handle,
-        left_pipeline,
-        right_pipeline,
-    )
 }
 
 #[cfg(test)]
@@ -150,12 +91,13 @@ mod tests {
     use crossbeam::channel::bounded;
 
     use super::Pipeline;
-    use crate::camera::record::writer::{Metadata, SESSION_MANIFEST_FILE_NAME, SessionManifest};
+    use crate::camera::record::writer::Metadata;
     use crate::camera_ingest::replay_recorded_session;
-    use crate::computer_vision::{
-        contour, forward_downsampled_copy, intensity_normalization, mog2, undistortion,
-    };
+    use crate::computer_vision::{contour, forward_downsampled_copy, mog2, undistortion};
     use crate::pipeline::{CameraId, Context, Frame as PipelineFrame, PipelineStage};
+
+    const LEFT_CAM_DIR: &str = "left_cam";
+    const RIGHT_CAM_DIR: &str = "right_cam";
 
     #[test]
     fn pipeline_new_starts_and_stops_after_input_channel_closes() {
@@ -182,24 +124,15 @@ mod tests {
                 .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        let left_dir = temp_dir.join("camera-b");
-        let right_dir = temp_dir.join("camera-a");
+        let left_dir = temp_dir.join(LEFT_CAM_DIR);
+        let right_dir = temp_dir.join(RIGHT_CAM_DIR);
         fs::create_dir_all(&left_dir).expect("create left test dir");
         fs::create_dir_all(&right_dir).expect("create right test dir");
-        fs::write(
-            temp_dir.join(SESSION_MANIFEST_FILE_NAME),
-            serde_json::to_vec_pretty(&SessionManifest {
-                left_camera_id: "camera-b".to_string(),
-                right_camera_id: "camera-a".to_string(),
-            })
-            .expect("serialize session manifest"),
-        )
-        .expect("write session manifest");
 
         write_test_recorded_frame(
             &left_dir,
             &Metadata {
-                camera_id: "camera-b".to_string(),
+                camera_id: "left-cam-serial".to_string(),
                 frame_index: 0,
                 width: 4,
                 height: 1,
@@ -213,7 +146,7 @@ mod tests {
         write_test_recorded_frame(
             &right_dir,
             &Metadata {
-                camera_id: "camera-a".to_string(),
+                camera_id: "right-cam-serial".to_string(),
                 frame_index: 0,
                 width: 4,
                 height: 1,
@@ -228,19 +161,19 @@ mod tests {
         let capacity = 4;
         let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity);
         let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity);
-        replay_recorded_session(temp_dir.clone(), None, None, left_tx, right_tx);
+        replay_recorded_session(temp_dir.clone(), left_tx, right_tx);
 
         let left_frames: Vec<_> = left_rx.try_iter().collect();
         let right_frames: Vec<_> = right_rx.try_iter().collect();
 
         assert_eq!(left_frames.len(), 1);
-        assert_eq!(left_frames[0].data(), &[1, 2, 3, 4]);
+        assert_eq!(left_frames[0].raw_bytes_full_resolution().as_ref(), &[1, 2, 3, 4]);
         assert_eq!(left_frames[0].context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(left_frames[0].context().timestamp(), 300);
+        assert_eq!(left_frames[0].context().camera_buffer_timestamp(), 300);
         assert_eq!(right_frames.len(), 1);
-        assert_eq!(right_frames[0].data(), &[5, 6, 7, 8]);
+        assert_eq!(right_frames[0].raw_bytes_full_resolution().as_ref(), &[5, 6, 7, 8]);
         assert_eq!(right_frames[0].context().camera_id(), CameraId::FieldRight);
-        assert_eq!(right_frames[0].context().timestamp(), 320);
+        assert_eq!(right_frames[0].context().camera_buffer_timestamp(), 320);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -254,24 +187,15 @@ mod tests {
                 .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        let left_dir = temp_dir.join("camera-b");
-        let right_dir = temp_dir.join("camera-a");
+        let left_dir = temp_dir.join(LEFT_CAM_DIR);
+        let right_dir = temp_dir.join(RIGHT_CAM_DIR);
         fs::create_dir_all(&left_dir).expect("create left test dir");
         fs::create_dir_all(&right_dir).expect("create right test dir");
-        fs::write(
-            temp_dir.join(SESSION_MANIFEST_FILE_NAME),
-            serde_json::to_vec_pretty(&SessionManifest {
-                left_camera_id: "camera-b".to_string(),
-                right_camera_id: "camera-a".to_string(),
-            })
-            .expect("serialize session manifest"),
-        )
-        .expect("write session manifest");
 
         write_test_recorded_frame(
             &left_dir,
             &Metadata {
-                camera_id: "camera-b".to_string(),
+                camera_id: "left-cam-serial".to_string(),
                 frame_index: 0,
                 width: 4,
                 height: 1,
@@ -285,7 +209,7 @@ mod tests {
         write_test_recorded_frame(
             &right_dir,
             &Metadata {
-                camera_id: "camera-a".to_string(),
+                camera_id: "right-cam-serial".to_string(),
                 frame_index: 0,
                 width: 4,
                 height: 1,
@@ -306,7 +230,7 @@ mod tests {
         let (right_handles, right_output_rx) =
             spawn_tracking_pipeline_graph(right_rx, capacity, Arc::clone(&travel_log));
 
-        replay_recorded_session(temp_dir.clone(), None, None, left_tx, right_tx);
+        replay_recorded_session(temp_dir.clone(), left_tx, right_tx);
 
         let left_output = left_output_rx
             .recv_timeout(Duration::from_secs(5))
@@ -316,9 +240,9 @@ mod tests {
             .expect("right tracked pipeline should emit one frame");
 
         assert_eq!(left_output.context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(left_output.context().timestamp(), 300);
+        assert_eq!(left_output.context().camera_buffer_timestamp(), 300);
         assert_eq!(right_output.context().camera_id(), CameraId::FieldRight);
-        assert_eq!(right_output.context().timestamp(), 320);
+        assert_eq!(right_output.context().camera_buffer_timestamp(), 320);
 
         for handle in left_handles.into_iter().chain(right_handles) {
             handle
@@ -340,12 +264,15 @@ mod tests {
             })
             .count();
 
-        assert_eq!(left_entries, 5, "left frame should traverse all 5 stage slots");
         assert_eq!(
-            right_entries, 5,
-            "right frame should traverse all 5 stage slots"
+            left_entries, 4,
+            "left frame should traverse all 4 stage slots"
         );
-        for stage_index in 1..=5 {
+        assert_eq!(
+            right_entries, 4,
+            "right frame should traverse all 4 stage slots"
+        );
+        for stage_index in 1..=4 {
             assert!(
                 entries.iter().any(|(camera_id, idx, timestamp)| {
                     *camera_id == CameraId::FieldLeft && *idx == stage_index && *timestamp == 300
@@ -389,8 +316,8 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("pipeline should produce one output frame");
 
-        assert_eq!(output_frame.data(), file_bytes.as_slice());
-        assert_eq!(output_frame.context().timestamp(), input_timestamp);
+        assert_eq!(output_frame.raw_bytes_full_resolution().as_ref(), file_bytes.as_slice());
+        assert_eq!(output_frame.context().camera_buffer_timestamp(), input_timestamp);
 
         for handle in handles {
             handle
@@ -418,15 +345,13 @@ mod tests {
         let (tx_stage1, rx_stage2) = bounded::<PipelineFrame>(capacity);
         let (tx_stage2, rx_stage3) = bounded::<PipelineFrame>(capacity);
         let (tx_stage3, rx_stage4) = bounded::<PipelineFrame>(capacity);
-        let (tx_stage4, rx_stage5) = bounded::<PipelineFrame>(capacity);
-        let (tx_stage5, rx_output) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage4, rx_output) = bounded::<PipelineFrame>(capacity);
 
         let handles = vec![
             PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn(),
-            PipelineStage::new(rx_stage2, tx_stage2, intensity_normalization).spawn(),
-            PipelineStage::new(rx_stage3, tx_stage3, forward_downsampled_copy).spawn(),
-            PipelineStage::new(rx_stage4, tx_stage4, mog2).spawn(),
-            PipelineStage::new(rx_stage5, tx_stage5, contour).spawn(),
+            PipelineStage::new(rx_stage2, tx_stage2, forward_downsampled_copy).spawn(),
+            PipelineStage::new(rx_stage3, tx_stage3, mog2).spawn(),
+            PipelineStage::new(rx_stage4, tx_stage4, contour).spawn(),
         ];
 
         (handles, rx_output)
@@ -443,8 +368,7 @@ mod tests {
         let (tx_stage1, rx_stage2) = bounded::<PipelineFrame>(capacity);
         let (tx_stage2, rx_stage3) = bounded::<PipelineFrame>(capacity);
         let (tx_stage3, rx_stage4) = bounded::<PipelineFrame>(capacity);
-        let (tx_stage4, rx_stage5) = bounded::<PipelineFrame>(capacity);
-        let (tx_stage5, rx_output) = bounded::<PipelineFrame>(capacity);
+        let (tx_stage4, rx_output) = bounded::<PipelineFrame>(capacity);
 
         let make_stage = |stage_index: usize,
                           rx: crossbeam::channel::Receiver<PipelineFrame>,
@@ -457,7 +381,7 @@ mod tests {
                     .push((
                         frame.context().camera_id(),
                         stage_index,
-                        frame.context().timestamp(),
+                        frame.context().camera_buffer_timestamp(),
                     ));
                 frame
             })
@@ -469,7 +393,6 @@ mod tests {
             make_stage(2, rx_stage2, tx_stage2),
             make_stage(3, rx_stage3, tx_stage3),
             make_stage(4, rx_stage4, tx_stage4),
-            make_stage(5, rx_stage5, tx_stage5),
         ];
 
         (handles, rx_output)

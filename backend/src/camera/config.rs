@@ -1,5 +1,4 @@
 // Code for handling configurations for recording with Aravis.
-use crate::camera::RealBackendArgs;
 use crate::camera::RecordWithBothCamerasArgs;
 use crate::camera::RecordWithOneCameraArgs;
 use crate::camera::StreamFromCamerasArgs;
@@ -17,7 +16,6 @@ pub struct CameraIngestConfig {
     pub resolution: AtlasATP124SResolution,
 
     // System-level config.
-    pub enable_ptp: bool,
     pub num_buffers: usize,
     pub timeout_ms: u64,
 
@@ -32,7 +30,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
-            enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
             restart_requested: false,
@@ -45,22 +42,8 @@ impl CameraIngestConfig {
             exposure_time_us: args.common_args.exposure_time_us,
             frame_rate_hz: args.common_args.frame_rate_hz,
             resolution: args.common_args.resolution,
-            enable_ptp: args.common_args.enable_ptp,
             num_buffers: args.common_args.num_buffers,
             timeout_ms: args.common_args.timeout_ms,
-            restart_requested: false,
-        }
-    }
-
-    pub fn from_real_args(camera_id: String, args: &RealBackendArgs) -> Self {
-        Self {
-            camera_id,
-            exposure_time_us: args.exposure_time_us,
-            frame_rate_hz: args.frame_rate_hz,
-            resolution: args.resolution,
-            enable_ptp: args.enable_ptp,
-            num_buffers: args.num_buffers,
-            timeout_ms: args.timeout_ms,
             restart_requested: false,
         }
     }
@@ -71,7 +54,6 @@ impl CameraIngestConfig {
             exposure_time_us: args.exposure_time_us,
             frame_rate_hz: args.frame_rate_hz,
             resolution: args.resolution,
-            enable_ptp: false,
             num_buffers: 8,
             timeout_ms: 5000,
             restart_requested: false,
@@ -95,21 +77,6 @@ impl CameraIngestConfig {
     }
 }
 
-impl Default for CameraIngestConfig {
-    fn default() -> Self {
-        Self {
-            camera_id: String::new(),
-            exposure_time_us: 10000.0,
-            frame_rate_hz: 30.0,
-            resolution: AtlasATP124SResolution::Full,
-            enable_ptp: false,
-            num_buffers: 8,
-            timeout_ms: 5000,
-            restart_requested: false,
-        }
-    }
-}
-
 /// Different resolutions we might want to record with for the LUCID
 /// Vision Labs Atlas ATP124S cameras.
 /// See https://www.edmundoptics.com/p/lucid-vision-labst-atlas-atp124s-mc-sony-imx545-123mp-ip67-monochrome-camera/49821/.
@@ -125,8 +92,6 @@ pub enum AtlasATP124SResolution {
     #[default]
     Full,
 }
-
-pub type Resolution = AtlasATP124SResolution;
 
 impl AtlasATP124SResolution {
     /// Note that the dimensions are width x height. This should not be confused

@@ -16,7 +16,7 @@ use std::time::Duration;
 /// Shared code for interacting with Aravis library, used by both
 /// discovery and recording tools.
 
-// Retrieves token to access global state of the Aravis library.
+/// Retrieves token to access global state of the Aravis library.
 pub fn initialize_aravis() -> Aravis {
     Aravis::initialize().expect("Failed to initialize Aravis.")
 }
@@ -329,12 +329,7 @@ pub fn copy_buffer_bytes(buffer: &Buffer) -> Vec<u8> {
     let (ptr, len) = buffer.data();
 
     if ptr.is_null() || len == 0 {
-        eprintln!(
-            "Warning: Aravis returned an empty buffer (ptr null: {}, len: {}).",
-            ptr.is_null(),
-            len
-        );
-        return Vec::new();
+        panic!("ERROR: Aravis buffer was empty");
     }
 
     // `ptr` is non-null and Aravis guarantees the buffer data is valid

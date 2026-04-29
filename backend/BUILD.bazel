@@ -435,21 +435,6 @@ rust_binary(
     ],
 )
 
-rust_binary(
-    name = "dump_first_frames",
-    srcs = ["src/bin/dump_first_frames.rs"],
-    rustc_flags = ["-Cstrip=symbols"] + select({
-        "//:release": [
-            "-Ccodegen-units=1",
-            "-Copt-level=3",
-        ],
-        "//conditions:default": [],
-    }),
-    deps = [
-        ":backend_lib_real_cameras",
-        "@crates//:clap",
-    ],
-)
 
 rust_binary(
     name = "stream",

@@ -54,7 +54,7 @@ pub fn main() {
     // Spawn capture thread.
     let record_handle = thread::spawn(move || {
         run_capture_thread(
-            Some(output_base_dir),
+            output_base_dir,
             &camera_ingest_config,
             frame_tx,
             args.common_args.max_frames,
@@ -72,12 +72,8 @@ pub fn main() {
     let writer_handle = thread::spawn(move || {
         // Write incoming frames.
         for frame in frame_rx {
-            let output_camera_dir = frame
-                .output_camera_dir
-                .as_ref()
-                .expect("recorded one-camera frames should have an output directory");
             write_to_disk(
-                output_camera_dir,
+                &frame.output_camera_dir,
                 frame.frame_index,
                 &frame.bytes,
                 &frame.metadata,
