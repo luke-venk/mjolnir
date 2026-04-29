@@ -234,17 +234,49 @@ crate.spec(
     package = "opencv",
     version = "0.98.2",
 )
-crate.annotation(
-    build_script_data = ["@@//third_party:libclang_filegroup"],
+crate.annotation_select(
+    build_script_data = [
+        "@@//:clang",
+        "@@//third_party:libclang_filegroup",
+        "@@//third_party:opencv_dir",
+    ],
     build_script_env = {
-        "OPENCV_LINK_LIBS": "opencv_core,opencv_imgproc,opencv_imgcodecs,opencv_calib3d,opencv_features2d,opencv_flann,opencv_dnn",
+        "OPENCV_LINK_LIBS": "opencv_core,opencv_imgproc,opencv_imgcodecs,opencv_calib3d,opencv_features2d,opencv_flann",
+        "OPENCV_INCLUDE_PATHS": "$(execpath @@//third_party:opencv_dir)/include/opencv4",
+        "OPENCV_LINK_PATHS": "$(execpath @@//third_party:opencv_dir)/lib",
         "OPENCV_PACKAGE_NAME": "opencv4",
         "LIBCLANG_PATH": "$(execpath @@//third_party:libclang_filegroup)",
         "DYLD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
         "LD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
+        "CLANG_PATH": "$(execpath @@//:clang)",
     },
     build_script_link_deps = ["@@//third_party:opencv"],
     crate = "opencv",
+    triples = [
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
+    deps = ["@@//third_party:opencv"],
+)
+crate.annotation_select(
+    build_script_data = [
+        "@@//third_party:libclang_filegroup",
+        "@@//third_party:opencv_dir",
+    ],
+    build_script_env = {
+        "OPENCV_LINK_LIBS": "opencv_core,opencv_imgproc,opencv_imgcodecs,opencv_calib3d,opencv_features2d,opencv_flann",
+        "OPENCV_INCLUDE_PATHS": "$(execpath @@//third_party:opencv_dir)/include/opencv4",
+        "OPENCV_LINK_PATHS": "$(execpath @@//third_party:opencv_dir)/lib",
+        "OPENCV_PACKAGE_NAME": "opencv4",
+        "LIBCLANG_PATH": "$(execpath @@//third_party:libclang_filegroup)",
+        "DYLD_LIBRARY_PATH": "$(execpath @@//third_party:libclang_filegroup)/..",
+    },
+    build_script_link_deps = ["@@//third_party:opencv"],
+    crate = "opencv",
+    triples = [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+    ],
     deps = ["@@//third_party:opencv"],
 )
 crate.spec(
@@ -295,6 +327,7 @@ crate.spec(
     version = "1.0",
 )
 crate.spec(
+    default_features = False,
     package = "serialport",
     version = "4.9.0",
 )
