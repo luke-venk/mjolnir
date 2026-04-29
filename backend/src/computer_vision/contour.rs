@@ -3,6 +3,7 @@ use opencv::core::{self, CV_32F, Mat, Point, Point2f, Scalar, Vector};
 use opencv::imgproc;
 use opencv::prelude::*;
 use opencv::video::{KalmanFilter, KalmanFilterTrait, KalmanFilterTraitConst};
+use std::cell::RefCell;
 use std::collections::VecDeque;
 
 const MIN_AREA: f64 = 8.0;
@@ -70,7 +71,7 @@ impl ContourTracker {
         let Some(mask) = frame.downsampled_image() else {
             self.mark_missed();
             frame.context_mut().set_detected(Some(false));
-            frame.context_mut().set_centroid(None, None);
+            frame.context_mut().set_centroid(None);
             return frame;
         };
 
@@ -82,14 +83,12 @@ impl ContourTracker {
             Some(candidate) => {
                 self.correct(candidate.cx, candidate.cy);
                 frame.context_mut().set_detected(Some(true));
-                frame
-                    .context_mut()
-                    .set_centroid(Some(candidate.cx), Some(candidate.cy));
+                frame.context_mut().set_centroid(Some((candidate.cx, candidate.cy)));
             }
             None => {
                 self.mark_missed();
                 frame.context_mut().set_detected(Some(false));
-                frame.context_mut().set_centroid(None, None);
+                frame.context_mut().set_centroid(None);
             }
         }
 
@@ -345,9 +344,12 @@ impl Default for ContourTracker {
     }
 }
 
+thread_local! {
+    static CONTOUR_TRACKER: RefCell<ContourTracker> = RefCell::new(ContourTracker::new());
+}
+
 pub fn contour(frame: Frame) -> Frame {
-    let mut tracker = ContourTracker::new();
-    tracker.process_frame(frame)
+    CONTOUR_TRACKER.with(|tracker| tracker.borrow_mut().process_frame(frame))
 }
 
 fn make_kalman() -> opencv::Result<KalmanFilter> {
@@ -505,8 +507,7 @@ mod tests {
         let output = tracker.process_frame(frame);
 
         assert_eq!(output.context().detected(), Some(false));
-        assert_eq!(output.context().cx(), None);
-        assert_eq!(output.context().cy(), None);
+        assert_eq!(output.context().centroid(), None);
     }
 
     #[rstest]
@@ -532,8 +533,7 @@ mod tests {
         let output = tracker.process_frame(frame);
 
         assert_eq!(output.context().detected(), Some(true));
-        let cx = output.context().cx().expect("expected cx");
-        let cy = output.context().cy().expect("expected cy");
+        let (cx, cy) = output.context().centroid().expect("expected centroid");
         assert!((cx - 200.0).abs() <= 1.0);
         assert!((cy - 150.0).abs() <= 1.0);
     }
@@ -560,8 +560,7 @@ mod tests {
         let mut tracker = ContourTracker::new();
         let output = tracker.process_frame(frame);
         assert_eq!(output.context().detected(), Some(false));
-        assert_eq!(output.context().cx(), None);
-        assert_eq!(output.context().cy(), None);
+        assert_eq!(output.context().centroid(), None);
     }
 
     #[rstest]

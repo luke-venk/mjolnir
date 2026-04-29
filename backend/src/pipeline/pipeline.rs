@@ -1,6 +1,6 @@
 use super::PipelineStage;
 use crate::camera_ingest::ingest_frames;
-use crate::computer_vision::{ContourTracker, forward_downsampled_copy, mog2, undistortion};
+use crate::computer_vision::{contour, forward_downsampled_copy, mog2, undistortion};
 use crate::pipeline::{CameraId, Frame};
 use crossbeam::channel::{Sender, bounded};
 use std::thread::{self, JoinHandle};
@@ -32,11 +32,7 @@ impl Pipeline {
             PipelineStage::new(rx_stage2, tx_stage2, forward_downsampled_copy).spawn();
         let handle_stage3 = PipelineStage::new(rx_stage3, tx_stage3, mog2).spawn();
 
-        let mut contour_tracker = ContourTracker::new();
-        let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, move |frame| {
-            contour_tracker.process_frame(frame)
-        })
-        .spawn();
+        let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, contour).spawn();
 
         let handle_output = thread::spawn(move || {
             for frame in rx_output.iter() {

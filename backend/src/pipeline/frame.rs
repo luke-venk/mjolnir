@@ -140,8 +140,7 @@ pub struct Context {
     camera_buffer_timestamp: u64,
 
     detected: Option<bool>,
-    cx: Option<f64>,
-    cy: Option<f64>,
+    centroid: Option<(f64, f64)>,
 }
 
 impl Context {
@@ -150,8 +149,7 @@ impl Context {
             camera_id,
             camera_buffer_timestamp,
             detected: None,
-            cx: None,
-            cy: None,
+            centroid: None,
         }
     }
 
@@ -167,21 +165,16 @@ impl Context {
         self.detected
     }
 
-    pub fn cx(&self) -> Option<f64> {
-        self.cx
-    }
-
-    pub fn cy(&self) -> Option<f64> {
-        self.cy
+    pub fn centroid(&self) -> Option<(f64, f64)> {
+        self.centroid
     }
 
     pub fn set_detected(&mut self, detected: Option<bool>) {
         self.detected = detected;
     }
 
-    pub fn set_centroid(&mut self, cx: Option<f64>, cy: Option<f64>) {
-        self.cx = cx;
-        self.cy = cy;
+    pub fn set_centroid(&mut self, centroid: Option<(f64, f64)>) {
+        self.centroid = centroid;
     }
 }
 
@@ -199,8 +192,7 @@ mod tests {
         assert_eq!(context.camera_id(), CameraId::FieldLeft);
         assert_eq!(context.camera_buffer_timestamp(), 6767);
         assert_eq!(context.detected(), None);
-        assert_eq!(context.cx(), None);
-        assert_eq!(context.cy(), None);
+        assert_eq!(context.centroid(), None);
     }
 
     #[rstest]
@@ -221,7 +213,6 @@ mod tests {
         assert_eq!(frame.context().camera_id(), CameraId::FieldLeft);
         assert_eq!(frame.context().camera_buffer_timestamp(), 1342);
         assert_eq!(frame.context().detected(), None);
-        assert_eq!(frame.context().cx(), None);
-        assert_eq!(frame.context().cy(), None);
+        assert_eq!(frame.context().centroid(), None);
     }
 }
