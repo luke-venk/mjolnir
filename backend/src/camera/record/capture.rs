@@ -86,7 +86,6 @@ pub fn send_action_command(
     group_key: u32,
     group_mask: u32,
 ) {
-    println!("Sending action command!");
     // GigEV action command packet: 56 bytes total
     // Ref: GigE Vision spec section on Action Commands
     let mut packet = [0u8; 28];
@@ -395,9 +394,13 @@ pub fn run_capture_thread(
         }
     }
 
-    // Keep track of start time and the number of saved frames.
+    // Keep track of start time and the number of frames saved/dropped.
     let start_time: Instant = Instant::now();
     let mut frames_saved: usize = 0usize;
+    let mut frames_dropped: usize = 0usize;
+
+    // Define recording start time separately so can properly compute frame rate.
+    let mut recording_start_time: Option<Instant> = None;
 
     // Used to provide countdowns to the user
     let mut countdown_timer: Instant = Instant::now();
@@ -455,6 +458,10 @@ pub fn run_capture_thread(
                 stream.push_buffer(buffer);
             }
             continue;
+        } else if recording_start_time.is_none() {
+            // If elapsed time has passed the throwaway duration and the recording start
+            // time hasn't been set, set it.
+            recording_start_time = Some(Instant::now());
         }
 
         // Load camera buffer.
@@ -473,6 +480,7 @@ pub fn run_capture_thread(
                 // network path, complete exposure time, etc. So to prevent messy printing,
                 // only print the below if a timeout occurs after the first buffer arrives.
                 if first_buffer_arrived {
+                    frames_dropped += 1;
                     eprintln!(
                         "Timed out waiting for frame buffer to be delivered from camera {}.",
                         config.camera_id
@@ -485,7 +493,9 @@ pub fn run_capture_thread(
         // If loading the buffer worked, copy the frame buffer into raw bytes.
         match buffer.status() {
             BufferStatus::Success => {
-                let elapsed_since_start = start_time.elapsed();
+                let elapsed_since_start = recording_start_time
+                    .expect("recording_start_time should be set if frames are being received.")
+                    .elapsed();
 
                 // If we still haven't saved the number of frames required for Mog2 to
                 // build the background model, continue writing to disk and inform the
@@ -559,6 +569,7 @@ pub fn run_capture_thread(
                 }
             }
             status => {
+                frames_dropped += 1;
                 eprintln!(
                     "ERROR: Camera {} returned non-success buffer status: {:?}",
                     config.camera_id, status
@@ -567,24 +578,35 @@ pub fn run_capture_thread(
         }
     }
 
+    // Stop acquisition.
     shutdown.store(true, Ordering::SeqCst);
-
     let _ = camera.stop_acquisition();
     if let Some(output_camera_dir) = output_camera_dir {
-        let total_capture_time_s =
-            (start_time.elapsed().as_secs_f64() - throwaway_duration_s).max(0.0);
-        let frame_rate = if total_capture_time_s > 0.0 {
-            frames_saved as f64 / total_capture_time_s
-        } else {
-            0.0
-        };
+        // Compute how much time has passed since recording has started.
+        // Then, report metrics.
+        if let Some(record_start) = recording_start_time {
+            let total_capture_time_s: f64 = record_start.elapsed().as_secs_f64();
+            let effective_frame_rate: f64 = frames_saved as f64 / total_capture_time_s;
+            let delivery_rate: f64 =
+                frames_saved as f64 / (frames_saved + frames_dropped) as f64;
 
-        println!("\nFinished recording from camera {}.", config.camera_id);
-        println!(
-            "Saved {} frame(s) in {:.3} seconds, total frame rate was {:.3} frames per second.",
-            frames_saved, total_capture_time_s, frame_rate,
-        );
-        println!("Wrote files into {}.", output_camera_dir.display());
+            println!("Finished recording from camera {}.", config.camera_id,);
+            println!();
+            println!(
+                "Saved {} frame(s) and dropped {} frames(s) in {:.3} seconds.",
+                frames_saved, frames_dropped, total_capture_time_s,
+            );
+            println!(
+                "The effective frame rate was {:.3} FPS (requested {:.3} FPS). Delivery rate was {:.1}%.",
+                effective_frame_rate,
+                config.frame_rate_hz,
+                delivery_rate * 100.0,
+            );
+            println!();
+            println!("Wrote files into {}.", output_camera_dir.display());
+        } else {
+            println!("Recording was cancelled before any frames were written.");
+        }
     } else {
         println!(
             "Finished capturing from camera {}. Forwarded {} frame(s).",
