@@ -1,20 +1,19 @@
 use axum::{Router, http::Method};
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
-use backend_lib::aggregation_coordinator::{AggregationCommand, AggregationCoordinator};
+use backend_lib::aggregator::{AggregationCommand, AggregationCoordinator};
 #[cfg(feature = "real_cameras")]
-use backend_lib::camera::CvBackendCameraArgs;
+use backend_lib::camera::parse_real_backend_args;
 #[cfg(feature = "real_cameras")]
-use backend_lib::matched_contour_pair_aggregator::MatchedContourPairAggregator;
+use backend_lib::aggregator::MatchedContourPairAggregator;
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{CameraId, Pipeline};
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 #[cfg(feature = "real_cameras")]
-use backend_lib::schemas::{ContourOutput, MatchedContourPair};
+use backend_lib::pipeline::{Frame, MatchedContourPair};
 #[cfg(feature = "real_cameras")]
-use backend_lib::trajectory_input_collector::OptimizeTrajectoryInput;
+use backend_lib::aggregator::OptimizeTrajectoryInput;
 #[cfg(feature = "real_cameras")]
-use clap::Parser;
 use tower_http::cors::{Any, CorsLayer};
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
@@ -52,12 +51,12 @@ async fn main() {
 #[cfg(feature = "real_cameras")]
 #[tokio::main]
 async fn main() {
-    let args: CvBackendCameraArgs = CvBackendCameraArgs::parse();
+    let args = parse_real_backend_args();
 
     // Start the 2 computer vision pipelines (one for each camera).
     let rolling_buffer_size: usize = 10;
-    let (contour_output_tx, contour_output_rx) =
-        crossbeam::channel::bounded::<ContourOutput>(rolling_buffer_size);
+    let (frame_output_tx, frame_output_rx) =
+        crossbeam::channel::bounded::<Frame>(rolling_buffer_size);
     let (matched_pair_tx, matched_pair_rx) =
         crossbeam::channel::bounded::<MatchedContourPair>(rolling_buffer_size);
     let (_aggregation_command_tx, aggregation_command_rx) =
@@ -66,7 +65,7 @@ async fn main() {
         crossbeam::channel::unbounded::<OptimizeTrajectoryInput>();
 
     let _matched_contour_pair_aggregator =
-        MatchedContourPairAggregator::new(contour_output_rx, matched_pair_tx, 33_330_000);
+        MatchedContourPairAggregator::new(frame_output_rx, matched_pair_tx, 33_330_000);
     let _aggregation_coordinator = AggregationCoordinator::new(
         matched_pair_rx,
         aggregation_command_rx,
@@ -78,13 +77,13 @@ async fn main() {
         CameraId::FieldLeft,
         args.left_camera_id,
         rolling_buffer_size,
-        contour_output_tx.clone(),
+        frame_output_tx.clone(),
     );
     let _ = Pipeline::new(
         CameraId::FieldRight,
         args.right_camera_id,
         rolling_buffer_size,
-        contour_output_tx,
+        frame_output_tx,
     );
 
     // Build the Axum router.
