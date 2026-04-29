@@ -2,7 +2,7 @@
 //! adjacent observations into `MatchedContourPair` values for downstream
 //! aggregation and trajectory preparation.
 
-use crate::pipeline::{CameraId, ContourOutput, MatchedContourPair};
+use crate::pipeline::{CameraId, ContourOutput, Frame, MatchedContourPair};
 use crossbeam::channel::{Receiver, Sender};
 use std::collections::VecDeque;
 use std::thread::{self, JoinHandle};
@@ -13,7 +13,7 @@ pub struct MatchedContourPairAggregator {
 
 impl MatchedContourPairAggregator {
     pub fn new(
-        output_rx: Receiver<ContourOutput>,
+        output_rx: Receiver<Frame>,
         matched_pair_tx: Sender<MatchedContourPair>,
         expected_frame_interval_ns: u64,
     ) -> Self {
@@ -21,7 +21,8 @@ impl MatchedContourPairAggregator {
             let mut left_queue = VecDeque::new();
             let mut right_queue = VecDeque::new();
 
-            for contour_output in output_rx.iter() {
+            for frame in output_rx.iter() {
+                let contour_output = ContourOutput::from(frame);
                 match contour_output.camera_id() {
                     CameraId::FieldLeft => left_queue.push_back(contour_output),
                     CameraId::FieldRight => right_queue.push_back(contour_output),

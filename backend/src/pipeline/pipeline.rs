@@ -1,7 +1,7 @@
 use super::PipelineStage;
 use crate::camera_ingest::ingest_frames;
 use crate::computer_vision::{contour, forward_downsampled_copy, mog2, undistortion};
-use crate::pipeline::{CameraId, ContourOutput, Frame};
+use crate::pipeline::{CameraId, Frame};
 use crossbeam::channel::{Sender, bounded};
 use std::thread::{self, JoinHandle};
 
@@ -19,7 +19,7 @@ impl Pipeline {
         camera_id: CameraId,
         camera_name: String,
         capacity_per_channel: usize,
-        contour_output_tx: Sender<ContourOutput>,
+        frame_output_tx: Sender<Frame>,
     ) -> Self {
         // Define inter-stage message channels for thread-safe message sharing.
         let (tx_ingest, rx_stage1) = bounded::<Frame>(capacity_per_channel);
@@ -46,14 +46,12 @@ impl Pipeline {
         // Stage 4: Contour.
         let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, contour).spawn();
 
-        // Output: Pixel coordinates.
-        // Spawn a thread to handle reporting pipeline outputs to math triangulation.
+        // Output: send post-contour frames to the aggregator boundary.
         let handle_output = thread::spawn(move || {
             for frame in rx_output.iter() {
-                let contour_output = ContourOutput::from(frame);
-                contour_output_tx
-                    .send(contour_output)
-                    .expect("Error sending contour output to aggregator.");
+                frame_output_tx
+                    .send(frame)
+                    .expect("Error sending processed frame to aggregator.");
             }
         });
 
