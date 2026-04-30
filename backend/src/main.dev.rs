@@ -1,8 +1,18 @@
 use axum::{Router, http::Method};
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
+use backend_lib::aggregator::{AggregationCommand, AggregationCoordinator};
+#[cfg(feature = "real_cameras")]
+use backend_lib::camera::parse_real_backend_args;
+#[cfg(feature = "real_cameras")]
+use backend_lib::aggregator::MatchedFramePairAggregator;
+#[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{CameraId, Pipeline};
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
+#[cfg(feature = "real_cameras")]
+use backend_lib::pipeline::{Frame, MatchedFramePair};
+#[cfg(feature = "real_cameras")]
+use backend_lib::aggregator::OptimizeTrajectoryInput;
 use tower_http::cors::{Any, CorsLayer};
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
@@ -40,10 +50,41 @@ async fn main() {
 #[cfg(feature = "real_cameras")]
 #[tokio::main]
 async fn main() {
+    let args = parse_real_backend_args();
+
     // Start the 2 computer vision pipelines (one for each camera).
     let rolling_buffer_size: usize = 10;
-    let _ = Pipeline::new(CameraId::FieldLeft, rolling_buffer_size);
-    let _ = Pipeline::new(CameraId::FieldRight, rolling_buffer_size);
+    let (frame_output_tx, frame_output_rx) =
+        crossbeam::channel::bounded::<Frame>(rolling_buffer_size);
+    let (matched_pair_tx, matched_pair_rx) =
+        crossbeam::channel::bounded::<MatchedFramePair>(rolling_buffer_size);
+    let (_aggregation_command_tx, aggregation_command_rx) =
+        crossbeam::channel::unbounded::<AggregationCommand>();
+    let (optimize_input_tx, _optimize_input_rx) =
+        crossbeam::channel::unbounded::<OptimizeTrajectoryInput>();
+
+    let _matched_frame_pair_aggregator =
+        MatchedFramePairAggregator::new(frame_output_rx, matched_pair_tx, 33_330_000);
+    let _aggregation_coordinator = AggregationCoordinator::new(
+        matched_pair_rx,
+        aggregation_command_rx,
+        optimize_input_tx,
+        250,
+        250,
+    );
+
+    let _ = Pipeline::new(
+        CameraId::FieldLeft,
+        args.left_camera_id,
+        rolling_buffer_size,
+        frame_output_tx.clone(),
+    );
+    let _ = Pipeline::new(
+        CameraId::FieldRight,
+        args.right_camera_id,
+        rolling_buffer_size,
+        frame_output_tx,
+    );
 
     // Build the Axum router.
     let app = create_dev_app(ThrowSource::Camera);

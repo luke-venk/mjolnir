@@ -1,6 +1,6 @@
 use opencv::core::Mat;
 use opencv::prelude::MatTraitConstManual;
-use std::sync::OnceLock;
+use std::sync::RwLock;
 
 /// The frame contains all the information that is needed associated with a specific
 /// frame from a camera for computer vision.
@@ -17,9 +17,9 @@ use std::sync::OnceLock;
 /// For example: If we pass a pointer pointing to a Box<[u8]> to an unsafe `Mat`
 /// constructor, and the constructor modifies that data, that's undefined behavior.
 ///
-/// Note that `OnceLock<Mat>` is used to store the results of each pipeline stage.
-/// Since each stage runs on its own thread, `OnceLock` makes these thread safe
-/// while only being written once.
+/// Note that `RwLock<Option<Mat>>` is used to store the results of each pipeline
+/// stage. This keeps stage outputs thread safe while also allowing late-stage
+/// cleanup to drop image buffers once a slim downstream artifact has been built.
 #[derive(Debug, Clone)]
 pub struct Frame {
     /// The raw bytes for the frame coming from the camera at full resolution.
@@ -31,10 +31,10 @@ pub struct Frame {
     raw_full_resolution: (u32, u32),
 
     /// The frame after lens undistortion is applied, before downsampling is applied.
-    undistorted_image: OnceLock<Mat>,
+    undistorted_image: RwLock<Option<Mat>>,
 
     /// The frame after downsampling is applied, before Mog2 is applied.
-    downsampled_image: OnceLock<Mat>,
+    downsampled_image: RwLock<Option<Mat>>,
 
     /// Frame metadata like timestamps.
     context: Context,
@@ -45,8 +45,8 @@ impl Frame {
         Self {
             raw_bytes_full_resolution: data,
             raw_full_resolution: resolution,
-            undistorted_image: OnceLock::new(),
-            downsampled_image: OnceLock::new(),
+            undistorted_image: RwLock::new(None),
+            downsampled_image: RwLock::new(None),
             context,
         }
     }
@@ -59,28 +59,68 @@ impl Frame {
         self.raw_full_resolution
     }
 
-    pub fn undistorted_image(&self) -> Option<&Mat> {
-        self.undistorted_image.get()
+    pub fn undistorted_image(&self) -> Option<Mat> {
+        self.undistorted_image
+            .read()
+            .ok()
+            .and_then(|guard| guard.clone())
     }
 
     pub fn set_undistorted_image(&self, mat: Mat) -> Result<(), String> {
-        self.undistorted_image
-            .set(mat)
-            .map_err(|_| "Undistorted image already set.".to_string())
+        let mut guard = self
+            .undistorted_image
+            .write()
+            .map_err(|_| "Undistorted image lock poisoned.".to_string())?;
+        if guard.is_some() {
+            return Err("Undistorted image already set.".to_string());
+        }
+        *guard = Some(mat);
+        Ok(())
     }
 
-    pub fn downsampled_image(&self) -> Option<&Mat> {
-        self.downsampled_image.get()
+    pub fn clear_undistorted_image(&self) -> Result<(), String> {
+        let mut guard = self
+            .undistorted_image
+            .write()
+            .map_err(|_| "Undistorted image lock poisoned.".to_string())?;
+        *guard = None;
+        Ok(())
+    }
+
+    pub fn downsampled_image(&self) -> Option<Mat> {
+        self.downsampled_image
+            .read()
+            .ok()
+            .and_then(|guard| guard.clone())
     }
 
     pub fn set_downsampled_image(&self, mat: Mat) -> Result<(), String> {
-        self.downsampled_image
-            .set(mat)
-            .map_err(|_| "Downsampled normalized image already set.".to_string())
+        let mut guard = self
+            .downsampled_image
+            .write()
+            .map_err(|_| "Downsampled image lock poisoned.".to_string())?;
+        if guard.is_some() {
+            return Err("Downsampled normalized image already set.".to_string());
+        }
+        *guard = Some(mat);
+        Ok(())
+    }
+
+    pub fn clear_downsampled_image(&self) -> Result<(), String> {
+        let mut guard = self
+            .downsampled_image
+            .write()
+            .map_err(|_| "Downsampled image lock poisoned.".to_string())?;
+        *guard = None;
+        Ok(())
     }
 
     pub fn context(&self) -> &Context {
         &self.context
+    }
+
+    pub fn context_mut(&mut self) -> &mut Context {
+        &mut self.context
     }
 }
 
@@ -92,12 +132,15 @@ pub enum CameraId {
 }
 
 /// Our metadata for each frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Context {
     camera_id: CameraId,
 
     /// The timestamp given to the buffer by the camera (i.e. buffer.timestamp()).
     camera_buffer_timestamp: u64,
+
+    detected: Option<bool>,
+    centroid: Option<(f64, f64)>,
 }
 
 impl Context {
@@ -105,6 +148,8 @@ impl Context {
         Self {
             camera_id,
             camera_buffer_timestamp,
+            detected: None,
+            centroid: None,
         }
     }
 
@@ -114,6 +159,22 @@ impl Context {
 
     pub fn camera_buffer_timestamp(&self) -> u64 {
         self.camera_buffer_timestamp
+    }
+
+    pub fn detected(&self) -> Option<bool> {
+        self.detected
+    }
+
+    pub fn centroid(&self) -> Option<(f64, f64)> {
+        self.centroid
+    }
+
+    pub fn set_detected(&mut self, detected: Option<bool>) {
+        self.detected = detected;
+    }
+
+    pub fn set_centroid(&mut self, centroid: Option<(f64, f64)>) {
+        self.centroid = centroid;
     }
 }
 
@@ -130,6 +191,8 @@ mod tests {
 
         assert_eq!(context.camera_id(), CameraId::FieldLeft);
         assert_eq!(context.camera_buffer_timestamp(), 6767);
+        assert_eq!(context.detected(), None);
+        assert_eq!(context.centroid(), None);
     }
 
     #[rstest]
@@ -145,10 +208,11 @@ mod tests {
             assert_eq!(pixel, 21u8);
         }
         for pixel in frame.undistorted_image().unwrap().iter::<u8>().unwrap() {
-            // Access 1st element because 0th is pixel coordinate and 2nd is value.
             assert_eq!(pixel.1, 21u8);
         }
         assert_eq!(frame.context().camera_id(), CameraId::FieldLeft);
         assert_eq!(frame.context().camera_buffer_timestamp(), 1342);
+        assert_eq!(frame.context().detected(), None);
+        assert_eq!(frame.context().centroid(), None);
     }
 }
