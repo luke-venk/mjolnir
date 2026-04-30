@@ -11,8 +11,15 @@
 // Frame routing here is purely folder-based — there is no manifest. Camera
 // assignment (which physical camera ends up in `left_cam` vs `right_cam`) is
 // the recorder's responsibility and is out of scope for replay.
+//
+// Memory: this loads frames from disk lazily. The first pass walks the
+// metadata sidecars (small JSON files) to build a sorted plan; the second
+// pass loads each frame's payload, forwards it, and drops it. At any moment
+// the only in-memory frame payload is the one currently being forwarded.
 
-use crate::camera::record::writer::{Frame as RecordedFrame, read_recorded_frame};
+use crate::camera::record::writer::{
+    Metadata, read_recorded_frame, read_recorded_frame_metadata,
+};
 use crate::camera_ingest::camera_ingest_helpers::{
     forward_recorded_frame, recorded_frame_sort_key,
 };
@@ -21,10 +28,13 @@ use crossbeam::channel::Sender;
 use std::{
     fs,
     path::{Path, PathBuf},
+    thread,
+    time::Duration,
 };
 
 const LEFT_CAM_DIR: &str = "left_cam";
 const RIGHT_CAM_DIR: &str = "right_cam";
+const PER_FRAME_DELAY: Duration = Duration::from_millis(25);
 
 pub fn replay_recorded_session(
     footage_dir: PathBuf,
@@ -46,30 +56,40 @@ pub fn replay_recorded_session(
         );
     }
 
-    let mut frames: Vec<(CameraId, RecordedFrame)> = Vec::new();
+    // First pass: read just the metadata sidecars so we can sort by
+    // timestamp without loading frame payloads into memory.
+    let mut planned_frames: Vec<(CameraId, PathBuf, Metadata)> = Vec::new();
     for json_path in collect_frame_json_paths(&left_dir) {
-        frames.push((CameraId::FieldLeft, read_recorded_frame(&json_path)));
+        let metadata = read_recorded_frame_metadata(&json_path);
+        planned_frames.push((CameraId::FieldLeft, json_path, metadata));
     }
     for json_path in collect_frame_json_paths(&right_dir) {
-        frames.push((CameraId::FieldRight, read_recorded_frame(&json_path)));
+        let metadata = read_recorded_frame_metadata(&json_path);
+        planned_frames.push((CameraId::FieldRight, json_path, metadata));
     }
 
-    if frames.is_empty() {
+    if planned_frames.is_empty() {
         panic!(
             "No recorded frame metadata files were found in {} (looked under {LEFT_CAM_DIR}/ and {RIGHT_CAM_DIR}/).",
             footage_dir.display()
         );
     }
 
-    frames.sort_by_key(|(_, frame)| recorded_frame_sort_key(frame));
+    planned_frames.sort_by(|(_, _, a), (_, _, b)| {
+        recorded_frame_sort_key(a).cmp(&recorded_frame_sort_key(b))
+    });
 
     println!(
         "camera_ingest: replaying {} recorded frame(s) from {}.",
-        frames.len(),
+        planned_frames.len(),
         footage_dir.display()
     );
 
-    for (camera_id, recorded_frame) in frames {
+    // Second pass: load each payload immediately before forwarding so only
+    // one frame's bytes live in memory at a time.
+    for (camera_id, json_path, _metadata) in planned_frames {
+        let recorded_frame = read_recorded_frame(&json_path);
+        thread::sleep(PER_FRAME_DELAY);
         if !forward_recorded_frame(camera_id, recorded_frame, &left_tx, &right_tx) {
             break;
         }

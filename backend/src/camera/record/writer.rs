@@ -84,16 +84,23 @@ pub fn write_to_disk(
         .unwrap_or_else(|e| panic!("failed to write {}: {e}", json_path.display()));
 }
 
+/// Reads only the metadata sidecar (JSON) for a recorded frame, without
+/// loading the payload bytes off disk. Useful for replay paths that want to
+/// sort frames by timestamp before deciding what to load into memory.
+pub fn read_recorded_frame_metadata(json_path: &Path) -> Metadata {
+    let metadata_json = fs::read_to_string(json_path)
+        .unwrap_or_else(|err| panic!("Failed to read {}: {err}", json_path.display()));
+    serde_json::from_str(&metadata_json)
+        .unwrap_or_else(|err| panic!("Failed to parse {}: {err}", json_path.display()))
+}
+
 /// Reads one recorded frame payload + its metadata back from disk.
 ///
 /// `json_path` must point to a frame metadata file. The matching payload is
 /// looked up next to it by trying the extensions in
 /// `RECORDED_FRAME_PAYLOAD_EXTENSIONS` in order (`.tiff` then `.raw`).
 pub fn read_recorded_frame(json_path: &Path) -> Frame {
-    let metadata_json = fs::read_to_string(json_path)
-        .unwrap_or_else(|err| panic!("Failed to read {}: {err}", json_path.display()));
-    let metadata: Metadata = serde_json::from_str(&metadata_json)
-        .unwrap_or_else(|err| panic!("Failed to parse {}: {err}", json_path.display()));
+    let metadata = read_recorded_frame_metadata(json_path);
     let bytes = read_recorded_frame_payload_bytes(json_path);
     let output_camera_dir = json_path
         .parent()

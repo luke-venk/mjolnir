@@ -1,6 +1,6 @@
 use crossbeam::channel::Sender;
 
-use crate::camera::record::writer::Frame as RecordedFrame;
+use crate::camera::record::writer::{Frame as RecordedFrame, Metadata};
 use crate::pipeline::{CameraId, Context, Frame as PipelineFrame};
 
 /// Converts one recorded frame payload into the pipeline's frame type.
@@ -30,18 +30,21 @@ pub fn recorded_frame_to_frame(frame: RecordedFrame, camera_id: CameraId) -> Pip
 /// synchronized timestamp). Asserts it is non-zero. Trailing fields
 /// (`camera_id`, `frame_index`) are deterministic tie-breakers when two
 /// frames share a buffer timestamp.
-pub fn recorded_frame_sort_key(frame: &RecordedFrame) -> (u64, String, usize) {
-    let timestamp = frame.metadata.buffer_timestamp_ns;
+///
+/// Takes `&Metadata` (not `&RecordedFrame`) so callers can sort on lightweight
+/// metadata sidecars without loading the frame payload bytes off disk first.
+pub fn recorded_frame_sort_key(metadata: &Metadata) -> (u64, String, usize) {
+    let timestamp = metadata.buffer_timestamp_ns;
     assert!(
         timestamp != 0,
         "recorded frame {} for camera {} has zero buffer_timestamp_ns",
-        frame.metadata.frame_index, frame.metadata.camera_id
+        metadata.frame_index, metadata.camera_id
     );
 
     (
         timestamp,
-        frame.metadata.camera_id.clone(),
-        frame.metadata.frame_index,
+        metadata.camera_id.clone(),
+        metadata.frame_index,
     )
 }
 
@@ -153,7 +156,7 @@ mod tests {
         );
 
         assert_eq!(
-            recorded_frame_sort_key(&frame),
+            recorded_frame_sort_key(&frame.metadata),
             (22, "camera-z".to_string(), 7)
         );
     }
@@ -175,7 +178,7 @@ mod tests {
             vec![],
         );
 
-        let _ = recorded_frame_sort_key(&frame);
+        let _ = recorded_frame_sort_key(&frame.metadata);
     }
 
     #[test]
