@@ -731,3 +731,4 @@ if __name__ == "__main__":
     plt.legend()
     plt.savefig('a1a2.png')
     plt.show()
+    
