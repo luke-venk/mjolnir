@@ -81,20 +81,66 @@ impl From<Frame> for ContourOutput {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchedContourPair {
-    left: ContourOutput,
-    right: ContourOutput,
+    left: MatchedContour,
+    right: MatchedContour,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchedContour {
+    camera_buffer_timestamp: u64,
+    detected: bool,
+    center_px: Option<PixelCenter>,
+}
+
+impl MatchedContour {
+    pub fn new(
+        camera_buffer_timestamp: u64,
+        detected: bool,
+        center_px: Option<PixelCenter>,
+    ) -> Self {
+        Self {
+            camera_buffer_timestamp,
+            detected,
+            center_px,
+        }
+    }
+
+    pub fn camera_buffer_timestamp(&self) -> u64 {
+        self.camera_buffer_timestamp
+    }
+
+    pub fn center_px(&self) -> Option<&PixelCenter> {
+        self.center_px.as_ref()
+    }
+
+    pub fn detected(&self) -> bool {
+        self.detected
+    }
+}
+
+impl From<ContourOutput> for MatchedContour {
+    fn from(contour_output: ContourOutput) -> Self {
+        Self::new(
+            contour_output.camera_buffer_timestamp,
+            contour_output.detected,
+            contour_output.center_px,
+        )
+    }
 }
 
 impl MatchedContourPair {
     pub fn new(left: ContourOutput, right: ContourOutput) -> Self {
-        Self { left, right }
+        Self {
+            left: left.into(),
+            right: right.into(),
+        }
     }
 
-    pub fn left(&self) -> &ContourOutput {
+    pub fn left(&self) -> &MatchedContour {
         &self.left
     }
 
-    pub fn right(&self) -> &ContourOutput {
+    pub fn right(&self) -> &MatchedContour {
         &self.right
     }
 
@@ -145,8 +191,8 @@ mod tests {
 
         let pair = MatchedContourPair::new(left, right);
 
-        assert_eq!(pair.left().camera_id(), CameraId::FieldLeft);
-        assert_eq!(pair.right().camera_id(), CameraId::FieldRight);
+        assert_eq!(pair.left().camera_buffer_timestamp(), 110);
+        assert_eq!(pair.right().camera_buffer_timestamp(), 210);
         assert!(pair.left().detected());
         assert!(!pair.right().detected());
         assert_eq!(pair.pair_timestamp_ns(), 160);

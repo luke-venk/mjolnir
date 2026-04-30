@@ -34,14 +34,22 @@ impl MatchedContourPairAggregator {
                     let delta = left_ts.abs_diff(right_ts);
 
                     if delta <= expected_frame_interval_ns {
-                        let left_match = left_queue.pop_front().unwrap();
-                        let right_match = right_queue.pop_front().unwrap();
+                        let left_match = left_queue
+                            .pop_front()
+                            .expect("left queue should contain an item while matching contour outputs");
+                        let right_match = right_queue
+                            .pop_front()
+                            .expect("right queue should contain an item while matching contour outputs");
                         let matched_pair = MatchedContourPair::new(left_match, right_match);
                         let _ = matched_pair_tx.send(matched_pair);
                     } else if left_ts < right_ts {
-                        let _ = left_queue.pop_front();
+                        left_queue
+                            .pop_front()
+                            .expect("left queue should contain an item while pruning unmatched contour outputs");
                     } else {
-                        let _ = right_queue.pop_front();
+                        right_queue
+                            .pop_front()
+                            .expect("right queue should contain an item while pruning unmatched contour outputs");
                     }
                 }
             }
