@@ -212,7 +212,6 @@ mod tests {
             assert_eq!(pixel, 21u8);
         }
         for pixel in frame.undistorted_image().unwrap().iter::<u8>().unwrap() {
-            // Access 1st element because 0th is pixel coordinate and 2nd is value.
             assert_eq!(pixel.1, 21u8);
         }
         assert_eq!(frame.context().camera_id(), CameraId::FieldLeft);
