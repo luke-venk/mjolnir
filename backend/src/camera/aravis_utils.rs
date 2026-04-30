@@ -109,14 +109,20 @@ pub fn configure_camera(
         .expect("Failed to set the gains in camera configuration.");
 
     // Frame rate enable.
-    camera
-        .set_frame_rate_enable(true)
-        .expect("Failed to enable frame rate in camera configuration.");
+    if maybe_ptp_config.is_none() {
+        camera
+            .set_frame_rate_enable(true)
+            .expect("Failed to enable frame rate in camera configuration.");
 
-    // Frame rate.
-    camera
-        .set_frame_rate(config.frame_rate_hz)
-        .expect("Failed to set frame rate in camera configuration.");
+        // Frame rate.
+        camera
+            .set_frame_rate(config.frame_rate_hz)
+            .expect("Failed to set frame rate in camera configuration.");
+    } else {
+        camera
+            .set_frame_rate_enable(false)
+            .expect("Failed to enable frame rate in camera configuration.");
+    }
 
     // Use binning to downsample from full resolution to lower resolution.
     if camera
