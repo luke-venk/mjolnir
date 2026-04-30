@@ -86,13 +86,25 @@ pub fn replay_recorded_session(
     );
 
     // Second pass: load each payload immediately before forwarding so only
-    // one frame's bytes live in memory at a time.
-    for (camera_id, json_path, _metadata) in planned_frames {
+    // one frame's bytes live in memory at a time. Forward in left/right
+    // pairs so both cameras' frames for the same capture moment arrive
+    // back-to-back, then sleep before the next pair.
+    let mut iter = planned_frames.into_iter();
+    while let Some((camera_id, json_path, _)) = iter.next() {
         let recorded_frame = read_recorded_frame(&json_path);
-        thread::sleep(PER_FRAME_DELAY);
         if !forward_recorded_frame(camera_id, recorded_frame, &left_tx, &right_tx) {
             break;
         }
+
+        let Some((camera_id, json_path, _)) = iter.next() else {
+            break;
+        };
+        let recorded_frame = read_recorded_frame(&json_path);
+        if !forward_recorded_frame(camera_id, recorded_frame, &left_tx, &right_tx) {
+            break;
+        }
+
+        thread::sleep(PER_FRAME_DELAY);
     }
 }
 
