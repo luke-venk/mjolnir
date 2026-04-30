@@ -1,16 +1,17 @@
-// Convert the output of `math_triangulation::optimize_trajectory` into a
-// `ThrowAnalysisResponse` that can be returned to the frontend.
-//
-// The triangulation step returns a 3D trajectory in world coordinates. This
-// module is responsible for picking the landing point, computing the distance
-// from the inside edge of the throwing circle, deciding whether the throw is a
-// sector violation, and assembling the final response.
-//
-// Coordinate frame:
-// - Origin is at the center of the throwing circle.
-// - +x points down the center of the legal sector.
-// - +z points up.
-// A throw with `y == 0` is straight down the middle of the sector.
+//! Convert the output of `math_triangulation::optimize_trajectory` into a
+//! `ThrowAnalysisResponse` that can be returned to the frontend.
+//!
+//! The triangulation step returns a 3D trajectory in world coordinates. This
+//! module is responsible for picking the landing point, computing the
+//! distance from the inside edge of the throwing circle, deciding whether
+//! the throw is a sector violation, and assembling the final response.
+//!
+//! Coordinate frame:
+//! - Origin is at the center of the throwing circle.
+//! - +x points down the center of the legal sector.
+//! - +z points up.
+//!
+//! A throw with `y == 0` is straight down the middle of the sector.
 
 use super::{
     InfractionType, ThrowAnalysisResponse, ThrowType,
@@ -21,31 +22,32 @@ use chrono::{DateTime, Utc};
 use nalgebra::Vector3;
 use uuid::Uuid;
 
-// Pick the landing point from the optimized trajectory.
-//
-// The trajectory is a sequence of 3D positions sampled at `dt` intervals.
-// The landing point is the last sample (the trajectory is truncated at impact
-// during optimization). Returns `None` if the trajectory is empty.
-//
-// In practice the trajectory will be empty only if the upstream LM-call layer
-// emits a `TriangulationOutput` with `triangulation_succeeded == true` but no
-// samples — which shouldn't happen, but we keep the `Option` to avoid a panic
-// if the upstream contract drifts. `build_throw_response` already short-circuits
-// on `triangulation_succeeded == false`, so this is the secondary defense.
+/// Pick the landing point from the optimized trajectory.
+///
+/// The trajectory is a sequence of 3D positions sampled at `dt` intervals.
+/// The landing point is the last sample (the trajectory is truncated at
+/// impact during optimization). Returns `None` if the trajectory is empty.
+///
+/// In practice the trajectory will be empty only if the upstream LM-call
+/// layer emits a `TriangulationOutput` with `triangulation_succeeded == true`
+/// but no samples — which shouldn't happen, but we keep the `Option` to
+/// avoid a panic if the upstream contract drifts. `build_throw_response`
+/// already short-circuits on `triangulation_succeeded == false`, so this is
+/// the secondary defense.
 fn landing_from_trajectory(trajectory: &[Vector3<f64>]) -> Option<(f32, f32)> {
     let last = trajectory.last()?;
     Some((last[0] as f32, last[1] as f32))
 }
 
-// Distance from the inside edge of the throwing circle to the landing point,
-// in meters. The throwing circle is centered at the origin in our coordinate
-// frame, so the distance is `||(x, y)|| - circle_radius`.
-//
-// World athletics rules measure from the inside edge of the stop board, but
-// for shot put / discus / hammer the circle is symmetric and the measurement
-// is from the inside edge of the circle. For javelin, the "circle" field
-// dimension represents the runway length, not a circle radius, so the
-// subtraction is omitted.
+/// Distance from the inside edge of the throwing circle to the landing
+/// point, in meters. The throwing circle is centered at the origin in our
+/// coordinate frame, so the distance is `||(x, y)|| - circle_radius`.
+///
+/// World athletics rules measure from the inside edge of the stop board,
+/// but for shot put / discus / hammer the circle is symmetric and the
+/// measurement is from the inside edge of the circle. For javelin, the
+/// "circle" field dimension represents the runway length, not a circle
+/// radius, so the subtraction is omitted.
 fn compute_distance(landing_xy: (f32, f32), throw_type: ThrowType) -> f32 {
     let (x, y) = landing_xy;
     let raw = (x * x + y * y).sqrt();
@@ -58,12 +60,12 @@ fn compute_distance(landing_xy: (f32, f32), throw_type: ThrowType) -> f32 {
     }
 }
 
-// Decide whether the landing point is outside the legal sector and, if so,
-// which side it landed on. Returns `None` if the throw is in-bounds.
-//
-// The sector is symmetric about the +x axis with half-angle `sector_angle / 2`.
-// A throw with positive y past the half-angle is a `LeftSector` violation;
-// negative y past the half-angle is `RightSector`.
+/// Decide whether the landing point is outside the legal sector and, if so,
+/// which side it landed on. Returns `None` if the throw is in-bounds.
+///
+/// The sector is symmetric about the +x axis with half-angle
+/// `sector_angle / 2`. A throw with positive y past the half-angle is a
+/// `LeftSector` violation; negative y past the half-angle is `RightSector`.
 fn classify_sector(landing_xy: (f32, f32), throw_type: ThrowType) -> Option<InfractionType> {
     let (x, y) = landing_xy;
     let (_, _, sector_angle_deg) = get_field_dimensions(throw_type);
@@ -81,39 +83,49 @@ fn classify_sector(landing_xy: (f32, f32), throw_type: ThrowType) -> Option<Infr
     })
 }
 
-// Convert a buffer timestamp in nanoseconds to the ISO-8601 string format
-// the frontend expects. The schema field is named
-// `frame_timestamp_from_camera_microseconds` for historical reasons but the
-// value is an RFC3339 timestamp string (see `simulate_throw_event`).
-fn timestamp_ns_to_string(impact_timestamp_ns: u64) -> String {
-    let secs = (impact_timestamp_ns / 1_000_000_000) as i64;
-    let nsecs = (impact_timestamp_ns % 1_000_000_000) as u32;
+/// Convert a Unix-epoch nanosecond timestamp to the RFC3339 string the
+/// frontend expects.
+///
+/// **Precondition:** `impact_unix_timestamp_ns` must be referenced to the
+/// Unix epoch. The cameras' raw `buffer_timestamp_ns` values are PTP
+/// timestamps in their own clock domain; converting from camera/PTP time
+/// to Unix time is upstream's responsibility (tracked in #76). Passing in
+/// raw PTP nanoseconds will produce nonsense datetimes.
+///
+/// The schema field this populates is named
+/// `frame_timestamp_from_camera_microseconds` for historical reasons but
+/// the value is an RFC3339 string (see `simulate_throw_event`).
+fn timestamp_ns_to_string(impact_unix_timestamp_ns: u64) -> String {
+    let secs = (impact_unix_timestamp_ns / 1_000_000_000) as i64;
+    let nsecs = (impact_unix_timestamp_ns % 1_000_000_000) as u32;
     DateTime::<Utc>::from_timestamp(secs, nsecs)
         .unwrap_or_else(Utc::now)
         .to_rfc3339()
 }
 
-// Build the final response from the triangulation output and surrounding
-// context. `circle_infraction` comes from the touch sensor pipeline and is
-// provided by the caller; this module does not detect circle infractions.
-//
-// Returns `None` if the triangulation step did not converge or produced no
-// trajectory. The caller decides what to do in that case (e.g., return 503,
-// fall back to the previous response, etc).
-//
-// `triangulation` is produced by the LM-call layer (issue #80) by wrapping the
-// return tuple of `math_triangulation::optimize_trajectory`. See
-// `TriangulationOutput` for the contract.
+/// Build the final response from the triangulation output and surrounding
+/// context. `circle_infraction` comes from the touch sensor pipeline and is
+/// provided by the caller; this module does not detect circle infractions.
+///
+/// Returns `Err(message)` if the triangulation step did not converge or
+/// produced no trajectory. The caller decides what to do with the error
+/// (e.g., return 503, fall back to the previous response, etc.).
+///
+/// `triangulation` is produced by the LM-call layer (issue #80) by wrapping
+/// the return tuple of `math_triangulation::optimize_trajectory`. See
+/// [`TriangulationOutput`] for the contract — including that
+/// `impact_timestamp_ns` must already be in Unix-epoch nanoseconds.
 pub fn build_throw_response(
     triangulation: &TriangulationOutput,
     throw_type: ThrowType,
     circle_infraction: Option<InfractionType>,
     image_urls: Vec<String>,
-) -> Option<ThrowAnalysisResponse> {
+) -> Result<ThrowAnalysisResponse, String> {
     if !triangulation.triangulation_succeeded {
-        return None;
+        return Err("Levenberg-Marquardt optimization did not converge".to_string());
     }
-    let landing_xy = landing_from_trajectory(&triangulation.trajectory)?;
+    let landing_xy = landing_from_trajectory(&triangulation.trajectory)
+        .ok_or_else(|| "Triangulation produced an empty trajectory".to_string())?;
 
     let mut infractions: Vec<InfractionType> = Vec::new();
     let sector_violation = classify_sector(landing_xy, throw_type);
@@ -131,7 +143,7 @@ pub fn build_throw_response(
         Some(landing_xy)
     };
 
-    Some(ThrowAnalysisResponse {
+    Ok(ThrowAnalysisResponse {
         throw_id: Uuid::new_v4(),
         frame_timestamp_from_camera_microseconds: timestamp_ns_to_string(
             triangulation.impact_timestamp_ns,
@@ -244,11 +256,13 @@ mod tests {
             ThrowType::Shotput,
             None,
             vec!["a.png".to_string()],
-        );
-        let response = response.expect("should produce a response");
+        )
+        .expect("should produce a response");
         assert!(response.infractions.is_empty());
         assert_eq!(response.landing_point_x_y, Some((10.0, 0.5)));
-        assert!((response.distance_m - (((10.0_f32).powi(2) + 0.25_f32).sqrt() - 1.0675)).abs() < 1e-3);
+        assert!(
+            (response.distance_m - (((10.0_f32).powi(2) + 0.25_f32).sqrt() - 1.0675)).abs() < 1e-3
+        );
         assert_eq!(response.throw_type, ThrowType::Shotput);
         assert_eq!(response.images, vec!["a.png".to_string()]);
     }
@@ -299,7 +313,7 @@ mod tests {
     }
 
     #[test]
-    fn build_response_returns_none_when_triangulation_failed() {
+    fn build_response_returns_err_when_triangulation_failed() {
         let trajectory = traj(&[(0.0, 0.0, 2.0), (10.0, 0.0, 0.05)]);
         let response = build_throw_response(
             &output(trajectory, false),
@@ -307,18 +321,24 @@ mod tests {
             None,
             vec![],
         );
-        assert!(response.is_none());
+        assert_eq!(
+            response.unwrap_err(),
+            "Levenberg-Marquardt optimization did not converge"
+        );
     }
 
     #[test]
-    fn build_response_returns_none_for_empty_trajectory() {
+    fn build_response_returns_err_for_empty_trajectory() {
         let response = build_throw_response(
             &output(vec![], true),
             ThrowType::Shotput,
             None,
             vec![],
         );
-        assert!(response.is_none());
+        assert_eq!(
+            response.unwrap_err(),
+            "Triangulation produced an empty trajectory"
+        );
     }
 
     #[test]
