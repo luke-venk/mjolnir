@@ -17,7 +17,7 @@ use super::{
     InfractionType, ThrowAnalysisResponse, ThrowType,
     simulate_throw::get_field_dimensions,
 };
-use crate::triangulation::TriangulationOutput;
+use crate::math_triangulation::TriangulationOutput;
 use chrono::{DateTime, Utc};
 use nalgebra::Vector3;
 use uuid::Uuid;
