@@ -1,8 +1,8 @@
-//! Collects matched left/right contour observations and converts sufficiently
+//! Collects matched left/right frame observations and converts sufficiently
 //! complete sequences into `OptimizeTrajectoryInput` values suitable for
 //! trajectory optimization.
 
-use crate::pipeline::MatchedContourPair;
+use crate::pipeline::{CameraId, Context, Frame, MatchedFramePair};
 use nalgebra::Vector2;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,7 +27,7 @@ impl OptimizeTrajectoryInput {
 
 #[derive(Debug, Default)]
 pub struct TrajectoryInputCollector {
-    matched_pairs: Vec<MatchedContourPair>,
+    matched_pairs: Vec<MatchedFramePair>,
 }
 
 impl TrajectoryInputCollector {
@@ -37,7 +37,7 @@ impl TrajectoryInputCollector {
         }
     }
 
-    pub fn push(&mut self, matched_pair: MatchedContourPair) {
+    pub fn push(&mut self, matched_pair: MatchedFramePair) {
         self.matched_pairs.push(matched_pair);
     }
 
@@ -53,7 +53,7 @@ impl TrajectoryInputCollector {
         self.matched_pairs.is_empty()
     }
 
-    pub fn matched_pairs(&self) -> &[MatchedContourPair] {
+    pub fn matched_pairs(&self) -> &[MatchedFramePair] {
         &self.matched_pairs
     }
 
@@ -64,10 +64,13 @@ impl TrajectoryInputCollector {
     pub fn build_optimize_trajectory_input_from_all_pairs(
         &self,
     ) -> Option<OptimizeTrajectoryInput> {
-        let usable_pairs: Vec<&MatchedContourPair> = self
+        let usable_pairs: Vec<&MatchedFramePair> = self
             .matched_pairs
             .iter()
-            .filter(|pair| pair.left().center_px().is_some() && pair.right().center_px().is_some())
+            .filter(|pair| {
+                pair.left().context().centroid().is_some()
+                    && pair.right().context().centroid().is_some()
+            })
             .collect();
 
         if usable_pairs.len() < 2 {
@@ -77,16 +80,24 @@ impl TrajectoryInputCollector {
         let left_pixels: Vec<Vector2<f64>> = usable_pairs
             .iter()
             .map(|pair| {
-                let center = pair.left().center_px().expect("left center should exist");
-                Vector2::new(center.cx_px(), center.cy_px())
+                let (cx, cy) = pair
+                    .left()
+                    .context()
+                    .centroid()
+                    .expect("left center should exist");
+                Vector2::new(cx, cy)
             })
             .collect();
 
         let right_pixels: Vec<Vector2<f64>> = usable_pairs
             .iter()
             .map(|pair| {
-                let center = pair.right().center_px().expect("right center should exist");
-                Vector2::new(center.cx_px(), center.cy_px())
+                let (cx, cy) = pair
+                    .right()
+                    .context()
+                    .centroid()
+                    .expect("right center should exist");
+                Vector2::new(cx, cy)
             })
             .collect();
 
@@ -96,7 +107,7 @@ impl TrajectoryInputCollector {
     }
 }
 
-fn median_dt_seconds(usable_pairs: &[&MatchedContourPair]) -> Option<f64> {
+fn median_dt_seconds(usable_pairs: &[&MatchedFramePair]) -> Option<f64> {
     if usable_pairs.len() < 2 {
         return None;
     }
@@ -129,29 +140,31 @@ fn median_dt_seconds(usable_pairs: &[&MatchedContourPair]) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pipeline::CameraId;
-    use crate::pipeline::{ContourOutput, MatchedContourPair, PixelCenter};
+
+    fn make_frame(
+        camera_id: CameraId,
+        timestamp_ns: u64,
+        center: Option<(f64, f64)>,
+    ) -> Frame {
+        let mut frame = Frame::new(
+            vec![1, 2, 3, 4].into_boxed_slice(),
+            (2, 2),
+            Context::new(camera_id, timestamp_ns),
+        );
+        frame.context_mut().set_detected(Some(center.is_some()));
+        frame.context_mut().set_centroid(center);
+        frame
+    }
 
     fn make_pair(
         timestamp_ns: u64,
         left_center: Option<(f64, f64)>,
         right_center: Option<(f64, f64)>,
-    ) -> MatchedContourPair {
-        let left = ContourOutput::new(
-            CameraId::FieldLeft,
-            timestamp_ns,
-            left_center.is_some(),
-            left_center.map(|(cx, cy)| PixelCenter::new(cx, cy)),
-        );
+    ) -> MatchedFramePair {
+        let left = make_frame(CameraId::FieldLeft, timestamp_ns, left_center);
+        let right = make_frame(CameraId::FieldRight, timestamp_ns, right_center);
 
-        let right = ContourOutput::new(
-            CameraId::FieldRight,
-            timestamp_ns,
-            right_center.is_some(),
-            right_center.map(|(cx, cy)| PixelCenter::new(cx, cy)),
-        );
-
-        MatchedContourPair::new(left, right)
+        MatchedFramePair::new(left, right)
     }
 
     #[test]

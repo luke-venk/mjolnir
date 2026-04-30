@@ -5,12 +5,12 @@ use backend_lib::aggregator::{AggregationCommand, AggregationCoordinator};
 #[cfg(feature = "real_cameras")]
 use backend_lib::camera::parse_real_backend_args;
 #[cfg(feature = "real_cameras")]
-use backend_lib::aggregator::MatchedContourPairAggregator;
+use backend_lib::aggregator::MatchedFramePairAggregator;
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{CameraId, Pipeline};
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 #[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::{Frame, MatchedContourPair};
+use backend_lib::pipeline::{Frame, MatchedFramePair};
 #[cfg(feature = "real_cameras")]
 use backend_lib::aggregator::OptimizeTrajectoryInput;
 use tower_http::cors::{Any, CorsLayer};
@@ -57,14 +57,14 @@ async fn main() {
     let (frame_output_tx, frame_output_rx) =
         crossbeam::channel::bounded::<Frame>(rolling_buffer_size);
     let (matched_pair_tx, matched_pair_rx) =
-        crossbeam::channel::bounded::<MatchedContourPair>(rolling_buffer_size);
+        crossbeam::channel::bounded::<MatchedFramePair>(rolling_buffer_size);
     let (_aggregation_command_tx, aggregation_command_rx) =
         crossbeam::channel::unbounded::<AggregationCommand>();
     let (optimize_input_tx, _optimize_input_rx) =
         crossbeam::channel::unbounded::<OptimizeTrajectoryInput>();
 
-    let _matched_contour_pair_aggregator =
-        MatchedContourPairAggregator::new(frame_output_rx, matched_pair_tx, 33_330_000);
+    let _matched_frame_pair_aggregator =
+        MatchedFramePairAggregator::new(frame_output_rx, matched_pair_tx, 33_330_000);
     let _aggregation_coordinator = AggregationCoordinator::new(
         matched_pair_rx,
         aggregation_command_rx,
