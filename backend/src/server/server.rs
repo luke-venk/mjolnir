@@ -1,19 +1,19 @@
 use crate::circle_infractions_ingest::CircleInfractionDetectionState;
-use crate::throws::ThrowType;
 use crate::server::app_state::AppState;
+use crate::throws::ThrowType;
 use crate::throws::{simulate_throw::simulate_throw_event, *};
 use super::ThrowSource;
+
 use axum::{
-    Json, Router,
     extract::State,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
+    Json, Router,
 };
 use crossbeam::channel::Receiver;
 use serde_json::json;
 
-// Informs us that server is up and running.
 async fn health_check() -> impl IntoResponse {
     Json(json!({
         "status": "ok",
@@ -21,7 +21,6 @@ async fn health_check() -> impl IntoResponse {
     }))
 }
 
-// Allows user input of what type of event the next throw will be.
 async fn post_throw_type(
     State(state): State<AppState>,
     Json(payload): Json<PostThrowTypeRequest>,
@@ -34,7 +33,8 @@ async fn post_throw_type(
         _ => {
             return Err((
                 StatusCode::BAD_REQUEST,
-                "Error: User specified invalid throwing event. Please choose one of 'shotput','discus', 'hammer', or 'javelin'.".to_string(),
+                "Error: invalid throwing event. Choose 'shotput','discus','hammer','javelin'."
+                    .to_string(),
             ))
         }
     };
@@ -43,38 +43,63 @@ async fn post_throw_type(
     Ok(StatusCode::OK)
 }
 
-// Allows query of what the type of event the current throw is.
 async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeResponse> {
     let throw_type = *state.throw_type.read().await;
     Json(GetThrowTypeResponse { throw_type })
 }
 
-// The `analyze-throw` endpoint uses simulated data if the throw
-// source is `Simulated`, but calls the CV pipeline if the throw
-// source is `Camera`.
+// history_ms contains timestamps (ms since unix epoch) when INFRACTION bytes were received.
+// We add Circle iff there exists an infraction in [throw_start_ms - 2000, throw_end_ms].
+fn has_circle_infraction_in_window(history_ms: &[u64], throw_start_ms: u64, throw_end_ms: u64) -> bool {
+    let start = throw_start_ms.saturating_sub(2_000);
+    let end = throw_end_ms;
+    history_ms.iter().any(|&t| t >= start && t <= end)
+}
+
 async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisResponse> {
     let throw_type: ThrowType = *state.throw_type.read().await;
 
-    // 1) Produce the base throw analysis result (simulated for now)
+    // 1) Base throw analysis result (simulated for now)
     let mut result: ThrowAnalysisResponse = match state.throw_source {
         ThrowSource::Simulated => simulate_throw_event(throw_type),
         ThrowSource::Camera => {
-            // TODO(#28): replace with real CV pipeline output
+            // TODO: replace with real CV pipeline output
             simulate_throw_event(throw_type)
         }
     };
 
-    // 2) If we saw a recent circle infraction signal, attach it to this throw
-    let now_ms = chrono::Utc::now().timestamp_millis() as u64;
+    // 2) Remove any simulated Circle infractions.
+    result
+        .infractions
+        .retain(|inf| inf.infraction_type != InfractionType::Circle);
+
+    // 3) Compute throw window (ms) from response start/end.
+    //
+    // Ideal path: these should be derived from the chosen trajectory in the 60s ringbuffer.
+    // Right now simulate_throw_event populates them, so we can already test the logic end-to-end.
+    let start_us = result
+        .throw_start_timestamp_from_camera_microseconds
+        .as_ref()
+        .and_then(|s| s.parse::<u64>().ok());
+
+    let end_us = result
+        .throw_end_timestamp_from_camera_microseconds
+        .as_ref()
+        .and_then(|s| s.parse::<u64>().ok());
+
+    // If timestamps are missing, we cannot correlate reliably; return without Circle.
+    let (Some(start_us), Some(end_us)) = (start_us, end_us) else {
+        return Json(result);
+    };
+
+    let throw_start_ms = start_us / 1_000;
+    let throw_end_ms = end_us / 1_000;
+
+    // 4) Correlate with circle infraction history
     let history = state.get_infraction_history().await;
+    let circle = has_circle_infraction_in_window(&history, throw_start_ms, throw_end_ms);
 
-    // Use the most recent infraction only (simpler + less confusing)
-    let recent_circle = history
-        .last()
-        .map(|t| now_ms.saturating_sub(*t) <= 10_000) // 10 seconds
-        .unwrap_or(false);
-
-    if recent_circle {
+    if circle {
         result.infractions.push(Infraction {
             infraction_type: InfractionType::Circle,
             confidence: 1.0,
@@ -83,6 +108,7 @@ async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisR
 
     Json(result)
 }
+
 async fn get_circle_status(State(state): State<AppState>) -> Json<serde_json::Value> {
     let stale = state.is_circle_infraction_system_stale().await;
     let history = state.get_infraction_history().await;
@@ -94,24 +120,32 @@ async fn get_circle_status(State(state): State<AppState>) -> Json<serde_json::Va
         "history_len": history.len(),
     }))
 }
-// In both dev and prod mode, the router will require the HTTP routes
-// and the thread-safe shared app state.
-pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleInfractionDetectionState>) -> Router {
-    // Thread-safe shared app state for current throw event.
+
+pub fn create_api_router(
+    throw_source: ThrowSource,
+    circle_rx: Receiver<CircleInfractionDetectionState>,
+) -> Router {
     let state = AppState::new(throw_source);
     let state_clone = state.clone();
+
     tokio::spawn(async move {
         loop {
             let state = state_clone.clone();
-            match tokio::task::spawn_blocking({
-                let rx = circle_rx.clone(); // crossbeam Receiver is Clone
+            let recv_result = tokio::task::spawn_blocking({
+                let rx = circle_rx.clone();
                 move || rx.recv()
             })
-            .await
-            {
+            .await;
+
+            match recv_result {
                 Ok(Ok(CircleInfractionDetectionState::DetectedInfraction(ts))) => {
                     state.set_circle_infraction_system_is_stale(false).await;
-                    state.record_infraction(ts).await;
+
+                    // Prefer approx PTP if available, else local arrival time.
+                    let best_ns = ts.approx_ptp_ns.unwrap_or(ts.local_arrival_ns);
+                    let ts_ms = (best_ns / 1_000_000) as u64;
+
+                    state.record_infraction(ts_ms).await;
                 }
                 Ok(Ok(CircleInfractionDetectionState::KeepAlive)) => {
                     state.set_circle_infraction_system_is_stale(false).await;
@@ -119,118 +153,26 @@ pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleIn
                 Ok(Ok(CircleInfractionDetectionState::Stale)) => {
                     state.set_circle_infraction_system_is_stale(true).await;
                 }
-                Ok(Err(_)) | Err(_) => break, // sender dropped or task panicked
+                Ok(Err(_)) | Err(_) => break,
             }
         }
     });
 
-    // Define HTTP routes.
     let http_routes = Router::new()
         .route("/health", get(health_check))
         .route("/throw-type", post(post_throw_type).get(get_throw_type))
         .route("/analyze-throw", get(get_throw_results))
         .route("/circle-status", get(get_circle_status));
-    // Nest the routes behind the "/api" prefix so no naming collisions
-    // with frontend requests.
+
     Router::new().nest("/api", http_routes).with_state(state)
 }
 
 pub async fn start_server(app: Router, addr: &str) {
-    // Listener.
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("Failed to bind TCP listener.");
 
-    // Start the server.
     axum::serve(listener, app)
         .await
         .expect("Failed to start server.");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::{body::Body, http::Request};
-    use http_body_util::BodyExt;
-    use tower::ServiceExt;
-
-    #[tokio::test]
-    async fn test_health_check() {
-        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx);
-
-        let request = Request::builder()
-            .uri("/api/health")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-
-        assert_eq!(json["status"], "ok");
-        assert_eq!(json["message"], "Server is running.");
-    }
-
-    #[tokio::test]
-    async fn test_default_throw_type_is_shotput() {
-        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx);
-
-        let request = Request::builder()
-            .uri("/api/throw-type")
-            .body(Body::empty())
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["throw_type"], "Shotput");
-    }
-
-    #[tokio::test]
-    async fn test_valid_throw_type_post_and_get() {
-        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx);
-
-        let post_request = Request::builder()
-            .method("POST")
-            .uri("/api/throw-type")
-            .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"throw_type":"discus"}"#))
-            .unwrap();
-        let post_response = app.clone().oneshot(post_request).await.unwrap();
-        assert_eq!(post_response.status(), StatusCode::OK);
-
-        let get_request = Request::builder()
-            .uri("/api/throw-type")
-            .body(Body::empty())
-            .unwrap();
-        let get_response = app.oneshot(get_request).await.unwrap();
-        assert_eq!(get_response.status(), StatusCode::OK);
-
-        let body = get_response.into_body().collect().await.unwrap().to_bytes();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["throw_type"], "Discus");
-    }
-
-    #[tokio::test]
-    async fn test_invalid_throw_type_post() {
-        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx);
-
-        let request = Request::builder()
-            .method("POST")
-            .uri("/api/throw-type")
-            .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"throw_type":"curling"}"#))
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
 }

@@ -1,3 +1,5 @@
+use crate::time::ptp_offset;
+
 use super::writer::{Frame, Metadata, ensure_dir, sanitize_path_name};
 use crate::camera::CameraIngestConfig;
 use crate::camera::aravis_utils::{
@@ -15,7 +17,7 @@ use std::path::PathBuf;
 use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // Need both cams to agree on the next timestamp to start recording at
 // They're on separate threads and this code architecture doesn't make it easy for them to talk to each other
@@ -54,6 +56,14 @@ fn read_ptp_time_ns(camera: &Camera) -> u64 {
         .execute_command("PtpDataSetLatch")
         .expect("Failed to latch PTP dataset.");
     unsafe_read_camera_integer(camera, "PtpDataSetLatchValue") as u64
+}
+
+// Local wall time in ns since UNIX_EPOCH
+fn local_now_ns() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64
 }
 
 /// Broadcasts a GigEV scheduled action command to all cameras on the network.
@@ -170,6 +180,7 @@ pub fn run_capture_thread(
     } else {
         None
     };
+
     let frame_interval_ns: Option<u64> = if let Some(ref ptp_config) = maybe_ptp_config
         && !ptp_config.is_slave
     {
@@ -177,10 +188,13 @@ pub fn run_capture_thread(
     } else {
         None
     };
+
     let maybe_socket = if let Some(ref ptp_config) = maybe_ptp_config
         && !ptp_config.is_slave
     {
-        let addr = host_interface_ip.expect("Capture thread was configured to be PTP & Acquisition master but was not provided a host SocketAddr.");
+        let addr = host_interface_ip.expect(
+            "Capture thread was configured to be PTP & Acquisition master but was not provided a host SocketAddr.",
+        );
         let socket = UdpSocket::bind(addr).expect("Failed to bind UDP socket for action command.");
         socket
             .set_broadcast(true)
@@ -252,6 +266,9 @@ pub fn run_capture_thread(
     let start_time: Instant = Instant::now();
     let mut frames_saved: usize = 0usize;
 
+    // NEW: periodic offset update (once/sec)
+    let mut last_offset_update: Instant = Instant::now();
+
     // Used to provide countdowns to the user
     let mut countdown_timer: Instant = Instant::now();
     let expected_mog2_duration_s: f64 = (MOG2_HISTORY_FRAMES as f64) / config.frame_rate_hz;
@@ -268,6 +285,15 @@ pub fn run_capture_thread(
             break;
         }
 
+        // NEW: refresh ptp offset while running in real PTP mode
+        if maybe_ptp_config.is_some() && last_offset_update.elapsed() >= Duration::from_secs(1) {
+            let ptp_ns = read_ptp_time_ns(&camera);
+            let local_ns = local_now_ns();
+            ptp_offset::update_offset_from_pair(ptp_ns, local_ns);
+            eprintln!("[ptp_offset] updated ptp_ns={} local_ns={}", ptp_ns, local_ns);
+            last_offset_update = Instant::now();
+        }
+
         // Stop streaming if a maximum number of frames was configured and
         // the camera has recorded that many frames.
         if let Some(limit) = max_frames {
@@ -279,10 +305,6 @@ pub fn run_capture_thread(
         // Stop streaming if a maximum duration was configured and the camera has recorded
         // for that amount of time. Note that the max duration needs to account for both
         // time spent throwing away frames and time spent recording still frames for Mog2.
-        // Since the time duration for recording for Mog2 (mog2_duration_s) is an approximation
-        // and this would be wrong if frames are dropped, we actually record the instant at
-        // which Mog2 frame collection completed, which also accounts for the time throwing
-        // away frames.
         if let Some(max_duration_s) = max_duration_s {
             if let Some(mog2_completed_at) = mog2_completed_at {
                 if mog2_completed_at.elapsed() >= Duration::from_secs_f64(max_duration_s) {
@@ -291,8 +313,6 @@ pub fn run_capture_thread(
             }
         }
 
-        // If the elapsed time has not passed the throwaway duration, print out to the user
-        // every second and skip writing the frame to disk.
         if start_time.elapsed() <= Duration::from_secs_f64(throwaway_duration_s) {
             if countdown_timer.elapsed() >= Duration::from_secs_f64(1.0) {
                 let throwaway_seconds_remaining: Duration =
@@ -303,15 +323,12 @@ pub fn run_capture_thread(
                 );
                 countdown_timer = Instant::now();
             }
-            // Also be sure to drain the buffer during this time.
             if let Some(buffer) = stream.timeout_pop_buffer(0) {
                 stream.push_buffer(buffer);
             }
             continue;
         }
 
-        // Load camera buffer.
-        // Block current thread until frame buffer delivered or the timeout elapses.
         let buffer = match stream.timeout_pop_buffer(config.timeout_ms * 1000) {
             Some(buffer) => {
                 if !first_buffer_arrived {
@@ -320,11 +337,6 @@ pub fn run_capture_thread(
                 buffer
             }
             None => {
-                // If the buffer hasn't yet loaded, skip.
-                // At startup, buffers won't be loaded because between `start_acquisition()`
-                // and the first real frame arriving, camera has to arm sensors, establish
-                // network path, complete exposure time, etc. So to prevent messy printing,
-                // only print the below if a timeout occurs after the first buffer arrives.
                 if first_buffer_arrived {
                     eprintln!(
                         "Timed out waiting for frame buffer to be delivered from camera {}.",
@@ -335,17 +347,10 @@ pub fn run_capture_thread(
             }
         };
 
-        // If loading the buffer worked, copy the frame buffer into raw bytes.
         match buffer.status() {
             BufferStatus::Success => {
                 let elapsed_since_start = start_time.elapsed();
 
-                // If we still haven't saved the number of frames required for Mog2 to
-                // build the background model, continue writing to disk and inform the
-                // user every second of this, so they can remain still.
-                // We just check number of frames to determine if we've hit our frame
-                // limit or not, but use a calculated duration to inform the user of how
-                // much longer they shoudl wait.
                 if frames_saved < MOG2_HISTORY_FRAMES {
                     if countdown_timer.elapsed() >= Duration::from_secs_f64(1.0) {
                         let mog2_seconds_remaining: Duration = Duration::from_secs_f64(
@@ -367,9 +372,6 @@ pub fn run_capture_thread(
                     );
                 }
 
-                // Take the buffer from the stream and store its information, and then
-                // immediately push the buffer back to the stream, so it doesn't
-                // starve.
                 let data = copy_buffer_bytes(&buffer);
                 let system_timestamp_ns = buffer.system_timestamp();
                 let buffer_timestamp_ns = buffer.timestamp();
@@ -381,7 +383,6 @@ pub fn run_capture_thread(
                     continue;
                 }
 
-                // Store metadata.
                 let metadata = Metadata {
                     camera_id: config.camera_id.clone(),
                     frame_index: frames_saved,
@@ -393,8 +394,6 @@ pub fn run_capture_thread(
                     frame_id,
                 };
 
-                // Package bytes and metadata into Frame struct and pass
-                // over crossbeam-channel to write thread.
                 let frame = Frame {
                     output_camera_dir: output_camera_dir.clone(),
                     frame_index: frames_saved,
