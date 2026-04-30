@@ -1,6 +1,5 @@
-//! Coordinates time-windowed collection of matched left/right contour pairs and
-//! emits `OptimizeTrajectoryInput` once a throw window has ended and sufficient
-//! observations have been gathered.
+//! Coordinates start-triggered collection of matched left/right contour pairs and
+//! emits `OptimizeTrajectoryInput` once a fixed sample count has been gathered.
 
 use crate::aggregator::{OptimizeTrajectoryInput, TrajectoryInputCollector};
 use crate::pipeline::MatchedContourPair;
@@ -11,14 +10,12 @@ use std::thread::{self, JoinHandle};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AggregationCommand {
     Start { timestamp_ns: u64 },
-    End { timestamp_ns: u64 },
     Reset,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct ActiveWindow {
     start_timestamp_ns: u64,
-    end_timestamp_ns: Option<u64>,
 }
 
 pub struct AggregationCoordinator {
@@ -31,6 +28,7 @@ impl AggregationCoordinator {
         command_rx: Receiver<AggregationCommand>,
         optimize_input_tx: Sender<OptimizeTrajectoryInput>,
         lookback_capacity: usize,
+        sample_limit: usize,
     ) -> Self {
         let handle = thread::spawn(move || {
             let mut collector = TrajectoryInputCollector::new();
@@ -51,13 +49,7 @@ impl AggregationCoordinator {
                                 }
                                 active_window = Some(ActiveWindow {
                                     start_timestamp_ns: timestamp_ns,
-                                    end_timestamp_ns: None,
                                 });
-                            }
-                            Ok(AggregationCommand::End { timestamp_ns }) => {
-                                if let Some(window) = active_window.as_mut() {
-                                    window.end_timestamp_ns = Some(timestamp_ns);
-                                }
                             }
                             Ok(AggregationCommand::Reset) => {
                                 collector.clear();
@@ -83,9 +75,7 @@ impl AggregationCoordinator {
 
                                     collector.push(matched_pair);
 
-                                    if let Some(end_timestamp_ns) = window.end_timestamp_ns
-                                        && pair_timestamp_ns > end_timestamp_ns
-                                    {
+                                    if collector.len() >= sample_limit {
                                         if let Some(optimize_input) = collector.build_optimize_trajectory_input() {
                                             let _ = optimize_input_tx.send(optimize_input);
                                         }
@@ -134,13 +124,13 @@ mod tests {
     }
 
     #[test]
-    fn test_coordinator_collects_within_window_and_emits_after_end_boundary_is_crossed() {
+    fn test_coordinator_collects_from_start_and_emits_after_sample_limit() {
         let (matched_pair_tx, matched_pair_rx) = crossbeam::channel::unbounded();
         let (command_tx, command_rx) = crossbeam::channel::unbounded();
         let (optimize_input_tx, optimize_input_rx) = crossbeam::channel::unbounded();
 
         let _coordinator =
-            AggregationCoordinator::new(matched_pair_rx, command_rx, optimize_input_tx, 250);
+            AggregationCoordinator::new(matched_pair_rx, command_rx, optimize_input_tx, 250, 3);
 
         command_tx
             .send(AggregationCommand::Start { timestamp_ns: 100 })
@@ -153,9 +143,6 @@ mod tests {
             .unwrap();
         matched_pair_tx
             .send(make_pair(133, Some((11.0, 21.0)), None))
-            .unwrap();
-        command_tx
-            .send(AggregationCommand::End { timestamp_ns: 150 })
             .unwrap();
         matched_pair_tx
             .send(make_pair(166, Some((12.0, 22.0)), Some((32.0, 42.0))))

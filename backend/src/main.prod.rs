@@ -14,7 +14,6 @@ use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use backend_lib::pipeline::{Frame, MatchedContourPair};
 #[cfg(feature = "real_cameras")]
 use backend_lib::aggregator::OptimizeTrajectoryInput;
-#[cfg(feature = "real_cameras")]
 use rust_embed::Embed;
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
@@ -74,6 +73,7 @@ async fn main() {
         matched_pair_rx,
         aggregation_command_rx,
         optimize_input_tx,
+        250,
         250,
     );
 
