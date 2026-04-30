@@ -1,7 +1,6 @@
-//! Coordinates start-triggered collection of matched left/right frame pairs and
-//! emits `OptimizeTrajectoryInput` once a fixed sample count has been gathered.
+//! Coordinates start/end-triggered collection of matched left/right frame pairs
+//! and emits finished matched windows for rerun processing.
 
-use crate::aggregator::{OptimizeTrajectoryInput, TrajectoryInputCollector};
 use crate::pipeline::{CameraId, Context, Frame, MatchedFramePair};
 use crossbeam::channel::{Receiver, Sender, select};
 use std::collections::VecDeque;
@@ -10,12 +9,14 @@ use std::thread::{self, JoinHandle};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AggregationCommand {
     Start { timestamp_ns: u64 },
+    End { timestamp_ns: u64 },
     Reset,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct ActiveWindow {
     start_timestamp_ns: u64,
+    end_timestamp_ns: Option<u64>,
 }
 
 pub struct AggregationCoordinator {
@@ -26,12 +27,10 @@ impl AggregationCoordinator {
     pub fn new(
         matched_pair_rx: Receiver<MatchedFramePair>,
         command_rx: Receiver<AggregationCommand>,
-        optimize_input_tx: Sender<OptimizeTrajectoryInput>,
+        matched_window_tx: Sender<Vec<MatchedFramePair>>,
         lookback_capacity: usize,
-        sample_limit: usize,
     ) -> Self {
         let handle = thread::spawn(move || {
-            let mut collector = TrajectoryInputCollector::new();
             let mut active_window: Option<ActiveWindow> = None;
             let mut lookback_buffer: VecDeque<MatchedFramePair> =
                 VecDeque::with_capacity(lookback_capacity);
@@ -41,18 +40,17 @@ impl AggregationCoordinator {
                     recv(command_rx) -> message => {
                         match message {
                             Ok(AggregationCommand::Start { timestamp_ns }) => {
-                                collector.clear();
-                                for matched_pair in lookback_buffer.iter() {
-                                    if matched_pair.pair_timestamp_ns() >= timestamp_ns {
-                                        collector.push(matched_pair.clone());
-                                    }
-                                }
                                 active_window = Some(ActiveWindow {
                                     start_timestamp_ns: timestamp_ns,
+                                    end_timestamp_ns: None,
                                 });
                             }
+                            Ok(AggregationCommand::End { timestamp_ns }) => {
+                                if let Some(window) = active_window.as_mut() {
+                                    window.end_timestamp_ns = Some(timestamp_ns);
+                                }
+                            }
                             Ok(AggregationCommand::Reset) => {
-                                collector.clear();
                                 active_window = None;
                             }
                             Err(_) => break,
@@ -68,20 +66,22 @@ impl AggregationCoordinator {
                                     let _ = lookback_buffer.pop_front();
                                 }
 
-                                if let Some(window) = active_window.as_ref() {
-                                    if pair_timestamp_ns < window.start_timestamp_ns {
-                                        continue;
-                                    }
+                                if let Some(window) = active_window.as_ref()
+                                    && let Some(end_timestamp_ns) = window.end_timestamp_ns
+                                    && pair_timestamp_ns > end_timestamp_ns
+                                {
+                                    let matched_window: Vec<MatchedFramePair> = lookback_buffer
+                                        .iter()
+                                        .filter(|matched_pair| {
+                                            matched_pair.pair_timestamp_ns() >= window.start_timestamp_ns
+                                        })
+                                        .cloned()
+                                        .collect();
 
-                                    collector.push(matched_pair);
-
-                                    if collector.len() >= sample_limit {
-                                        if let Some(optimize_input) = collector.build_optimize_trajectory_input() {
-                                            let _ = optimize_input_tx.send(optimize_input);
-                                        }
-                                        collector.clear();
-                                        active_window = None;
+                                    if !matched_window.is_empty() {
+                                        let _ = matched_window_tx.send(matched_window);
                                     }
+                                    active_window = None;
                                 }
                             }
                             Err(_) => break,
@@ -126,13 +126,13 @@ mod tests {
     }
 
     #[test]
-    fn test_coordinator_collects_from_start_and_emits_after_sample_limit() {
+    fn test_coordinator_emits_window_after_end_boundary_is_crossed() {
         let (matched_pair_tx, matched_pair_rx) = crossbeam::channel::unbounded();
         let (command_tx, command_rx) = crossbeam::channel::unbounded();
-        let (optimize_input_tx, optimize_input_rx) = crossbeam::channel::unbounded();
+        let (matched_window_tx, matched_window_rx) = crossbeam::channel::unbounded();
 
         let _coordinator =
-            AggregationCoordinator::new(matched_pair_rx, command_rx, optimize_input_tx, 250, 3);
+            AggregationCoordinator::new(matched_pair_rx, command_rx, matched_window_tx, 250);
 
         command_tx
             .send(AggregationCommand::Start { timestamp_ns: 100 })
@@ -146,17 +146,17 @@ mod tests {
         matched_pair_tx
             .send(make_pair(133, Some((11.0, 21.0)), None))
             .unwrap();
+        command_tx
+            .send(AggregationCommand::End { timestamp_ns: 150 })
+            .unwrap();
         matched_pair_tx
             .send(make_pair(166, Some((12.0, 22.0)), Some((32.0, 42.0))))
             .unwrap();
 
-        let optimize_input = optimize_input_rx.recv().expect("expected optimize input");
-        assert_eq!(optimize_input.pixels().len(), 2);
-        assert_eq!(optimize_input.pixels()[0].len(), 2);
-        assert_eq!(optimize_input.pixels()[1].len(), 2);
-        assert_eq!(optimize_input.pixels()[0][0], nalgebra::Vector2::new(10.0, 20.0));
-        assert_eq!(optimize_input.pixels()[0][1], nalgebra::Vector2::new(12.0, 22.0));
-        assert_eq!(optimize_input.pixels()[1][0], nalgebra::Vector2::new(30.0, 40.0));
-        assert_eq!(optimize_input.pixels()[1][1], nalgebra::Vector2::new(32.0, 42.0));
+        let matched_window = matched_window_rx.recv().expect("expected matched window");
+        assert_eq!(matched_window.len(), 3);
+        assert_eq!(matched_window[0].pair_timestamp_ns(), 100);
+        assert_eq!(matched_window[1].pair_timestamp_ns(), 133);
+        assert_eq!(matched_window[2].pair_timestamp_ns(), 166);
     }
 }

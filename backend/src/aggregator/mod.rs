@@ -4,8 +4,10 @@
 
 pub mod aggregation_coordinator;
 pub mod matched_frame_pair_aggregator;
+pub mod rerun_pipeline;
 pub mod trajectory_input_collector;
 
 pub use aggregation_coordinator::{AggregationCommand, AggregationCoordinator};
 pub use matched_frame_pair_aggregator::MatchedFramePairAggregator;
+pub use rerun_pipeline::RerunPipeline;
 pub use trajectory_input_collector::{OptimizeTrajectoryInput, TrajectoryInputCollector};

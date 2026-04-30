@@ -1,7 +1,7 @@
 use axum::{Router, http::Method};
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
-use backend_lib::aggregator::{AggregationCommand, AggregationCoordinator};
+use backend_lib::aggregator::{AggregationCommand, AggregationCoordinator, RerunPipeline};
 #[cfg(feature = "real_cameras")]
 use backend_lib::camera::parse_real_backend_args;
 #[cfg(feature = "real_cameras")]
@@ -63,6 +63,8 @@ async fn main() {
         crossbeam::channel::bounded::<MatchedFramePair>(rolling_buffer_size);
     let (_aggregation_command_tx, aggregation_command_rx) =
         crossbeam::channel::unbounded::<AggregationCommand>();
+    let (matched_window_tx, matched_window_rx) =
+        crossbeam::channel::unbounded::<Vec<MatchedFramePair>>();
     let (optimize_input_tx, _optimize_input_rx) =
         crossbeam::channel::unbounded::<OptimizeTrajectoryInput>();
 
@@ -74,10 +76,10 @@ async fn main() {
     let _aggregation_coordinator = AggregationCoordinator::new(
         matched_pair_rx,
         aggregation_command_rx,
-        optimize_input_tx,
-        250,
+        matched_window_tx,
         250,
     );
+    let _rerun_pipeline = RerunPipeline::new(matched_window_rx, optimize_input_tx);
 
     let _ = Pipeline::new(
         CameraId::FieldLeft,

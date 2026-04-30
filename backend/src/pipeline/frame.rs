@@ -23,7 +23,7 @@ use std::sync::RwLock;
 #[derive(Debug, Clone)]
 pub struct Frame {
     /// The raw bytes for the frame coming from the camera at full resolution.
-    raw_bytes_full_resolution: Box<[u8]>,
+    raw_bytes_full_resolution: Option<Box<[u8]>>,
 
     /// The (width, height) of pixels for the frame. Note that this shouldn't
     /// be confused with (rows, cols), which is in fact the opposite but
@@ -43,7 +43,7 @@ pub struct Frame {
 impl Frame {
     pub fn new(data: Box<[u8]>, resolution: (u32, u32), context: Context) -> Self {
         Self {
-            raw_bytes_full_resolution: data,
+            raw_bytes_full_resolution: Some(data),
             raw_full_resolution: resolution,
             undistorted_image: RwLock::new(None),
             downsampled_image: RwLock::new(None),
@@ -51,8 +51,12 @@ impl Frame {
         }
     }
 
-    pub fn raw_bytes_full_resolution(&self) -> &Box<[u8]> {
-        &self.raw_bytes_full_resolution
+    pub fn raw_bytes_full_resolution(&self) -> Option<&Box<[u8]>> {
+        self.raw_bytes_full_resolution.as_ref()
+    }
+
+    pub fn clear_raw_bytes_full_resolution(&mut self) {
+        self.raw_bytes_full_resolution = None;
     }
 
     pub fn raw_full_resolution(&self) -> (u32, u32) {
@@ -204,7 +208,7 @@ mod tests {
             ComputerVisionStage::ForwardDownsampledCopy,
         );
 
-        for &pixel in frame.raw_bytes_full_resolution() {
+        for &pixel in frame.raw_bytes_full_resolution().unwrap() {
             assert_eq!(pixel, 21u8);
         }
         for pixel in frame.undistorted_image().unwrap().iter::<u8>().unwrap() {

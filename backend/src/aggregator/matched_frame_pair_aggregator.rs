@@ -21,8 +21,8 @@ impl MatchedFramePairAggregator {
             let mut left_queue = VecDeque::new();
             let mut right_queue = VecDeque::new();
 
-            for frame in output_rx.iter() {
-                let _ = frame.clear_undistorted_image();
+            for mut frame in output_rx.iter() {
+                frame.clear_raw_bytes_full_resolution();
                 let _ = frame.clear_downsampled_image();
 
                 match frame.context().camera_id() {

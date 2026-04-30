@@ -67,7 +67,7 @@ mod tests {
 
         // Assert that updated timestamp and data is as expected.
         assert_eq!(frame_out.context().camera_buffer_timestamp(), 1739);
-        for &pixel in frame_out.raw_bytes_full_resolution() {
+        for &pixel in frame_out.raw_bytes_full_resolution().unwrap() {
             assert_eq!(pixel, 67u8);
         }
     }
