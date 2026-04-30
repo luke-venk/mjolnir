@@ -2,11 +2,10 @@ use super::PipelineStage;
 use crate::camera_ingest::ingest_frames;
 use crate::computer_vision::{contour, forward_downsampled_copy, mog2, undistortion};
 use crate::pipeline::{CameraId, Frame};
-use crossbeam::channel::bounded;
+use crossbeam::channel::{Sender, bounded};
 use std::thread::{self, JoinHandle};
 
 pub struct Pipeline {
-    _camera_id: CameraId,
     handles: Vec<JoinHandle<()>>,
 }
 
@@ -16,7 +15,12 @@ impl Pipeline {
     // create the PipelineStages, spawn each stage, and return a Pipeline.
     // Calling this function automatically starts each of the pipeline
     // stages.
-    pub fn new(_camera_id: CameraId, capacity_per_channel: usize) -> Self {
+    pub fn new(
+        camera_id: CameraId,
+        camera_name: String,
+        capacity_per_channel: usize,
+        frame_output_tx: Sender<Frame>,
+    ) -> Self {
         // Define inter-stage message channels for thread-safe message sharing.
         let (tx_ingest, rx_stage1) = bounded::<Frame>(capacity_per_channel);
         let (tx_stage1, rx_stage2) = bounded::<Frame>(capacity_per_channel);
@@ -27,12 +31,11 @@ impl Pipeline {
         // Input: Camera Ingest.
         // Spawn a thread to handle camera ingest from GigEVision API here.
         let handle_ingest = thread::spawn(move || {
-            ingest_frames(tx_ingest);
+            ingest_frames(camera_id, camera_name, tx_ingest);
         });
 
         // Stage 1: Undistortion.
         let handle_stage1 = PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn();
-
         // Stage 2: Forward Downsampled Copy.
         let handle_stage2 =
             PipelineStage::new(rx_stage2, tx_stage2, forward_downsampled_copy).spawn();
@@ -43,16 +46,16 @@ impl Pipeline {
         // Stage 4: Contour.
         let handle_stage4 = PipelineStage::new(rx_stage4, tx_stage4, contour).spawn();
 
-        // Output: Pixel coordinates.
-        // Spawn a thread to handle reporting pipeline outputs to math triangulation.
+        // Output: send post-contour frames to the aggregator boundary.
         let handle_output = thread::spawn(move || {
-            for _frame in rx_output.iter() {
-                // TODO: forward results to output.
+            for frame in rx_output.iter() {
+                frame_output_tx
+                    .send(frame)
+                    .expect("Error sending processed frame to aggregator.");
             }
         });
 
         Self {
-            _camera_id,
             handles: vec![
                 handle_ingest,
                 handle_stage1,

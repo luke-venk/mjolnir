@@ -1,3 +1,4 @@
+pub mod aggregator;
 pub mod camera;
 pub mod camera_ingest;
 pub mod circle_infractions_ingest;
