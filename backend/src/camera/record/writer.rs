@@ -1,12 +1,16 @@
 // Code that handles writing our captured frames from RAM to disk (SSD) in
 // a performant manner so frames aren't dropped.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
-use std::fs::{create_dir_all, File};
+use std::fs::{self, create_dir_all, File};
+use std::io::BufReader;
 use std::io::BufWriter;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use tiff::decoder::{Decoder, DecodingResult};
 use tiff::encoder::{colortype, TiffEncoder};
+
+const RECORDED_FRAME_PAYLOAD_EXTENSIONS: [&str; 2] = ["tiff", "raw"];
 
 /// Helper function to ensure output directory exists.
 pub fn ensure_dir(path: &PathBuf) {
@@ -30,7 +34,7 @@ pub fn sanitize_path_name(value: &str) -> String {
 
 /// Metadata for each frame to be recorded as a JSON file,
 /// in addition to raw bytes for the frame.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
     pub camera_id: String,
     pub frame_index: usize,
@@ -78,4 +82,90 @@ pub fn write_to_disk(
     json_file
         .write_all(json.as_bytes())
         .unwrap_or_else(|e| panic!("failed to write {}: {e}", json_path.display()));
+}
+
+/// Reads only the metadata sidecar (JSON) for a recorded frame, without
+/// loading the payload bytes off disk. Useful for replay paths that want to
+/// sort frames by timestamp before deciding what to load into memory.
+pub fn read_recorded_frame_metadata(json_path: &Path) -> Metadata {
+    let metadata_json = fs::read_to_string(json_path)
+        .unwrap_or_else(|err| panic!("Failed to read {}: {err}", json_path.display()));
+    serde_json::from_str(&metadata_json)
+        .unwrap_or_else(|err| panic!("Failed to parse {}: {err}", json_path.display()))
+}
+
+/// Reads one recorded frame payload + its metadata back from disk.
+///
+/// `json_path` must point to a frame metadata file. The matching payload is
+/// looked up next to it by trying the extensions in
+/// `RECORDED_FRAME_PAYLOAD_EXTENSIONS` in order (`.tiff` then `.raw`).
+pub fn read_recorded_frame(json_path: &Path) -> Frame {
+    let metadata = read_recorded_frame_metadata(json_path);
+    let bytes = read_recorded_frame_payload_bytes(json_path);
+    let output_camera_dir = json_path
+        .parent()
+        .unwrap_or_else(|| {
+            panic!(
+                "Frame metadata {} has no parent directory",
+                json_path.display()
+            )
+        })
+        .to_path_buf();
+
+    Frame {
+        output_camera_dir,
+        frame_index: metadata.frame_index,
+        bytes,
+        metadata,
+    }
+}
+
+fn read_recorded_frame_payload_bytes(json_path: &Path) -> Vec<u8> {
+    let payload_paths = RECORDED_FRAME_PAYLOAD_EXTENSIONS
+        .iter()
+        .map(|extension| json_path.with_extension(extension))
+        .collect::<Vec<_>>();
+
+    for payload_path in &payload_paths {
+        if payload_path.exists() {
+            if payload_path.extension().is_some_and(|ext| ext == "tiff") {
+                return read_tiff_payload_bytes(payload_path);
+            }
+            return fs::read(payload_path)
+                .unwrap_or_else(|err| panic!("Failed to read {}: {err}", payload_path.display()));
+        }
+    }
+
+    let attempted_paths = payload_paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    panic!(
+        "Failed to find recorded frame payload for {}. Tried: {}",
+        json_path.display(),
+        attempted_paths
+    );
+}
+
+fn read_tiff_payload_bytes(tiff_path: &Path) -> Vec<u8> {
+    let file = File::open(tiff_path)
+        .unwrap_or_else(|err| panic!("Failed to open {}: {err}", tiff_path.display()));
+    let mut decoder = Decoder::new(BufReader::new(file)).unwrap_or_else(|err| {
+        panic!(
+            "Failed to create TIFF decoder for {}: {err}",
+            tiff_path.display()
+        )
+    });
+
+    match decoder
+        .read_image()
+        .unwrap_or_else(|err| panic!("Failed to decode {}: {err}", tiff_path.display()))
+    {
+        DecodingResult::U8(bytes) => bytes,
+        _ => panic!(
+            "Expected an 8-bit grayscale TIFF payload in {}.",
+            tiff_path.display()
+        ),
+    }
 }

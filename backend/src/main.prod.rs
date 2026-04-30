@@ -1,8 +1,10 @@
 use axum::Router;
 use axum_embed::ServeEmbed;
+#[cfg(feature = "real_cameras")]
+use backend_lib::camera::parse_real_backend_args;
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::{CameraId, Pipeline};
+use backend_lib::pipeline::start_recorded_footage_pipelines;
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use rust_embed::Embed;
 
@@ -44,14 +46,19 @@ async fn main() {
 #[cfg(feature = "real_cameras")]
 #[tokio::main]
 async fn main() {
-    // Start the 2 computer vision pipelines (one for each camera).
+    let args = parse_real_backend_args();
     let rolling_buffer_size: usize = 10;
-    let _ = Pipeline::new(CameraId::FieldLeft, rolling_buffer_size);
-    let _ = Pipeline::new(CameraId::FieldRight, rolling_buffer_size);
+    println!(
+        "Starting real prod backend in recorded-footage replay mode from {}.",
+        args.feed_footage_dir.display()
+    );
+    let _ = start_recorded_footage_pipelines(args.feed_footage_dir, rolling_buffer_size);
 
     // Build the Axum router.
     let app = create_prod_app(ThrowSource::Camera);
 
     // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
+
+    // TODO(#7): Implement Clean Shutdown.
 }
