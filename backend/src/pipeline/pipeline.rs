@@ -169,11 +169,11 @@ mod tests {
         assert_eq!(left_frames.len(), 1);
         assert_eq!(left_frames[0].raw_bytes_full_resolution().as_ref(), &[1, 2, 3, 4]);
         assert_eq!(left_frames[0].context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(left_frames[0].context().camera_buffer_timestamp(), 300);
+        assert_eq!(left_frames[0].context().camera_buffer_timestamp(), 200);
         assert_eq!(right_frames.len(), 1);
         assert_eq!(right_frames[0].raw_bytes_full_resolution().as_ref(), &[5, 6, 7, 8]);
         assert_eq!(right_frames[0].context().camera_id(), CameraId::FieldRight);
-        assert_eq!(right_frames[0].context().camera_buffer_timestamp(), 320);
+        assert_eq!(right_frames[0].context().camera_buffer_timestamp(), 210);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -240,9 +240,9 @@ mod tests {
             .expect("right tracked pipeline should emit one frame");
 
         assert_eq!(left_output.context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(left_output.context().camera_buffer_timestamp(), 300);
+        assert_eq!(left_output.context().camera_buffer_timestamp(), 200);
         assert_eq!(right_output.context().camera_id(), CameraId::FieldRight);
-        assert_eq!(right_output.context().camera_buffer_timestamp(), 320);
+        assert_eq!(right_output.context().camera_buffer_timestamp(), 210);
 
         for handle in left_handles.into_iter().chain(right_handles) {
             handle
@@ -254,13 +254,13 @@ mod tests {
         let left_entries = entries
             .iter()
             .filter(|(camera_id, _, timestamp)| {
-                *camera_id == CameraId::FieldLeft && *timestamp == 300
+                *camera_id == CameraId::FieldLeft && *timestamp == 200
             })
             .count();
         let right_entries = entries
             .iter()
             .filter(|(camera_id, _, timestamp)| {
-                *camera_id == CameraId::FieldRight && *timestamp == 320
+                *camera_id == CameraId::FieldRight && *timestamp == 210
             })
             .count();
 
@@ -275,13 +275,13 @@ mod tests {
         for stage_index in 1..=4 {
             assert!(
                 entries.iter().any(|(camera_id, idx, timestamp)| {
-                    *camera_id == CameraId::FieldLeft && *idx == stage_index && *timestamp == 300
+                    *camera_id == CameraId::FieldLeft && *idx == stage_index && *timestamp == 200
                 }),
                 "left frame should reach stage slot {stage_index}"
             );
             assert!(
                 entries.iter().any(|(camera_id, idx, timestamp)| {
-                    *camera_id == CameraId::FieldRight && *idx == stage_index && *timestamp == 320
+                    *camera_id == CameraId::FieldRight && *idx == stage_index && *timestamp == 210
                 }),
                 "right frame should reach stage slot {stage_index}"
             );

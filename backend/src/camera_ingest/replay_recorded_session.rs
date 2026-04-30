@@ -182,11 +182,11 @@ mod tests {
         assert_eq!(left_frames.len(), 1);
         assert_eq!(left_frames[0].raw_bytes_full_resolution().as_ref(), &[1, 2, 3, 4]);
         assert_eq!(left_frames[0].context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(left_frames[0].context().camera_buffer_timestamp(), 300);
+        assert_eq!(left_frames[0].context().camera_buffer_timestamp(), 200);
         assert_eq!(right_frames.len(), 1);
         assert_eq!(right_frames[0].raw_bytes_full_resolution().as_ref(), &[5, 6, 7, 8]);
         assert_eq!(right_frames[0].context().camera_id(), CameraId::FieldRight);
-        assert_eq!(right_frames[0].context().camera_buffer_timestamp(), 320);
+        assert_eq!(right_frames[0].context().camera_buffer_timestamp(), 210);
 
         let _ = fs::remove_dir_all(session);
     }

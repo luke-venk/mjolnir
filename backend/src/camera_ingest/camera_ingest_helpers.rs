@@ -4,14 +4,18 @@ use crate::camera::record::writer::Frame as RecordedFrame;
 use crate::pipeline::{CameraId, Context, Frame as PipelineFrame};
 
 /// Converts one recorded frame payload into the pipeline's frame type.
+///
+/// Uses `buffer_timestamp_ns` (the camera's PTP-synchronized timestamp)
+/// exclusively. Asserts it is non-zero, since `system_timestamp_ns` is on a
+/// different (host wall-clock) time scale and `frame_id` is a counter, not a
+/// timestamp.
 pub fn recorded_frame_to_frame(frame: RecordedFrame, camera_id: CameraId) -> PipelineFrame {
-    let timestamp = if frame.metadata.system_timestamp_ns != 0 {
-        frame.metadata.system_timestamp_ns
-    } else if frame.metadata.buffer_timestamp_ns != 0 {
-        frame.metadata.buffer_timestamp_ns
-    } else {
-        frame.metadata.frame_id
-    };
+    let timestamp = frame.metadata.buffer_timestamp_ns;
+    assert!(
+        timestamp != 0,
+        "recorded frame {} for camera {} has zero buffer_timestamp_ns",
+        frame.metadata.frame_index, frame.metadata.camera_id
+    );
     let resolution = (frame.metadata.width, frame.metadata.height);
 
     PipelineFrame::new(
@@ -21,27 +25,21 @@ pub fn recorded_frame_to_frame(frame: RecordedFrame, camera_id: CameraId) -> Pip
     )
 }
 
-/// Sort key used to interleave the two cameras' recorded frames in the
-/// timestamp order they were captured. Prefers `buffer_timestamp_ns`, then
-/// `system_timestamp_ns`, then `frame_id`. The trailing fields are
-/// tie-breakers so the ordering is deterministic.
-pub fn recorded_frame_sort_key(frame: &RecordedFrame) -> (u64, u64, String, usize) {
-    let primary_timestamp = if frame.metadata.buffer_timestamp_ns != 0 {
-        frame.metadata.buffer_timestamp_ns
-    } else if frame.metadata.system_timestamp_ns != 0 {
-        frame.metadata.system_timestamp_ns
-    } else {
-        frame.metadata.frame_id
-    };
-    let secondary_timestamp = if frame.metadata.system_timestamp_ns != 0 {
-        frame.metadata.system_timestamp_ns
-    } else {
-        frame.metadata.buffer_timestamp_ns
-    };
+/// Sort key used to interleave the two cameras' recorded frames in the order
+/// they were captured. Sorts by `buffer_timestamp_ns` (the camera's PTP-
+/// synchronized timestamp). Asserts it is non-zero. Trailing fields
+/// (`camera_id`, `frame_index`) are deterministic tie-breakers when two
+/// frames share a buffer timestamp.
+pub fn recorded_frame_sort_key(frame: &RecordedFrame) -> (u64, String, usize) {
+    let timestamp = frame.metadata.buffer_timestamp_ns;
+    assert!(
+        timestamp != 0,
+        "recorded frame {} for camera {} has zero buffer_timestamp_ns",
+        frame.metadata.frame_index, frame.metadata.camera_id
+    );
 
     (
-        primary_timestamp,
-        secondary_timestamp,
+        timestamp,
         frame.metadata.camera_id.clone(),
         frame.metadata.frame_index,
     )
@@ -95,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn recorded_frame_to_frame_prefers_system_timestamp() {
+    fn recorded_frame_to_frame_uses_buffer_timestamp() {
         let frame = make_frame(
             Metadata {
                 camera_id: "camera-a".to_string(),
@@ -103,7 +101,7 @@ mod tests {
                 width: 3,
                 height: 1,
                 payload_bytes: 3,
-                system_timestamp_ns: 123,
+                system_timestamp_ns: 999,
                 buffer_timestamp_ns: 456,
                 frame_id: 789,
             },
@@ -115,32 +113,12 @@ mod tests {
         assert_eq!(converted.raw_bytes_full_resolution().as_ref(), &[1, 2, 3]);
         assert_eq!(converted.raw_full_resolution(), (3, 1));
         assert_eq!(converted.context().camera_id(), CameraId::FieldLeft);
-        assert_eq!(converted.context().camera_buffer_timestamp(), 123);
-    }
-
-    #[test]
-    fn recorded_frame_to_frame_falls_back_to_buffer_timestamp() {
-        let frame = make_frame(
-            Metadata {
-                camera_id: "camera-b".to_string(),
-                frame_index: 1,
-                width: 3,
-                height: 1,
-                payload_bytes: 3,
-                system_timestamp_ns: 0,
-                buffer_timestamp_ns: 456,
-                frame_id: 789,
-            },
-            vec![9, 8, 7],
-        );
-
-        let converted = recorded_frame_to_frame(frame, CameraId::FieldRight);
-
         assert_eq!(converted.context().camera_buffer_timestamp(), 456);
     }
 
     #[test]
-    fn recorded_frame_to_frame_falls_back_to_frame_id() {
+    #[should_panic(expected = "zero buffer_timestamp_ns")]
+    fn recorded_frame_to_frame_panics_on_zero_buffer_timestamp() {
         let frame = make_frame(
             Metadata {
                 camera_id: "camera-c".to_string(),
@@ -148,20 +126,18 @@ mod tests {
                 width: 3,
                 height: 1,
                 payload_bytes: 3,
-                system_timestamp_ns: 0,
+                system_timestamp_ns: 999,
                 buffer_timestamp_ns: 0,
                 frame_id: 789,
             },
             vec![4, 5, 6],
         );
 
-        let converted = recorded_frame_to_frame(frame, CameraId::FieldLeft);
-
-        assert_eq!(converted.context().camera_buffer_timestamp(), 789);
+        let _ = recorded_frame_to_frame(frame, CameraId::FieldLeft);
     }
 
     #[test]
-    fn recorded_frame_sort_key_prefers_buffer_then_system_then_frame_id() {
+    fn recorded_frame_sort_key_uses_buffer_timestamp_with_deterministic_tiebreakers() {
         let frame = make_frame(
             Metadata {
                 camera_id: "camera-z".to_string(),
@@ -169,7 +145,7 @@ mod tests {
                 width: 0,
                 height: 0,
                 payload_bytes: 0,
-                system_timestamp_ns: 33,
+                system_timestamp_ns: 999,
                 buffer_timestamp_ns: 22,
                 frame_id: 11,
             },
@@ -178,8 +154,28 @@ mod tests {
 
         assert_eq!(
             recorded_frame_sort_key(&frame),
-            (22, 33, "camera-z".to_string(), 7)
+            (22, "camera-z".to_string(), 7)
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "zero buffer_timestamp_ns")]
+    fn recorded_frame_sort_key_panics_on_zero_buffer_timestamp() {
+        let frame = make_frame(
+            Metadata {
+                camera_id: "camera-z".to_string(),
+                frame_index: 7,
+                width: 0,
+                height: 0,
+                payload_bytes: 0,
+                system_timestamp_ns: 999,
+                buffer_timestamp_ns: 0,
+                frame_id: 11,
+            },
+            vec![],
+        );
+
+        let _ = recorded_frame_sort_key(&frame);
     }
 
     #[test]
@@ -191,8 +187,8 @@ mod tests {
                 width: 3,
                 height: 1,
                 payload_bytes: 3,
-                system_timestamp_ns: 123,
-                buffer_timestamp_ns: 0,
+                system_timestamp_ns: 0,
+                buffer_timestamp_ns: 123,
                 frame_id: 0,
             },
             vec![1, 2, 3],
@@ -206,7 +202,10 @@ mod tests {
             &left_tx,
             &right_tx,
         ));
-        assert_eq!(left_rx.try_recv().unwrap().context().camera_buffer_timestamp(), 123);
+        assert_eq!(
+            left_rx.try_recv().unwrap().context().camera_buffer_timestamp(),
+            123
+        );
         assert!(right_rx.try_recv().is_err());
     }
 
@@ -219,8 +218,8 @@ mod tests {
                 width: 1,
                 height: 1,
                 payload_bytes: 1,
-                system_timestamp_ns: 1,
-                buffer_timestamp_ns: 0,
+                system_timestamp_ns: 0,
+                buffer_timestamp_ns: 1,
                 frame_id: 0,
             },
             vec![1],
