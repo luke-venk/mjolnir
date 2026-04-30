@@ -24,11 +24,13 @@ const gchar *g_dngettext(const gchar *domain,
                          gulong n);
 
 /* Platform Impl Stubs */
+#ifdef __APPLE__
 void load_user_special_dirs_macos(gchar **special_dirs);
 const gchar *g_content_type_get_icon_impl(const gchar *type);
 const gchar *g_content_type_get_symbolic_icon_impl(const gchar *type);
 const gchar *g_content_type_from_mime_type_impl(const gchar *mime);
 const gchar *g_content_type_guess_impl(const gchar *filename, const guchar *data, size_t data_size, int *result_uncertain);
+#endif
 
 /* GIO/Sandbox Stubs */
 int glib_get_sandbox_type(void);
