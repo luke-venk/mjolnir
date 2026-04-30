@@ -21,7 +21,7 @@ pub fn forward_downsampled_copy(frame: Frame) -> Frame {
     let mut output_mat: Mat = Mat::default();
 
     // Perform resizing operation.
-    if let Err(err) = resize(input_mat, &mut output_mat, SIZE, 0.0, 0.0, INTER_LINEAR) {
+    if let Err(err) = resize(&input_mat, &mut output_mat, SIZE, 0.0, 0.0, INTER_LINEAR) {
         eprintln!(
             "Error: Failed to downsample frame in forward_downsampled_copy(). Returning original frame. {err}"
         );
@@ -56,7 +56,7 @@ mod tests {
             ComputerVisionStage::ForwardDownsampledCopy,
         );
         let output_frame: Frame = forward_downsampled_copy(input_frame);
-        let downsampled_mat: &Mat = output_frame.downsampled_image().unwrap();
+        let downsampled_mat: Mat = output_frame.downsampled_image().unwrap();
 
         // Check dimensions match expected for downsampling.
         assert_eq!(downsampled_mat.rows(), DOWNSAMPLED_HEIGHT_PX);

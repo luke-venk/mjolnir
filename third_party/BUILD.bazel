@@ -44,8 +44,8 @@ cc_library(
                 "libffi/src/x86/*.h",
             ],
             exclude = [
+                "libffi/src/x86/sysv_intel.S",
                 "libffi/src/x86/win64_intel.S",
-                "libffi/src/x86/win64.S",
             ],
         ),
     }),
@@ -53,6 +53,7 @@ cc_library(
         "libffi/include/ffi_cfi.h",
         "libffi/include/ffi_common.h",
         "libffi/include/tramp.h",
+        "libffi/src/dlmalloc.c",
     ],
     copts = [
         "-fvisibility=hidden",
@@ -65,7 +66,12 @@ cc_library(
         "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
         "//conditions:default": [],
     }),
-    defines = ["FFI_BUILDING"],
+    defines = [
+        "FFI_BUILDING",
+    ] + select({
+        "//:linux_amd64": ["X86_64"],
+        "//conditions:default": [],
+    }),
     includes = [
         "libffi/include",
     ] + select({
@@ -376,6 +382,7 @@ cc_library(
             "glib/glib/gwin32.c",
             "glib/glib/win_iconv.c",
             "glib/glib/gutils-os2.c",
+            "glib/glib/gutilsprivate.c",
         ],
     ) + [
         "libintl_stubs/intl_stubs.c",
@@ -388,6 +395,7 @@ cc_library(
     ]) + [
         "glib/glib/glib-visibility.h",
         "glib/glib/gthread-posix.c",
+        "glib/glib/gutilsprivate.c",
         "glib/glib/gversionmacros.h",
         "libintl_stubs/libintl.h",
         ":glib_generated_config",
@@ -888,6 +896,98 @@ genrule(
 )
 
 cc_library(
+    name = "xdgmime",
+    srcs = glob(["glib/gio/xdgmime/*.c"]),
+    hdrs = glob(["glib/gio/xdgmime/*.h"]),
+    copts = [
+        "-Wno-unknown-pragmas",
+        "-Wno-format-nonliteral",
+        "-Wno-unused-function",
+        "-DXDG_PREFIX=_gio_xdg",
+        "-fvisibility=hidden",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": ["-D_GNU_SOURCE"],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    includes = ["glib/gio"],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "gio_inotify",
+    srcs = [
+        "glib/gio/inotify/inotify-kernel.c",
+        "glib/gio/inotify/inotify-sub.c",
+        "glib/gio/inotify/inotify-path.c",
+        "glib/gio/inotify/inotify-missing.c",
+        "glib/gio/inotify/inotify-helper.c",
+        "glib/gio/inotify/ginotifyfilemonitor.c",
+    ],
+    hdrs = glob(["glib/gio/inotify/*.h"]) + glob(["glib/gio/*.h"]) + [
+        ":generate_gio_enumtypes_h",
+        ":generate_gnetworking_h",
+        ":generate_xdp_dbus_sources",
+        ":gio_visibility",
+    ],
+    copts = [
+        "-Wno-unknown-pragmas",
+        "-DGIO_COMPILATION",
+        "-fvisibility=hidden",
+        "-fno-strict-aliasing",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-O2",
+    ] + select({
+        "@platforms//os:linux": [
+            "-pthread",
+            "-D_GNU_SOURCE",
+        ],
+        "@platforms//os:macos": ["-D_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    includes = [
+        ".",
+        "glib",
+        "glib/gio",
+        "glib/gio/inotify",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lrt",
+            "-lm",
+            "-lresolv",
+            "-lpthread",
+            "-Wl,--gc-sections",
+        ],
+        "@platforms//os:macos": [
+            "-liconv",
+            "-framework CoreFoundation",
+            "-framework SystemConfiguration",
+            "-framework CoreServices",
+            "-Wl,-dead_strip",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":glib_objects",
+        ":gmodule",
+        ":gobject",
+    ],
+)
+
+cc_library(
     name = "gio_objects",
     srcs = glob(
         ["glib/gio/*.c"],
@@ -898,26 +998,22 @@ cc_library(
             "glib/gio/gresource-tool.c",
             "glib/gio/gio-tool*.c",
             "glib/gio/gsandboxutil.c",
-            "glib/gio/gnetworkmonitornetlink.c",
-            "glib/gio/gnetworkmonitornm.c",
-            "glib/gio/gdesktopappinfo.c",
             "glib/gio/gfdonotificationbackend.c",
             "glib/gio/gkeyfilesettingsbackend.c",
             "glib/gio/gdbus-daemon.c",
             "glib/gio/gdbus-tool.c",
+            "glib/gio/gosxnetworkmonitor.c",
             "glib/gio/gwin32*.c",
             "glib/gio/giowin32*.c",
             "glib/gio/*-win32.c",
             "glib/gio/glocalvfs.c",
             "glib/gio/gcontenttype-win32.c",
-            "glib/gio/gcontenttype-fdo.c",
             "glib/gio/glib-compile-resources.c",
             "glib/gio/glib-compile-schemas.c",
             "glib/gio/gsettings-tool.c",
             "glib/gio/gresource-tool.c",
             "glib/gio/gio-tool*.c",
             "glib/gio/gapplication-tool.c",
-            "glib/gio/gmemorymonitorbase.c",
             "glib/gio/gmemorymonitor.c",
             "glib/gio/gmemorymonitorportal.c",
             "glib/gio/gmemorymonitordbus.c",
@@ -989,9 +1085,11 @@ cc_library(
     }),
     textual_hdrs = ["glib/gio/strinfo.c"],
     deps = [
+        ":gio_inotify",
         ":glib_objects",
         ":gmodule",
         ":gobject",
+        ":xdgmime",
     ],
 )
 
@@ -1154,6 +1252,7 @@ cc_library(
         "-ffunction-sections",
         "-fdata-sections",
         "-O2",
+        "-I/usr/include/libxml2",
     ] + select({
         "@platforms//os:linux": [
             "-pthread",
@@ -1164,10 +1263,11 @@ cc_library(
     defines = ["ARAVIS_COMPILATION"],
     includes = [
         "aravis/src",
+        "/usr/include/libxml2",
     ],
     linkopts = [
         "-lxml2",
-        "-Wl,-fatal_warnings",
+        "-Wl,-fatal-warnings",
     ] + select({
         "@platforms//os:linux": [
             "-lrt",
@@ -1329,6 +1429,7 @@ cmake(
         "WITH_1394": "OFF",
         "WITH_EIGEN": "OFF",
         "WITH_ITT": "OFF",
+        "WITH_IPP": "OFF",
         "WITH_OPENCL": "OFF",
         "WITH_CAROTENE": "OFF",
         # Enable only the core modules
@@ -1342,7 +1443,7 @@ cmake(
         "BUILD_opencv_dnn": "OFF",
         "BUILD_opencv_highgui": "OFF",
         "BUILD_opencv_videoio": "OFF",
-        "BUILD_opencv_video": "OFF",
+        "BUILD_opencv_video": "ON",
         "BUILD_opencv_ml": "OFF",
         "BUILD_opencv_objdetect": "OFF",
         "BUILD_opencv_photo": "OFF",
@@ -1359,6 +1460,7 @@ cmake(
         "libopencv_calib3d.a",
         "libopencv_features2d.a",
         "libopencv_flann.a",
+        "libopencv_video.a",
     ],
     visibility = ["//visibility:public"],
 )

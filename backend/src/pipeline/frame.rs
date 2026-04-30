@@ -20,7 +20,7 @@ use std::sync::RwLock;
 /// Note that `RwLock<Option<Mat>>` is used to store the results of each pipeline
 /// stage. This keeps stage outputs thread safe while also allowing late-stage
 /// cleanup to drop image buffers once a slim downstream artifact has been built.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Frame {
     /// The raw bytes for the frame coming from the camera at full resolution.
     raw_bytes_full_resolution: Box<[u8]>,
@@ -38,6 +38,18 @@ pub struct Frame {
 
     /// Frame metadata like timestamps.
     context: Context,
+}
+
+impl Clone for Frame {
+    fn clone(&self) -> Self {
+        Self {
+            raw_bytes_full_resolution: self.raw_bytes_full_resolution.clone(),
+            raw_full_resolution: self.raw_full_resolution,
+            undistorted_image: RwLock::new(self.undistorted_image()),
+            downsampled_image: RwLock::new(self.downsampled_image()),
+            context: self.context,
+        }
+    }
 }
 
 impl Frame {
