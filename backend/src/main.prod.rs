@@ -80,6 +80,7 @@ async fn main() {
         aggregation_command_rx,
         optimize_input_tx,
         250,
+        250,
     );
 
     let _ = Pipeline::new(
