@@ -1,8 +1,8 @@
-//! Coordinates start-triggered collection of matched left/right contour pairs and
+//! Coordinates start-triggered collection of matched left/right frame pairs and
 //! emits `OptimizeTrajectoryInput` once a fixed sample count has been gathered.
 
 use crate::aggregator::{OptimizeTrajectoryInput, TrajectoryInputCollector};
-use crate::pipeline::MatchedContourPair;
+use crate::pipeline::{CameraId, Context, Frame, MatchedFramePair};
 use crossbeam::channel::{Receiver, Sender, select};
 use std::collections::VecDeque;
 use std::thread::{self, JoinHandle};
@@ -24,7 +24,7 @@ pub struct AggregationCoordinator {
 
 impl AggregationCoordinator {
     pub fn new(
-        matched_pair_rx: Receiver<MatchedContourPair>,
+        matched_pair_rx: Receiver<MatchedFramePair>,
         command_rx: Receiver<AggregationCommand>,
         optimize_input_tx: Sender<OptimizeTrajectoryInput>,
         lookback_capacity: usize,
@@ -33,7 +33,7 @@ impl AggregationCoordinator {
         let handle = thread::spawn(move || {
             let mut collector = TrajectoryInputCollector::new();
             let mut active_window: Option<ActiveWindow> = None;
-            let mut lookback_buffer: VecDeque<MatchedContourPair> =
+            let mut lookback_buffer: VecDeque<MatchedFramePair> =
                 VecDeque::with_capacity(lookback_capacity);
 
             loop {
@@ -98,29 +98,31 @@ impl AggregationCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pipeline::CameraId;
-    use crate::pipeline::{ContourOutput, PixelCenter};
+
+    fn make_frame(
+        camera_id: CameraId,
+        timestamp_ns: u64,
+        center: Option<(f64, f64)>,
+    ) -> Frame {
+        let mut frame = Frame::new(
+            vec![1, 2, 3, 4].into_boxed_slice(),
+            (2, 2),
+            Context::new(camera_id, timestamp_ns),
+        );
+        frame.context_mut().set_detected(Some(center.is_some()));
+        frame.context_mut().set_centroid(center);
+        frame
+    }
 
     fn make_pair(
         timestamp_ns: u64,
         left_center: Option<(f64, f64)>,
         right_center: Option<(f64, f64)>,
-    ) -> MatchedContourPair {
-        let left = ContourOutput::new(
-            CameraId::FieldLeft,
-            timestamp_ns,
-            left_center.is_some(),
-            left_center.map(|(cx, cy)| PixelCenter::new(cx, cy)),
-        );
+    ) -> MatchedFramePair {
+        let left = make_frame(CameraId::FieldLeft, timestamp_ns, left_center);
+        let right = make_frame(CameraId::FieldRight, timestamp_ns, right_center);
 
-        let right = ContourOutput::new(
-            CameraId::FieldRight,
-            timestamp_ns,
-            right_center.is_some(),
-            right_center.map(|(cx, cy)| PixelCenter::new(cx, cy)),
-        );
-
-        MatchedContourPair::new(left, right)
+        MatchedFramePair::new(left, right)
     }
 
     #[test]
