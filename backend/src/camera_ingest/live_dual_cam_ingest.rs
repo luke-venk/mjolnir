@@ -4,15 +4,13 @@ use crate::camera::aravis_utils::{
 };
 use crate::camera::{AtlasATP124SResolution, BarrierResult, CameraIngestConfig, CancelableBarrier};
 use crate::computer_vision::mog2::MOG2_HISTORY_FRAMES;
-use crate::pipeline::{CameraId, Context, Frame};
+use crate::pipeline::{CameraId, Context, Frame, CAPACITY_PER_CROSSBEAM_CHANNEL};
 use aravis::{BufferStatus, CameraExt, StreamExt};
 use crossbeam::channel::{bounded, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-
-const MAX_QUEUED_FRAMES: usize = 10;
 
 pub fn begin_live_dual_cam_ingest(
     left_cam_id: String,
@@ -91,8 +89,8 @@ pub fn begin_live_dual_cam_ingest(
         lock_barrier: ptp_lock_barrier_2,
     };
 
-    let (tx_left, rx_left) = bounded::<Frame>(MAX_QUEUED_FRAMES);
-    let (tx_right, rx_right) = bounded::<Frame>(MAX_QUEUED_FRAMES);
+    let (tx_left, rx_left) = bounded::<Frame>(CAPACITY_PER_CROSSBEAM_CHANNEL);
+    let (tx_right, rx_right) = bounded::<Frame>(CAPACITY_PER_CROSSBEAM_CHANNEL);
 
     // Spawn 1st streaming thread.
     let _ = thread::spawn(move || {
