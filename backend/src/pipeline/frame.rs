@@ -1,4 +1,5 @@
 use opencv::core::Mat;
+#[allow(unused_imports)]
 use opencv::prelude::MatTraitConstManual;
 use std::sync::OnceLock;
 
