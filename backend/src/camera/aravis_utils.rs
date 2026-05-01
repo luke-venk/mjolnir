@@ -109,20 +109,14 @@ pub fn configure_camera(
         .expect("Failed to set the gains in camera configuration.");
 
     // Frame rate enable.
-    if maybe_ptp_config.is_none() {
-        camera
-            .set_frame_rate_enable(true)
-            .expect("Failed to enable frame rate in camera configuration.");
+    camera
+        .set_frame_rate_enable(true)
+        .expect("Failed to enable frame rate in camera configuration.");
 
-        // Frame rate.
-        camera
-            .set_frame_rate(config.frame_rate_hz)
-            .expect("Failed to set frame rate in camera configuration.");
-    } else {
-        camera
-            .set_frame_rate_enable(false)
-            .expect("Failed to enable frame rate in camera configuration.");
-    }
+    // Frame rate.
+    camera
+        .set_frame_rate(config.frame_rate_hz)
+        .expect("Failed to set frame rate in camera configuration.");
 
     // Use binning to downsample from full resolution to lower resolution.
     if camera
@@ -259,47 +253,47 @@ pub fn configure_camera(
             return;
         }
 
-        // Set transfer control settings for PTP synced captures
-        // Note: TransferControlMode was set to Basic because,
-        // unlike in the article linked above, our data throughput isn't close to saturating the link
-        // So we should be able to let the cameras transfer without us scheduling it
-        camera
-            .set_string("TransferControlMode", "Basic")
-            .expect("Failed to set TransferControlMode");
+        // // Set transfer control settings for PTP synced captures
+        // // Note: TransferControlMode was set to Basic because,
+        // // unlike in the article linked above, our data throughput isn't close to saturating the link
+        // // So we should be able to let the cameras transfer without us scheduling it
+        // camera
+        //     .set_string("TransferControlMode", "Basic")
+        //     .expect("Failed to set TransferControlMode");
 
-        // Set up frame start trigger system
-        camera
-            .set_string("TriggerSelector", "FrameStart")
-            .expect("Failed to set TriggerSelector");
-        camera
-            .set_string("TriggerMode", "On")
-            .expect("Failed to set TriggerMode");
-        camera
-            .set_string("TriggerSource", "Action0")
-            .expect("Failed to set TriggerSource");
-        camera
-            .set_string("ActionUnconditionalMode", "On")
-            .expect("Failed to set ActionUnconditionalMode");
-        // Disabling this because it will make cams ignore action commands when PTP sync is not 'locked'
-        // So even if PTP sync was successfully enabled and cameras were 'locked'
-        // If a camera missed a PTP check-in and was no longer 'locked'
-        // It would fail to capture a frame
-        // Even though its PTP timing is probably still very close to the other camera's
-        camera
-            .set_boolean("ActionPTPSyncRequired", false)
-            .expect("Failed to disable ActionPTPSyncRequired");
-        camera
-            .set_integer("ActionSelector", 0)
-            .expect("Failed to set ActionSelector");
-        camera
-            .set_integer("ActionDeviceKey", 1)
-            .expect("Failed to set ActionDeviceI+K");
-        camera
-            .set_integer("ActionGroupKey", 1)
-            .expect("Failed to set ActionGroupKey");
-        camera
-            .set_integer("ActionGroupMask", 1)
-            .expect("Failed to set ActionGroupMask");
+        // // Set up frame start trigger system
+        // camera
+        //     .set_string("TriggerSelector", "FrameStart")
+        //     .expect("Failed to set TriggerSelector");
+        // camera
+        //     .set_string("TriggerMode", "On")
+        //     .expect("Failed to set TriggerMode");
+        // camera
+        //     .set_string("TriggerSource", "Action0")
+        //     .expect("Failed to set TriggerSource");
+        // camera
+        //     .set_string("ActionUnconditionalMode", "On")
+        //     .expect("Failed to set ActionUnconditionalMode");
+        // // Disabling this because it will make cams ignore action commands when PTP sync is not 'locked'
+        // // So even if PTP sync was successfully enabled and cameras were 'locked'
+        // // If a camera missed a PTP check-in and was no longer 'locked'
+        // // It would fail to capture a frame
+        // // Even though its PTP timing is probably still very close to the other camera's
+        // camera
+        //     .set_boolean("ActionPTPSyncRequired", false)
+        //     .expect("Failed to disable ActionPTPSyncRequired");
+        // camera
+        //     .set_integer("ActionSelector", 0)
+        //     .expect("Failed to set ActionSelector");
+        // camera
+        //     .set_integer("ActionDeviceKey", 1)
+        //     .expect("Failed to set ActionDeviceI+K");
+        // camera
+        //     .set_integer("ActionGroupKey", 1)
+        //     .expect("Failed to set ActionGroupKey");
+        // camera
+        //     .set_integer("ActionGroupMask", 1)
+        //     .expect("Failed to set ActionGroupMask");
     }
 
     // Pixel format.

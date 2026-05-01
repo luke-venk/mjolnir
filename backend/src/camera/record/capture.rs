@@ -17,21 +17,21 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-// Need both cams to agree on the next timestamp to start recording at
-// They're on separate threads and this code architecture doesn't make it easy for them to talk to each other
-// So we use math to agree
-fn compute_first_frame_ptp_ns(current_ptp_ns: u64) -> u64 {
-    let interval_ns: u64 = 10_000_000_000; // 10 seconds in ns
-    let margin_ns: u64 = 3_000_000_000; //  3 second  in ns
+// // Need both cams to agree on the next timestamp to start recording at
+// // They're on separate threads and this code architecture doesn't make it easy for them to talk to each other
+// // So we use math to agree
+// fn compute_first_frame_ptp_ns(current_ptp_ns: u64) -> u64 {
+//     let interval_ns: u64 = 10_000_000_000; // 10 seconds in ns
+//     let margin_ns: u64 = 3_000_000_000; //  3 second  in ns
 
-    let next_boundary = (current_ptp_ns / interval_ns + 1) * interval_ns;
+//     let next_boundary = (current_ptp_ns / interval_ns + 1) * interval_ns;
 
-    if next_boundary - current_ptp_ns < margin_ns {
-        next_boundary + interval_ns
-    } else {
-        next_boundary
-    }
-}
+//     if next_boundary - current_ptp_ns < margin_ns {
+//         next_boundary + interval_ns
+//     } else {
+//         next_boundary
+//     }
+// }
 
 fn unsafe_read_camera_integer(camera: &Camera, node_name: &str) -> i64 {
     unsafe {
@@ -163,12 +163,12 @@ pub fn run_capture_thread(
     // For frame metadata.
     let (width, height) = config.resolution.dimensions();
 
-    let first_frame_ptp_ns = if maybe_ptp_config.is_some() {
-        let now = read_ptp_time_ns(&camera);
-        Some(compute_first_frame_ptp_ns(now))
-    } else {
-        None
-    };
+    // let first_frame_ptp_ns = if maybe_ptp_config.is_some() {
+    //     let now = read_ptp_time_ns(&camera);
+    //     Some(compute_first_frame_ptp_ns(now))
+    // } else {
+    //     None
+    // };
     let frame_interval_ns: Option<u64> = if let Some(ref ptp_config) = maybe_ptp_config
         && !ptp_config.is_slave
     {
@@ -193,11 +193,11 @@ pub fn run_capture_thread(
     camera
         .start_acquisition()
         .expect("Failed to start camera acquisition.");
-    if maybe_ptp_config.is_some() {
-        camera
-            .execute_command("TransferStart")
-            .expect("Failed to start transfer.");
-    }
+    // if maybe_ptp_config.is_some() {
+    //     camera
+    //         .execute_command("TransferStart")
+    //         .expect("Failed to start transfer.");
+    // }
 
     if let Some(barrier) = acquisition_barrier {
         if barrier.wait() == BarrierResult::Canceled {
@@ -205,56 +205,56 @@ pub fn run_capture_thread(
         }
     }
 
-    if let Some(ref ptp_config) = maybe_ptp_config {
-        // Only the Master (PC) schedules actions
-        if !ptp_config.is_slave {
-            let socket = maybe_socket.expect("Socket missing for PTP master");
-            let start_ns = first_frame_ptp_ns.expect("Start time missing");
-            let interval_ns = frame_interval_ns.expect("Interval missing");
-            let shutdown_heartbeat = shutdown.clone();
+    // if let Some(ref ptp_config) = maybe_ptp_config {
+    //     // Only the Master (PC) schedules actions
+    //     if !ptp_config.is_slave {
+    //         let socket = maybe_socket.expect("Socket missing for PTP master");
+    //         let start_ns = first_frame_ptp_ns.expect("Start time missing");
+    //         let interval_ns = frame_interval_ns.expect("Interval missing");
+    //         let shutdown_heartbeat = shutdown.clone();
 
-            // Sync System Time to PTP Time once
-            let p0 = read_ptp_time_ns(&camera);
-            let s0 = Instant::now();
+    //         // Sync System Time to PTP Time once
+    //         let p0 = read_ptp_time_ns(&camera);
+    //         let s0 = Instant::now();
 
-            std::thread::spawn(move || {
-                let mut frames_pushed = 0u64;
-                let lead_time_ns = 2 * interval_ns; // 150ms look-ahead
+    //         std::thread::spawn(move || {
+    //             let mut frames_pushed = 0u64;
+    //             let lead_time_ns = 2 * interval_ns; // 150ms look-ahead
 
-                loop {
-                    if shutdown_heartbeat.load(Ordering::SeqCst) {
-                        break;
-                    }
+    //             loop {
+    //                 if shutdown_heartbeat.load(Ordering::SeqCst) {
+    //                     break;
+    //                 }
 
-                    // Predict current PTP time based on local Instant
-                    let elapsed = s0.elapsed().as_nanos() as u64;
-                    let estimated_ptp = p0 + elapsed;
+    //                 // Predict current PTP time based on local Instant
+    //                 let elapsed = s0.elapsed().as_nanos() as u64;
+    //                 let estimated_ptp = p0 + elapsed;
 
-                    // Calculate the PTP timestamp for the next frame in the sequence
-                    let scheduled_until = start_ns + (frames_pushed * interval_ns);
+    //                 // Calculate the PTP timestamp for the next frame in the sequence
+    //                 let scheduled_until = start_ns + (frames_pushed * interval_ns);
 
-                    if estimated_ptp > scheduled_until + interval_ns {
-                        let frames_behind = (estimated_ptp - scheduled_until) / interval_ns;
-                        eprintln!("Action command heartbeat is {frames_behind} frame(s) behind. Local clock may be drifting from PTP time. Skipping {frames_behind} missed frame slots.");
-                        // Skip ahead rather than firing a burst of catch-up commands
-                        frames_pushed += frames_behind;
-                        continue;
-                    }
+    //                 if estimated_ptp > scheduled_until + interval_ns {
+    //                     let frames_behind = (estimated_ptp - scheduled_until) / interval_ns;
+    //                     eprintln!("Action command heartbeat is {frames_behind} frame(s) behind. Local clock may be drifting from PTP time. Skipping {frames_behind} missed frame slots.");
+    //                     // Skip ahead rather than firing a burst of catch-up commands
+    //                     frames_pushed += frames_behind;
+    //                     continue;
+    //                 }
 
-                    // Fill the camera pipeline if we are less than `lead_time_ns` ahead
-                    if scheduled_until < (estimated_ptp + lead_time_ns) {
-                        send_action_command(&socket, scheduled_until, 1, 1, 1);
-                        println!("Scheduling capture for {}ms", (scheduled_until - start_ns) / 1_000_000);
-                        frames_pushed += 1;
-                    } else {
-                        // Sleep long enough to avoid pegging the CPU, short enough to keep lead
-                        std::thread::sleep(Duration::from_millis(10));
-                    }
-                }
-                println!("Heartbeat thread exiting.");
-            });
-        }
-    }
+    //                 // Fill the camera pipeline if we are less than `lead_time_ns` ahead
+    //                 if scheduled_until < (estimated_ptp + lead_time_ns) {
+    //                     send_action_command(&socket, scheduled_until, 1, 1, 1);
+    //                     println!("Scheduling capture for {}ms", (scheduled_until - start_ns) / 1_000_000);
+    //                     frames_pushed += 1;
+    //                 } else {
+    //                     // Sleep long enough to avoid pegging the CPU, short enough to keep lead
+    //                     std::thread::sleep(Duration::from_millis(10));
+    //                 }
+    //             }
+    //             println!("Heartbeat thread exiting.");
+    //         });
+    //     }
+    // }
 
     // Keep track of start time and the number of frames saved/dropped.
     let start_time: Instant = Instant::now();
@@ -379,15 +379,15 @@ pub fn run_capture_thread(
                         countdown_timer = Instant::now();
                     }
                 } else {
-                    if let Some(start_ns) = first_frame_ptp_ns {
-                        println!(
-                            "Frame {} captured at {}ms and received at {:.2}s for {}.",
-                            frames_saved,
-                            (buffer_timestamp_ns - start_ns) / 1_000_000,
-                            elapsed_since_start.as_secs_f64(),
-                            camera_id,
-                        );
-                    } else {
+                    // if let Some(start_ns) = first_frame_ptp_ns {
+                    //     println!(
+                    //         "Frame {} captured at {}ms and received at {:.2}s for {}.",
+                    //         frames_saved,
+                    //         (buffer_timestamp_ns - start_ns) / 1_000_000,
+                    //         elapsed_since_start.as_secs_f64(),
+                    //         camera_id,
+                    //     );
+                    // } else {
                         println!(
                             "Frame {} captured at {}ms and received at {:.2}s for {}.",
                             frames_saved,
@@ -395,7 +395,7 @@ pub fn run_capture_thread(
                             elapsed_since_start.as_secs_f64(),
                             camera_id,
                         );
-                    }
+                    // }
                 }
 
                 // Take the buffer from the stream and store its information, and then
