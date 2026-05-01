@@ -2,7 +2,7 @@
 //! emits `OptimizeTrajectoryInput` once a fixed sample count has been gathered.
 
 use crate::aggregator::{OptimizeTrajectoryInput, TrajectoryInputCollector};
-use crate::pipeline::{CameraId, Context, Frame, MatchedFramePair};
+use crate::pipeline::MatchedFramePair;
 use crossbeam::channel::{Receiver, Sender, select};
 use std::collections::VecDeque;
 use std::thread::{self, JoinHandle};

@@ -2,7 +2,7 @@
 //! complete sequences into `OptimizeTrajectoryInput` values suitable for
 //! trajectory optimization.
 
-use crate::pipeline::{CameraId, Context, Frame, MatchedFramePair};
+use crate::pipeline::MatchedFramePair;
 use nalgebra::Vector2;
 
 #[derive(Debug, Clone, PartialEq)]

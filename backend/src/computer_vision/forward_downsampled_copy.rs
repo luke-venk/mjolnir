@@ -5,7 +5,6 @@
 use crate::pipeline::Frame;
 use opencv::core::{Mat, Size};
 use opencv::imgproc::{resize, INTER_LINEAR};
-use opencv::prelude::MatTraitConst;
 use opencv::prelude::MatTraitConstManual;
 
 const DOWNSAMPLED_WIDTH_PX: i32 = 960;
@@ -21,7 +20,7 @@ pub fn forward_downsampled_copy(frame: Frame) -> Frame {
     let mut output_mat: Mat = Mat::default();
 
     // Perform resizing operation.
-    if let Err(err) = resize(input_mat, &mut output_mat, SIZE, 0.0, 0.0, INTER_LINEAR) {
+    if let Err(err) = resize(&input_mat, &mut output_mat, SIZE, 0.0, 0.0, INTER_LINEAR) {
         eprintln!(
             "Error: Failed to downsample frame in forward_downsampled_copy(). Returning original frame. {err}"
         );
