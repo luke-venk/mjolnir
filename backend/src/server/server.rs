@@ -11,6 +11,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use crate::timing::global_time;
 use crossbeam::channel::Receiver;
 use serde_json::json;
 use std::path::PathBuf;
@@ -56,16 +57,28 @@ async fn get_throw_type(State(state): State<AppState>) -> Json<GetThrowTypeRespo
 // source is `Camera`.
 async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisResponse> {
     let throw_type: ThrowType = *state.throw_type.read().await;
-    match state.throw_source {
-        ThrowSource::Simulated => Json(simulate_throw_event(throw_type)),
+    let mut result: ThrowAnalysisResponse = match state.throw_source {
+        ThrowSource::Simulated => simulate_throw_event(throw_type),
         ThrowSource::Camera => {
             // TODO(#28)
             // NOTE: I'm having these 2 do the same thing for now, but how would this actually work?
             // Would it like continually listen for our final output function (that relies on the math scripts)
             // to return a ThrowAnalysisResponse?
-            Json(simulate_throw_event(throw_type))
+            simulate_throw_event(throw_type)
         }
+    };
+    let now_ns = global_time()
+        .camera_ptp_time_now_approximation_nanoseconds()
+        .unwrap_or_else(|| {
+            global_time().now_monotonic_in_nanoseconds_since_unix_epoch()
+        });
+    let ten_seconds_ago_ns = now_ns.saturating_sub(10_000_000_000);
+    let history = state.get_infraction_history().await;
+    let has_recent_circle_infractions = history.iter().any(|&ts| ts >= ten_seconds_ago_ns && ts <= now_ns);
+    if has_recent_circle_infractions {
+        result.infractions.push(InfractionType::Circle);
     }
+    Json(result)
 }
 
 // In both dev and prod mode, the router will require the HTTP routes

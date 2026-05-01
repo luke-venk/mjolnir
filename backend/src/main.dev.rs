@@ -5,6 +5,7 @@ use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::start_recorded_footage_pipelines;
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
+use backend_lib::timing::init_global_time;
 use std::path::PathBuf;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -31,6 +32,7 @@ pub fn create_dev_app(throw_source: ThrowSource, frames_dir: Option<PathBuf>) ->
 #[cfg(not(feature = "real_cameras"))]
 #[tokio::main]
 async fn main() {
+    init_global_time();
     // Build the Axum router.
     let app = create_dev_app(ThrowSource::Simulated, None);
 
@@ -43,6 +45,7 @@ async fn main() {
 #[cfg(feature = "real_cameras")]
 #[tokio::main]
 async fn main() {
+    init_global_time();
     let args = parse_real_backend_args();
     let rolling_buffer_size: usize = 10;
     println!(

@@ -36,13 +36,13 @@ impl AppState {
         self.infraction_history.read().await.clone().into()
     }
 
-    pub async fn record_infraction(&self, timestamp_ms: u64) {
+    pub async fn record_infraction(&self, timestamp_ns: u64) {
         let mut history = self.infraction_history.write().await;
-        let sixty_seconds_ago = timestamp_ms.saturating_sub(60_000);
+        let sixty_seconds_ago = timestamp_ns.saturating_sub(60_000_000_000);
         while history.front().map_or(false, |&t| t < sixty_seconds_ago) {
             history.pop_front();
         }
-        history.push_back(timestamp_ms);
+        history.push_back(timestamp_ns);
     }
 
     pub async fn is_circle_infraction_system_stale(&self) -> bool {
