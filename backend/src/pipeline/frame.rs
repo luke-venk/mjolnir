@@ -1,6 +1,6 @@
-use opencv::core::Mat;
 use std::sync::RwLock;
-
+use opencv::core::Mat;
+use opencv::prelude::MatTraitConstManual;
 /// The frame contains all the information that is needed associated with a specific
 /// frame from a camera for computer vision.
 ///

@@ -140,6 +140,7 @@ fn median_dt_seconds(usable_pairs: &[&MatchedFramePair]) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pipeline::{CameraId, Context, Frame};
 
     fn make_frame(
         camera_id: CameraId,

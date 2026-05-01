@@ -1,6 +1,5 @@
 //! Coordinates start-triggered collection of matched left/right frame pairs and
 //! emits `OptimizeTrajectoryInput` once a fixed sample count has been gathered.
-
 use crate::aggregator::{OptimizeTrajectoryInput, TrajectoryInputCollector};
 use crate::pipeline::MatchedFramePair;
 use crossbeam::channel::{Receiver, Sender, select};
@@ -98,6 +97,7 @@ impl AggregationCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pipeline::{CameraId, Context, Frame};
 
     fn make_frame(
         camera_id: CameraId,
