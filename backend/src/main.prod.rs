@@ -8,6 +8,11 @@ use backend_lib::pipeline::start_recorded_footage_pipelines;
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use backend_lib::timing::init_global_time;
 use rust_embed::Embed;
+#[cfg(feature = "real_cameras")]
+use backend_lib::pipeline::{CameraId, Pipeline};
+#[cfg(feature = "real_cameras")]
+use backend_lib::camera_ingest::begin_live_dual_cam_ingest;
+use backend_lib::pipeline::CAPACITY_PER_CROSSBEAM_CHANNEL;
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
 
@@ -50,12 +55,17 @@ async fn main() {
 async fn main() {
     init_global_time();
     let args = parse_real_backend_args();
-    let rolling_buffer_size: usize = 10;
-    println!(
-        "Starting real prod backend in recorded-footage replay mode from {}.",
-        args.feed_footage_dir.display()
-    );
-    let _ = start_recorded_footage_pipelines(args.feed_footage_dir, rolling_buffer_size);
+    if let Some(dir) = args.feed_footage_dir {
+        println!(
+            "Starting real dev backend in recorded-footage replay mode from {}.",
+            dir.display()
+        );
+        let _ = start_recorded_footage_pipelines(dir, CAPACITY_PER_CROSSBEAM_CHANNEL);
+    } else {
+        let (left_rx, right_rx) = begin_live_dual_cam_ingest(args.left_camera_id, args.right_camera_id, 10_000.0);
+        let _left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, CAPACITY_PER_CROSSBEAM_CHANNEL);
+        let _right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, CAPACITY_PER_CROSSBEAM_CHANNEL);
+    }
 
     // Build the Axum router.
     let app = create_prod_app(ThrowSource::Camera);
