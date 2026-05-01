@@ -14,15 +14,43 @@ Controls:
 
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 import argparse
 from collections import deque
 from dataclasses import dataclass, field
 import time
 from typing import Optional, Tuple, List
 
-from params import *
+DISPLAY_WIDTH  = 1920
+DISPLAY_HEIGHT = 1080
+PROCESS_WIDTH  = 960
+PROCESS_HEIGHT = 540
 
+# Background subtractor
+MOG2_HISTORY        = 300   # frames to build background model
+MOG2_VAR_THRESHOLD  = 60    # lower = more sensitive; raise if noisy background
+MOG2_DETECT_SHADOWS = False
+
+MORPH_OPEN_KERNEL  = 3   # removes small noise blobs
+MORPH_CLOSE_KERNEL = 40  # fills holes inside the shot put blob
+
+# ROI tracking after initialization
+ROI_SIZE = 100  # pixels in process-space (width and height of ROI)
+ROI_PADDING = 20  # extra padding around predicted position
+MIN_ROI_SIZE = 100  # minimum ROI size when not initialized
+
+# Consistency check parameters
+CONSISTENCY_WINDOW = 3  # number of frames to check for consistency
+MAX_DISTANCE_VARIATION = 15  # maximum allowed variation in distances (pixels)
+MIN_CONSISTENT_DETECTIONS = 4  # REDUCED from 5 to 2 - faster ROI activation
+
+MIN_AREA            = 8    # px^2 — ignore tiny noise
+MAX_AREA            = 50   # px^2 — ignore huge regions
+MAX_PERIMETER       = 70    # px — ignore very large contours (athlete body)
+MIN_CIRCULARITY     = 0.63   # 1.0 = perfect circle; lower catches slight blur61
+MAX_ASPECT_RATIO    = 1.7    # width/height of bounding rect; rejects lines
+
+MAX_MISSED_FRAMES   = 8     # frames without detection before tracker resets
+TRAIL_LENGTH        = 60    # how many past positions to draw as trail
 
 def make_kalman():
     kf = cv2.KalmanFilter(4, 2)
@@ -43,7 +71,7 @@ def make_kalman():
     kf.errorCovPost = np.eye(4, dtype=np.float32)
     return kf
 
-GRAVITY_PX_PER_FRAME2 = 0.01*8
+GRAVITY_PX_PER_FRAME2 = 0.01
 
 @dataclass
 class Tracker:
@@ -132,7 +160,7 @@ def get_roi_from_prediction(tracker: Tracker, frame_shape: Tuple[int, int]) -> T
         if len(tracker.trail) > 2:
             vx = tracker.kf.statePost[2][0]
             vy = tracker.kf.statePost[3][0]
-            speed = np.hypot(vx, vy)/.7
+            speed = np.hypot(vx, vy)
             dynamic_roi = int(ROI_SIZE * (1.0 + speed / 20.0))
             roi_size = min(ROI_SIZE * 2, max(ROI_SIZE, dynamic_roi))
         else:
@@ -197,7 +225,7 @@ def pick_best_candidate_with_roi_priority(candidates, tracker: Tracker, roi_slic
     # No consistent detections yet - use original logic
     if tracker.initialized and tracker.predicted:
         px, py = tracker.predicted
-        gate = 200
+        gate = 80
         gated = [c for c in candidates if np.hypot(c[0] - px, c[1] - py) < gate]
         
         if gated and len(tracker.trail) > 2:
@@ -237,7 +265,7 @@ def candidate_score(candidate, tracker: Tracker):
     else:
         size_err = 0
 
-    score =  dist + 0.5 * vel_err + 0.5 * size_err - 1 * circ
+    score = dist + 0.5 * vel_err + 0.5 * size_err - 2 * circ
     return score
 
 def detect_candidates_in_roi(mask, roi_slice, roi_offset):
@@ -332,25 +360,8 @@ def detect_candidates_full(mask):
 def draw_trail(frame, trail):
     pts = list(trail)
     for i in range(1, len(pts)):
-        # Glow layer (thicker, slightly dimmer)
-        cv2.line(
-            frame,
-            pts[i-1],
-            pts[i],
-            (0, 200, 200),
-            10,
-            lineType=cv2.LINE_AA
-        )
-        # Core bright line
-        cv2.line(
-            frame,
-            pts[i-1],
-            pts[i],
-            (0, 255, 255),
-            4,
-            lineType=cv2.LINE_AA
-        )
-        
+        cv2.line(frame, pts[i-1], pts[i], (0, 0, 255), 3)
+
 def draw_roi(frame, roi_slice, roi_offset, use_roi=True, consistent_count=0):
     """Draw ROI rectangle on frame with different color based on usage and consistency."""
     top, left = roi_offset
@@ -410,35 +421,8 @@ def make_candidate_vis(frame_gray, candidates, tracker, roi_slice=None, roi_offs
     
     if tracker.predicted:
         px, py = tracker.predicted
-
-        # --- Glow layer (outer, thicker, softer pink) ---
-        cv2.drawMarker(
-            vis, (px, py),
-            (255, 100, 255),          # softer pink glow
-            cv2.MARKER_CROSS,
-            28,                       # bigger marker
-            6,                        # thicker
-            line_type=cv2.LINE_AA
-        )
-        cv2.circle(
-        vis, (px, py),
-        90,                       # larger radius
-        (255, 100, 255),
-        4,
-        lineType=cv2.LINE_AA
-        )
-
-
-        # --- Core bright neon (inner sharp layer) ---
-        cv2.drawMarker(
-            vis, (px, py),
-            (255, 0, 255),            # bright neon pink
-            cv2.MARKER_CROSS,
-            20,
-            2,
-            line_type=cv2.LINE_AA
-        )
-
+        cv2.drawMarker(vis, (px, py), (255, 0, 255), cv2.MARKER_CROSS, 20, 2)
+        cv2.circle(vis, (px, py), 80, (255, 0, 255), 1)
     
     # Add consistency info
     status_y = 50
@@ -484,7 +468,7 @@ def assemble_panels(panels: list[tuple[np.ndarray, str]]):
 
     return np.vstack(rows)
 
-def main(video_path: str, render_visualization: bool = True, save_video: bool = True):
+def main(video_path: str, render_visualization: bool = True):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise FileNotFoundError(f"Cannot open video: {video_path}")
@@ -507,17 +491,9 @@ def main(video_path: str, render_visualization: bool = True, save_video: bool = 
     paused = False
     frame_n = 0
 
-    # if render_visualization:
-    #     cv2.namedWindow("Shot Put Tracker", cv2.WINDOW_NORMAL)
-    #     cv2.resizeWindow("Shot Put Tracker", DISPLAY_WIDTH, DISPLAY_HEIGHT)
-    #     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    #     out_video = cv2.VideoWriter('roi_priority.mp4', fourcc, 30.0, (DISPLAY_WIDTH, DISPLAY_HEIGHT))
-
     if render_visualization:
         cv2.namedWindow("Shot Put Tracker", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Shot Put Tracker", DISPLAY_WIDTH, DISPLAY_HEIGHT)
-
-    if save_video:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out_video = cv2.VideoWriter('roi_priority.mp4', fourcc, 30.0, (DISPLAY_WIDTH, DISPLAY_HEIGHT))
 
@@ -569,7 +545,7 @@ def main(video_path: str, render_visualization: bool = True, save_video: bool = 
                     tracker.reset()
             
             # Visualization
-            if True:#render_visualization:
+            if render_visualization:
                 contour_vis = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
                 cv2.drawContours(contour_vis, r_area, -1, (255, 0, 255), 2)
                 cv2.drawContours(contour_vis, r_per, -1, (0, 0, 255), 2)
@@ -587,12 +563,12 @@ def main(video_path: str, render_visualization: bool = True, save_video: bool = 
                     cv2.circle(final, (cx, cy), radius + 4, (0, 255, 0), 2)
                     cv2.circle(final, (cx, cy), 3, (0, 255, 0), -1)
                     cv2.putText(final, "DETECTED", (cx + radius + 5, cy),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 3)
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                 elif tracker.initialized and tracker.predicted:
                     px, py = tracker.predicted
-                    cv2.drawMarker(final, (px, py), (0, 165, 255), cv2.MARKER_CROSS, 28, 5)
+                    cv2.drawMarker(final, (px, py), (0, 165, 255), cv2.MARKER_CROSS, 20, 2)
                     cv2.putText(final, f"PREDICTED (miss:{tracker.missed})",
-                                (px + 12, py), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 165, 255), 3)
+                                (px + 12, py), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 165, 255), 1)
 
                 cv2.putText(final, f"Frame {frame_n}", (10, PROCESS_HEIGHT - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
@@ -628,13 +604,8 @@ def main(video_path: str, render_visualization: bool = True, save_video: bool = 
                 cv2.putText(quad, f"FPS: {frame_rate:.1f}", (DISPLAY_WIDTH - 120, 25), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
                 
-                # cv2.imshow("Shot Put Tracker", quad)
-                # out_video.write(quad)
-                if save_video:
-                    out_video.write(quad)
-
-                if render_visualization:
-                    cv2.imshow("Shot Put Tracker", quad)
+                cv2.imshow("Shot Put Tracker", quad)
+                out_video.write(quad)
 
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
@@ -688,179 +659,12 @@ def main(video_path: str, render_visualization: bool = True, save_video: bool = 
     print(f"Effective processing FPS: {effective_fps:.2f}")
     print("===========================\n")
 
-    # if render_visualization:
-    #     out_video.release()
-    if save_video:
+    if render_visualization:
         out_video.release()
 
     cap.release()
     if render_visualization:
         cv2.destroyAllWindows()
-def extract_trajectory_from_video(video_path: str, max_frames: Optional[int] = None):
-    """
-    Programmatic extractor that uses the ROI-priority pipeline in this module.
-    Returns the same trajectory (red line) as shown in the visualization.
-    
-    Returns:
-        positions: List of (x, y) pixel coordinates for every frame (None if no position)
-        detected: List of booleans indicating if position came from detection (True) or prediction (False)
-        fps: Video frame rate
-        (PROCESS_WIDTH, PROCESS_HEIGHT): Processing dimensions
-        trail: List of all positions used for the red line trail (same as positions but filtered)
-    """
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise FileNotFoundError(f"Cannot open video: {video_path}")
-
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    bg_sub = cv2.createBackgroundSubtractorMOG2(
-        history=MOG2_HISTORY,
-        varThreshold=MOG2_VAR_THRESHOLD,
-        detectShadows=MOG2_DETECT_SHADOWS,
-    )
-    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (MORPH_OPEN_KERNEL, MORPH_OPEN_KERNEL))
-    kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (MORPH_CLOSE_KERNEL, MORPH_CLOSE_KERNEL))
-
-    tracker = Tracker()
-    positions = []  # All positions (including None for frames with no position)
-    detected = []   # Whether each position was detected or predicted
-    frame_n = 0
-
-    while True:
-        ret, frame_orig = cap.read()
-        if not ret:
-            break
-        if max_frames is not None and frame_n >= max_frames:
-            break
-
-        frame_n += 1
-        frame_proc = cv2.resize(frame_orig, (PROCESS_WIDTH, PROCESS_HEIGHT))
-        gray = cv2.cvtColor(frame_proc, cv2.COLOR_BGR2GRAY)
-
-        roi_slice, roi_offset = get_roi_from_prediction(tracker, gray.shape)
-        fg_mask = bg_sub.apply(gray)
-        _, fg_mask = cv2.threshold(fg_mask, 200, 255, cv2.THRESH_BINARY)
-        mask_clean = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel_open)
-        mask_clean = cv2.morphologyEx(mask_clean, cv2.MORPH_CLOSE, kernel_close)
-        candidates, _, _, _, _, _ = detect_candidates_full(mask_clean)
-
-        if tracker.initialized:
-            tracker.predict()
-        best = pick_best_candidate_with_roi_priority(candidates, tracker, roi_slice, roi_offset)
-
-        if best:
-            cx, cy, _radius, _circ = best
-            tracker.correct(cx, cy)
-            tracker.missed = 0
-            positions.append(np.array([float(cx), float(cy)], dtype=np.float64))
-            detected.append(True)
-        else:
-            tracker.missed += 1
-            if tracker.missed > MAX_MISSED_FRAMES:
-                tracker.reset()
-            if tracker.predicted is not None:
-                # This is exactly what gets drawn in the red line (predicted positions)
-                positions.append(
-                    np.array([float(tracker.predicted[0]), float(tracker.predicted[1])], dtype=np.float64)
-                )
-                detected.append(False)
-            else:
-                positions.append(None)
-                detected.append(False)
-
-    cap.release()
-    
-    # The trail (red line) consists of all non-None positions in order
-    trail = [pos for pos in positions if pos is not None]
-    
-    return positions, detected, fps, (PROCESS_WIDTH, PROCESS_HEIGHT), trail
-
-
-# Enhanced plotting function that exactly matches the visualization
-def plot_trajectory_like_visualization(video_path, output_path="trajectory_plot.png"):
-    """
-    Plot the trajectory exactly as shown in the red line of the visualization.
-    """
-    # Extract trajectory including the trail
-    positions, detected, fps, (width, height), trail = extract_trajectory_from_video(video_path)
-    
-    if not trail:
-        print("No trajectory data found!")
-        return
-    
-    trail_array = np.array(trail)
-    
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-    
-    # Plot 1: Trajectory in image coordinates (like the red line)
-    ax1.plot(trail_array[:, 0], trail_array[:, 1], 'y-', linewidth=3.0, alpha=0.9, label='Trajectory (neon yellow)')
-    
-    # Color code detection vs prediction
-    detection_colors = []
-    frame_idx = 0
-    for i, pos in enumerate(positions):
-        if pos is not None:
-            if detected[i]:
-                detection_colors.append(('green', frame_idx, 'Detected'))
-            else:
-                detection_colors.append(('orange', frame_idx, 'Predicted'))
-            frame_idx += 1
-    
-    # Plot points with colors
-    for color, idx, label in detection_colors:
-        ax1.scatter(trail_array[idx, 0], trail_array[idx, 1], 
-                   c=color, s=30, alpha=0.6, edgecolors='black', linewidth=0.5)
-    
-    # Mark start and end
-    ax1.scatter(trail_array[0, 0], trail_array[0, 1], 
-               c='blue', s=200, marker='*', label='Start', zorder=5)
-    ax1.scatter(trail_array[-1, 0], trail_array[-1, 1], 
-               c='red', s=200, marker='*', label='End', zorder=5)
-    
-    ax1.set_xlabel('X (pixels)', fontsize=12)
-    ax1.set_ylabel('Y (pixels)', fontsize=12)
-    ax1.set_title(f'Shot Put Trajectory (Red Line from Visualization)\nVideo: {Path(video_path).name}', fontsize=14)
-    ax1.invert_yaxis()  # Match image coordinates
-    ax1.grid(True, alpha=0.3)
-    ax1.legend()
-    
-    # Add text box with statistics
-    stats_text = f'Total frames: {len(positions)}\n'
-    stats_text += f'Valid positions: {len(trail)}\n'
-    stats_text += f'Detected: {sum(detected)}\n'
-    stats_text += f'Predicted: {len([d for d in detected if d is False])}\n'
-    stats_text += f'FPS: {fps:.1f}\n'
-    stats_text += f'X range: {trail_array[:, 0].min():.1f} - {trail_array[:, 0].max():.1f}\n'
-    stats_text += f'Y range: {trail_array[:, 1].min():.1f} - {trail_array[:, 1].max():.1f}'
-    
-    ax1.text(0.02, 0.98, stats_text, transform=ax1.transAxes, 
-             verticalalignment='top', fontsize=9,
-             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    
-    # Plot 2: Position over time (like tracking visualization)
-    frames = range(len(trail))
-    ax2.plot(frames, trail_array[:, 0], 'y-', label='X coordinate', alpha=0.9)
-    ax2.plot(frames, trail_array[:, 1], 'l-', label='Y coordinate', alpha=0.9)
-    ax2.set_xlabel('Frame Number', fontsize=12)
-    ax2.set_ylabel('Pixel Coordinate', fontsize=12)
-    ax2.set_title('Position vs Time', fontsize=14)
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.show()
-    
-    print(f"\n=== Trajectory Statistics ===")
-    print(f"Total frames processed: {len(positions)}")
-    print(f"Frames with position (red line points): {len(trail)}")
-    print(f"  - Detected positions (green): {sum(detected)}")
-    print(f"  - Predicted positions (orange): {len([d for d in detected if d is False])}")
-    print(f"Trajectory length: {len(trail)} points")
-    print(f"Plot saved to: {output_path}")
-    
-    return trail_array, detected, fps
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Shot put tracker with ROI priority")
