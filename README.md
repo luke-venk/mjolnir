@@ -6,37 +6,46 @@ Current officiating in these events relies heavily on human judgment, which can 
 
 The system integrates ground cameras equipped with computer vision, a ground-based sensing and processing pipeline, and a graphical user interface allowing referees to understand system decisions in an intuitive and accessible manner.
 
-## Team Mjölnir
+### Team Mjölnir
 The team's name "Mjölnir" is named after the legendary hammer of Thor, the Norse god of thunder. Mjölnir infamously returns to Thor when he throws it, and since our system helps officiate hammer throw, we thought the name was fitting. Also, in the Marvel Cinematic Universe, the synthetic android "Vision" is one of the few beings able to lift Mjölnir — computer vision...
 
-Anyways, the following engineers contributed to this project.
-- Eloghosa Eguakun
-- Yash Jain
-- Alex Lozano
-- Rushil Randhar
-- Gautam Rao
-- Arushi Sadam
+The following engineers contributed to this project.
 - Owen Scott
 - Luke Venkataramanan
+- Yash Jain
 - Max Wiesenfeld
+- Rushil Randhar
+- Arushi Sadam
+- Gautam Rao
+- Alex Lozano
+- Eloghosa Eguakun
+
+## Usage
+### Releases
+To install our compiled binaries directly, please see the [releases page](https://github.com/luke-venk/mjolnir/releases/tag/v1.0.0).
+
+### Documentation
+For technical documentation on how to use our product, please refer to the following READMEs:
+1. [README.dev.md](README.dev.md): Instructions to get start with development (dependencies, extensions, etc.)
+2. [README.bazel.md](README.bazel.md): Instructions to build our project using Bazel
+3. [README.cameras.md](README.cameras.md): Instructions to run our camera tools using Bazel
 
 ## Repository Structure
 This section outlines the purpose of each directory in the repository.
 
 ### Backend
-The backend will be written in Rust and will be responsible for handling the Axum server to serve the frontend and run our complete pipelines for our system. Key responsibilities include ingesting frames from the cameras, using OpenCV tasks to analyze the frames, and outputting a decision regarding infraction status and distance thrown.
-
-### Computer Vision
-Experimental code responsible for perception and making decisions regarding measuring distance and sector violations can live here. This directory should include object detection, triangulation of rays, and outputting decisions regarding distances and sector violations. This code will be written in Python but the final product for CV will live in the Rust backend.
+We wrote the backend in Rust, and its responsibilities include the following:
+* Providing tools for recording and streaming using the cameras.
+* Running per-camera computer vision pipelines that process frames in parallel.
+* Using comptuer vision outputs to determine where the object landed on the field.
+* Listening for messages from the Arduino communicating circle infractions.
+* Running the Axum web server to serve our frontend.
 
 ### Circle Infractions
-The code that is responsible for converting the signals output by our touch-based sensor around the throwing circle into meaningful decisions will live here.
+The Arduino software that continuously reads from capacitive touch sensors, determines which touches are infractions, and sends them to the backend over UART lives here.
 
 ### Frontend
-The graphical user interface for our web application will live here, and the frontend will be written React / Next.js (TypeScript).
-
-### Message Formats
-The code defining message formats will live here. Because our system includes several independent applications, it is important to have a standard message format defined between applications so they can talk to each other reliably.
+The graphical user interface for our web application will live here, and the frontend is written in Next.js (TypeScript).
 
 ### Analysis
-Any code or diagrams that help us inform our design decisions for this system should go here. This includes any MATLAB or Python visualizations, or any useful diagrams.
+Code that helps inform our design decisions lives here (e.g., MATLAB scripts to determine camera error, Python scripts to validate computer vision pipelines, etc.). These are not included in our final binaries.
