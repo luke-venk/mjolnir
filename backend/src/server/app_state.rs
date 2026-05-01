@@ -5,6 +5,7 @@
 // docs: https://docs.rs/axum/latest/axum/extract/struct.State.html
 use crate::{server::ThrowSource, throws::ThrowType};
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -12,15 +13,20 @@ use tokio::sync::RwLock;
 pub struct AppState {
     pub throw_type: Arc<RwLock<ThrowType>>,
     pub throw_source: ThrowSource,
+    /// Root directory used by the `/api/frames/{*path}` route to serve
+    /// recorded TIFF frames as PNG. `None` when running in simulated mode
+    /// (no real frames on disk to serve).
+    pub frames_dir: Option<PathBuf>,
     infraction_history: Arc<RwLock<VecDeque<u64>>>,
     circle_infraction_system_is_stale: Arc<RwLock<bool>>,
 }
 
 impl AppState {
-    pub fn new(throw_source: ThrowSource) -> Self {
+    pub fn new(throw_source: ThrowSource, frames_dir: Option<PathBuf>) -> Self {
         Self {
             throw_type: Arc::new(RwLock::new(ThrowType::Shotput)),
             throw_source,
+            frames_dir,
             infraction_history: Arc::new(RwLock::new(VecDeque::new())),
             circle_infraction_system_is_stale: Arc::new(RwLock::new(false)),
         }

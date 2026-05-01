@@ -7,6 +7,7 @@ use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 use backend_lib::pipeline::start_recorded_footage_pipelines;
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use rust_embed::Embed;
+use std::path::PathBuf;
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
 
@@ -19,14 +20,14 @@ pub struct Asset;
 // In prod mode, the backend will serve the API but instead of serving
 // the Next.js server, it will embed the frontend's static exports using
 // rust-embed and serve using axum_embed.
-pub fn create_prod_app(throw_source: ThrowSource) -> Router {
+pub fn create_prod_app(throw_source: ThrowSource, frames_dir: Option<PathBuf>) -> Router {
     let serve_assets = ServeEmbed::<Asset>::new();
 
     let infractions_rx = begin_detecting_circle_infractions(ARDUINO_BAUD_RATE);
 
     // Use the fallback service so any request that isn't one of the
     // API's routes will be directed to the frontend static exports.
-    create_api_router(throw_source, infractions_rx).fallback_service(serve_assets)
+    create_api_router(throw_source, infractions_rx, frames_dir).fallback_service(serve_assets)
 }
 
 // Lacking a "real_cameras" feature flag will not start the CV pipelines, and will point the
@@ -35,7 +36,7 @@ pub fn create_prod_app(throw_source: ThrowSource) -> Router {
 #[tokio::main]
 async fn main() {
     // Build the Axum router.
-    let app = create_prod_app(ThrowSource::Simulated);
+    let app = create_prod_app(ThrowSource::Simulated, None);
 
     // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
@@ -52,10 +53,11 @@ async fn main() {
         "Starting real prod backend in recorded-footage replay mode from {}.",
         args.feed_footage_dir.display()
     );
+    let frames_dir = args.feed_footage_dir.clone();
     let _ = start_recorded_footage_pipelines(args.feed_footage_dir, rolling_buffer_size);
 
     // Build the Axum router.
-    let app = create_prod_app(ThrowSource::Camera);
+    let app = create_prod_app(ThrowSource::Camera, Some(frames_dir));
 
     // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;

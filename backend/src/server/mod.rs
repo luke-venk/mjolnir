@@ -1,4 +1,5 @@
 pub mod app_state;
+pub mod frames_route;
 pub mod server;
 pub mod throw_source;
 
