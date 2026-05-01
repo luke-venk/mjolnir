@@ -253,45 +253,6 @@ pub fn configure_camera(
             return;
         }
 
-        // Set transfer control settings for PTP synced captures
-        camera
-            .set_string("TransferControlMode", "UserControlled")
-            .expect("Failed to set TransferControlMode");
-        camera
-            .set_string("TransferOperationMode", "Continuous")
-            .expect("Failed to set TransferOperationMode");
-        camera
-            .execute_command("TransferStop")
-            .expect("Failed to stop early transfers");
-
-        // Set up frame start trigger system
-        camera
-            .set_string("TriggerSelector", "FrameStart")
-            .expect("Failed to set TriggerSelector");
-        camera
-            .set_string("TriggerMode", "On")
-            .expect("Failed to set TriggerMode");
-        camera
-            .set_string("TriggerSource", "Action0")
-            .expect("Failed to set TriggerSource");
-        camera
-            .set_string("ActionUnconditionalMode", "On")
-            .expect("Failed to set ActionUnconditionalMode");
-        camera
-            .set_boolean("ActionPTPSyncRequired", true)
-            .expect("Failed to set ActionPTPSyncRequired");
-        camera
-            .set_integer("ActionSelector", 0)
-            .expect("Failed to set ActionSelector");
-        camera
-            .set_integer("ActionDeviceKey", 1)
-            .expect("Failed to set ActionDeviceI+K");
-        camera
-            .set_integer("ActionGroupKey", 1)
-            .expect("Failed to set ActionGroupKey");
-        camera
-            .set_integer("ActionGroupMask", 1)
-            .expect("Failed to set ActionGroupMask");
     }
 
     // Pixel format.
