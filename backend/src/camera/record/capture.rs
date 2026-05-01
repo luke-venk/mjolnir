@@ -1,20 +1,19 @@
-use super::writer::{Frame, Metadata, ensure_dir, sanitize_path_name};
-use crate::camera::CameraIngestConfig;
+use super::writer::{ensure_dir, sanitize_path_name, Frame, Metadata};
 use crate::camera::aravis_utils::{
-    PtpConfig, configure_camera, copy_buffer_bytes, create_camera,
-    create_stream_and_allocate_buffers,
+    configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
+    PtpConfig,
 };
+use crate::camera::CameraIngestConfig;
 use crate::camera::{BarrierResult, CancelableBarrier};
 use crate::computer_vision::mog2::MOG2_HISTORY_FRAMES;
 use aravis::{BufferStatus, Camera, CameraExt, StreamExt};
 use aravis_sys::arv_camera_get_integer;
 use glib::translate::*; // To convert high-level types to raw pointers
 use std::ffi::CString;
-use std::net::{SocketAddr, UdpSocket};
 use std::path::PathBuf;
 use std::ptr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 fn unsafe_read_camera_integer(camera: &Camera, node_name: &str) -> i64 {
@@ -40,66 +39,6 @@ fn read_ptp_time_ns(camera: &Camera) -> u64 {
     unsafe_read_camera_integer(camera, "PtpDataSetLatchValue") as u64
 }
 
-/// Broadcasts a GigEV scheduled action command to all cameras on the network.
-/// All values must match what was configured on each camera:
-///   device_key, group_key, group_mask, and the scheduled PTP timestamp.
-pub fn send_action_command(
-    socket: &UdpSocket,
-    fire_at_ptp_ns: u64,
-    device_key: u32,
-    group_key: u32,
-    group_mask: u32,
-) {
-    // GigEV action command packet: 56 bytes total
-    // Ref: GigE Vision spec section on Action Commands
-    let mut packet = [0u8; 28];
-
-    // GVCP header
-    packet[0] = 0x42; // required first byte
-    packet[1] = 0b10000001; // flag denotes that action time is being sent and we want an ACK
-    packet[2] = 0x01; // command high: ACTION_CMD = 0x0100
-    packet[3] = 0x00; // command low
-    packet[4] = 0x00; // length high
-    packet[5] = 20; // length low (msg beyond header is 20 bytes)
-    // request id - can be any nonzero value maybe? Not according to spec but....
-    packet[6] = 0x00;
-    packet[7] = 0x01;
-
-    // Payload
-    // device key
-    packet[8] = (device_key >> 24) as u8;
-    packet[9] = (device_key >> 16) as u8;
-    packet[10] = (device_key >> 8) as u8;
-    packet[11] = device_key as u8;
-
-    // group key
-    packet[12] = (group_key >> 24) as u8;
-    packet[13] = (group_key >> 16) as u8;
-    packet[14] = (group_key >> 8) as u8;
-    packet[15] = group_key as u8;
-
-    // group mask
-    packet[16] = (group_mask >> 24) as u8;
-    packet[17] = (group_mask >> 16) as u8;
-    packet[18] = (group_mask >> 8) as u8;
-    packet[19] = group_mask as u8;
-
-    // scheduled action time in ns (8 bytes, big-endian)
-    packet[20] = (fire_at_ptp_ns >> 56) as u8;
-    packet[21] = (fire_at_ptp_ns >> 48) as u8;
-    packet[22] = (fire_at_ptp_ns >> 40) as u8;
-    packet[23] = (fire_at_ptp_ns >> 32) as u8;
-    packet[24] = (fire_at_ptp_ns >> 24) as u8;
-    packet[25] = (fire_at_ptp_ns >> 16) as u8;
-    packet[26] = (fire_at_ptp_ns >> 8) as u8;
-    packet[27] = fire_at_ptp_ns as u8;
-
-    // remaining bytes are reserved/zero
-    socket
-        .send_to(&packet, "255.255.255.255:3956")
-        .expect("Failed to send action command.");
-}
-
 /// Records stream from a single camera.
 pub fn run_capture_thread(
     output_base_dir: PathBuf,
@@ -109,7 +48,6 @@ pub fn run_capture_thread(
     max_duration_s: Option<f64>,
     throwaway_duration_s: f64,
     shutdown: Arc<AtomicBool>,
-    host_interface_ip: Option<SocketAddr>,
     configuration_barrier: Option<CancelableBarrier>,
     acquisition_barrier: Option<CancelableBarrier>,
     maybe_ptp_config: Option<PtpConfig>,
@@ -146,26 +84,6 @@ pub fn run_capture_thread(
 
     // For frame metadata.
     let (width, height) = config.resolution.dimensions();
-
-    let frame_interval_ns: Option<u64> = if let Some(ref ptp_config) = maybe_ptp_config
-        && !ptp_config.is_slave
-    {
-        Some((1_000_000_000.0 / config.frame_rate_hz) as u64)
-    } else {
-        None
-    };
-    let maybe_socket = if let Some(ref ptp_config) = maybe_ptp_config
-        && !ptp_config.is_slave
-    {
-        let addr = host_interface_ip.expect("Capture thread was configured to be PTP & Acquisition master but was not provided a host SocketAddr.");
-        let socket = UdpSocket::bind(addr).expect("Failed to bind UDP socket for action command.");
-        socket
-            .set_broadcast(true)
-            .expect("Failed to enable broadcast on action command socket.");
-        Some(socket)
-    } else {
-        None
-    };
 
     // Start Aravis camera aquisition.
     camera

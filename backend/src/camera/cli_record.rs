@@ -45,10 +45,6 @@ pub struct CommonRecordArgs {
     /// need to reach thermal/electrical equilibrium.
     #[arg(long = "throwaway-duration-s")]
     pub throwaway_duration_s: f64,
-
-    /// Whether to enable Precision Time Protocol if supported by the device.
-    #[arg(long, default_value_t = true, action = clap::ArgAction::Set, value_parser = clap::builder::BoolishValueParser::new())]
-    pub enable_ptp: bool,
 }
 
 impl CommonRecordArgs {
