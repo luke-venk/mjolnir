@@ -2,6 +2,7 @@
 use super::infraction_byte_decoder;
 #[cfg(feature = "real_circle_sensors")]
 use super::infraction_byte_decoder::InfractionState;
+use crate::timing::global_time;
 use crossbeam::channel::{bounded, Receiver, TrySendError};
 #[cfg(feature = "real_circle_sensors")]
 use serialport::SerialPort;
@@ -82,12 +83,12 @@ pub fn begin_detecting_circle_infractions(baud: u32) -> Receiver<CircleInfractio
             match port.read(&mut buf) {
                 Ok(1) => match infraction_byte_decoder::decode(buf[0]) {
                     Some(InfractionState::Infraction) => {
-                        let timestamp = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .expect("Time went backwards")
-                            .as_millis() as u64;
                         match tx.try_send(CircleInfractionDetectionState::DetectedInfraction(
-                            timestamp,
+                            global_time()
+                                .camera_ptp_time_now_approximation_nanoseconds()
+                                .unwrap_or_else(|| {
+                                    global_time().now_monotonic_in_nanoseconds_since_unix_epoch()
+                                }),
                         )) {
                             Ok(_) => {}
                             Err(TrySendError::Full(_)) => {

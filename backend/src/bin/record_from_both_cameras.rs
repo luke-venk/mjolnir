@@ -3,6 +3,7 @@ use backend_lib::camera::discovery::get_camera_ids;
 use backend_lib::camera::record::run_capture_thread;
 use backend_lib::camera::record::writer::{ensure_dir, write_to_disk, Frame};
 use backend_lib::camera::{CameraIngestConfig, CancelableBarrier, RecordWithBothCamerasArgs};
+use backend_lib::timing::init_global_time;
 use clap::Parser;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,6 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// store the frames to disk using the command-line.
 
 pub fn main() {
+    init_global_time();
     println!("------------------------");
     println!("RECORDING FROM BOTH CAMERAS...");
     println!("------------------------\n");

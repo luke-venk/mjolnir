@@ -1,5 +1,6 @@
 use backend_lib::camera::CameraIngestConfig;
 use backend_lib::camera::StreamFromCamerasArgs;
+use backend_lib::timing::init_global_time;
 use clap::Parser;
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +22,7 @@ use stream_lib::{FrameData, LiveViewApp};
 /// like the egui UI.
 
 fn main() -> eframe::Result<()> {
+    init_global_time();
     println!("------------------------");
     println!("LIVE STREAMING FROM CAMERA...");
     println!("------------------------\n");

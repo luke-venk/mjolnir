@@ -1,24 +1,133 @@
-use super::writer::{ensure_dir, sanitize_path_name, Frame, Metadata};
 use crate::camera::aravis_utils::{
     configure_camera, copy_buffer_bytes, create_camera, create_stream_and_allocate_buffers,
-    PtpConfig,
+    initialize_aravis, PtpConfig,
 };
-use crate::camera::CameraIngestConfig;
-use crate::camera::{BarrierResult, CancelableBarrier};
+use crate::camera::{AtlasATP124SResolution, BarrierResult, CameraIngestConfig, CancelableBarrier};
 use crate::computer_vision::mog2::MOG2_HISTORY_FRAMES;
+use crate::pipeline::{CameraId, Context, Frame, CAPACITY_PER_CROSSBEAM_CHANNEL};
 use aravis::{BufferStatus, CameraExt, StreamExt};
-use std::path::PathBuf;
+use crossbeam::channel::{bounded, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
+
+pub fn begin_live_dual_cam_ingest(
+    left_cam_id: String,
+    right_cam_id: String,
+    exposure_time_us: f64,
+) -> (Receiver<Frame>, Receiver<Frame>) {
+    let _ = initialize_aravis();
+
+    let left_cam_ingest_config = CameraIngestConfig {
+        camera_id: left_cam_id,
+        exposure_time_us,
+        frame_rate_hz: 30.0,
+        resolution: AtlasATP124SResolution::Full,
+        num_buffers: 16,
+        timeout_ms: 5000,
+        restart_requested: false,
+    };
+
+    let right_cam_ingest_config = CameraIngestConfig {
+        camera_id: right_cam_id,
+        exposure_time_us,
+        frame_rate_hz: 30.0,
+        resolution: AtlasATP124SResolution::Full,
+        num_buffers: 16,
+        timeout_ms: 5000,
+        restart_requested: false,
+    };
+
+    // Shared shutdown flag set by Ctrl+C handler.
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_clone1 = Arc::clone(&shutdown);
+    let shutdown_clone2 = Arc::clone(&shutdown);
+
+    // So we can make capture threads wait until all have PTP enabled, and cancel a wait in the event of SIGINT
+    let ptp_enable_barrier = CancelableBarrier::new(2);
+    let ptp_enable_barrier_1 = ptp_enable_barrier.clone();
+    let ptp_enable_barrier_2 = ptp_enable_barrier.clone();
+    // So we can make capture threads wait until all have applied their PTP configuration settings, and cancel a wait in the event of SIGINT
+    let ptp_configure_barrier = CancelableBarrier::new(2);
+    let ptp_configure_barrier_1 = ptp_configure_barrier.clone();
+    let ptp_configure_barrier_2 = ptp_configure_barrier.clone();
+    // So we can make capture threads wait until all have achieved PTP lock, and cancel a wait in the event of SIGINT
+    let ptp_lock_barrier = CancelableBarrier::new(2);
+    let ptp_lock_barrier_1 = ptp_lock_barrier.clone();
+    let ptp_lock_barrier_2 = ptp_lock_barrier.clone();
+    // So we can make capture threads wait until all have configuration beyond PTP (like exposure, resolution, etc), and cancel a wait in the event of SIGINT
+    let configuration_barrier = CancelableBarrier::new(2);
+    let configuration_barrier_1 = configuration_barrier.clone();
+    let configuration_barrier_2 = configuration_barrier.clone();
+    // So we can make capture threads wait until all have started acquisition, and cancel a wait in the event of SIGINT
+    let acquisition_barrier = CancelableBarrier::new(2);
+    let acquisition_barrier_1 = acquisition_barrier.clone();
+    let acquisition_barrier_2 = acquisition_barrier.clone();
+
+    ctrlc::set_handler(move || {
+        println!("\nShutdown signal received, stopping recording...");
+        shutdown.store(true, Ordering::SeqCst);
+        ptp_enable_barrier.cancel();
+        ptp_configure_barrier.cancel();
+        ptp_lock_barrier.cancel();
+        configuration_barrier.cancel();
+        acquisition_barrier.cancel();
+    })
+    .expect("Error setting Ctrl+C handler.");
+
+    let ptp_config_1 = PtpConfig {
+        is_slave: false,
+        enable_barrier: ptp_enable_barrier_1,
+        configure_barrier: ptp_configure_barrier_1,
+        lock_barrier: ptp_lock_barrier_1,
+    };
+    let ptp_config_2 = PtpConfig {
+        is_slave: true,
+        enable_barrier: ptp_enable_barrier_2,
+        configure_barrier: ptp_configure_barrier_2,
+        lock_barrier: ptp_lock_barrier_2,
+    };
+
+    let (tx_left, rx_left) = bounded::<Frame>(CAPACITY_PER_CROSSBEAM_CHANNEL);
+    let (tx_right, rx_right) = bounded::<Frame>(CAPACITY_PER_CROSSBEAM_CHANNEL);
+
+    // Spawn 1st streaming thread.
+    let _ = thread::spawn(move || {
+        run_capture_thread(
+            &left_cam_ingest_config,
+            CameraId::FieldLeft,
+            tx_left,
+            1.0,
+            Arc::clone(&shutdown_clone1),
+            Some(configuration_barrier_1),
+            Some(acquisition_barrier_1),
+            Some(ptp_config_1),
+        );
+    });
+
+    // Spawn 2nd streaming thread.
+    let _ = thread::spawn(move || {
+        run_capture_thread(
+            &right_cam_ingest_config,
+            CameraId::FieldRight,
+            tx_right,
+            1.0,
+            Arc::clone(&shutdown_clone2),
+            Some(configuration_barrier_2),
+            Some(acquisition_barrier_2),
+            Some(ptp_config_2),
+        );
+    });
+
+    (rx_left, rx_right)
+}
 
 /// Records stream from a single camera.
 pub fn run_capture_thread(
-    output_base_dir: PathBuf,
     config: &CameraIngestConfig,
+    camera_left_or_right: CameraId,
     frame_tx: crossbeam::channel::Sender<Frame>,
-    max_frames: Option<usize>,
-    max_duration_s: Option<f64>,
     throwaway_duration_s: f64,
     shutdown: Arc<AtomicBool>,
     configuration_barrier: Option<CancelableBarrier>,
@@ -27,17 +136,13 @@ pub fn run_capture_thread(
 ) {
     println!("Starting capture for camera {}.", config.camera_id);
 
-    // Ensure output directory exists.
     let camera_id = config.camera_id.clone();
-    let output_camera_dir = output_base_dir.join(sanitize_path_name(&camera_id));
-    ensure_dir(&output_camera_dir);
 
     // Create Aravis camera, apply configuration, start stream, and queue buffers.
     let camera = match create_camera(&camera_id) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("{e}");
-            return;
+            panic!("{e}");
         }
     };
     configure_camera(
@@ -54,9 +159,6 @@ pub fn run_capture_thread(
     }
 
     let stream = create_stream_and_allocate_buffers(&camera, config.num_buffers);
-
-    // For frame metadata.
-    let (width, height) = config.resolution.dimensions();
 
     // Start Aravis camera aquisition.
     camera
@@ -80,7 +182,6 @@ pub fn run_capture_thread(
     // Used to provide countdowns to the user
     let mut countdown_timer: Instant = Instant::now();
     let expected_mog2_duration_s: f64 = (MOG2_HISTORY_FRAMES as f64) / config.frame_rate_hz;
-    let mut mog2_completed_at: Option<Instant> = None;
 
     // Used to only print timeouts after first buffer arrives.
     let mut first_buffer_arrived = false;
@@ -91,29 +192,6 @@ pub fn run_capture_thread(
         if shutdown.load(Ordering::SeqCst) {
             println!("Shutting down capture for camera {}.", camera_id);
             break;
-        }
-
-        // Stop streaming if a maximum number of frames was configured and
-        // the camera has recorded that many frames.
-        if let Some(limit) = max_frames {
-            if frames_saved >= limit {
-                break;
-            }
-        }
-
-        // Stop streaming if a maximum duration was configured and the camera has recorded
-        // for that amount of time. Note that the max duration needs to account for both
-        // time spent throwing away frames and time spent recording still frames for Mog2.
-        // Since the time duration for recording for Mog2 (mog2_duration_s) is an approximation
-        // and this would be wrong if frames are dropped, we actually record the instant at
-        // which Mog2 frame collection completed, which also accounts for the time throwing
-        // away frames.
-        if let Some(max_duration_s) = max_duration_s {
-            if let Some(mog2_completed_at) = mog2_completed_at {
-                if mog2_completed_at.elapsed() >= Duration::from_secs_f64(max_duration_s) {
-                    break;
-                }
-            }
         }
 
         // If the elapsed time has not passed the throwaway duration, print out to the user
@@ -168,9 +246,6 @@ pub fn run_capture_thread(
         // If loading the buffer worked, copy the frame buffer into raw bytes.
         match buffer.status() {
             BufferStatus::Success => {
-                let elapsed_since_start = recording_start_time
-                    .expect("recording_start_time should be set if frames are being received.")
-                    .elapsed();
                 let buffer_timestamp_ns = buffer.timestamp();
 
                 // If we still haven't saved the number of frames required for Mog2 to
@@ -193,10 +268,9 @@ pub fn run_capture_thread(
                     }
                 } else {
                     println!(
-                        "Frame {} captured at {}ms and received at {:.2}s for {}.",
+                        "Frame {} captured at {}ms for {}.",
                         frames_saved,
                         buffer_timestamp_ns / 1_000_000,
-                        elapsed_since_start.as_secs_f64(),
                         camera_id,
                     );
                 }
@@ -205,8 +279,6 @@ pub fn run_capture_thread(
                 // immediately push the buffer back to the stream, so it doesn't
                 // starve.
                 let data = copy_buffer_bytes(&buffer);
-                let system_timestamp_ns = buffer.system_timestamp();
-                let frame_id = buffer.frame_id();
                 stream.push_buffer(buffer);
 
                 if data.is_empty() {
@@ -214,35 +286,18 @@ pub fn run_capture_thread(
                     continue;
                 }
 
-                // Store metadata.
-                let metadata = Metadata {
-                    camera_id: config.camera_id.clone(),
-                    frame_index: frames_saved,
-                    width,
-                    height,
-                    payload_bytes: data.len(),
-                    system_timestamp_ns,
-                    buffer_timestamp_ns,
-                    frame_id,
-                };
-
                 // Package bytes and metadata into Frame struct and pass
                 // over crossbeam-channel to write thread.
-                let frame = Frame {
-                    output_camera_dir: output_camera_dir.clone(),
-                    frame_index: frames_saved,
-                    bytes: data,
-                    metadata: metadata,
-                };
+                let frame = Frame::new(
+                    data.into_boxed_slice(),
+                    AtlasATP124SResolution::Full.dimensions(),
+                    Context::new(camera_left_or_right, buffer_timestamp_ns),
+                );
                 frame_tx.send(frame).expect(
                     "Error: Failed to send frame from recording capture thread to write thread.",
                 );
 
                 frames_saved += 1;
-
-                if frames_saved == MOG2_HISTORY_FRAMES {
-                    mog2_completed_at = Some(Instant::now());
-                }
             }
             status => {
                 frames_dropped += 1;
@@ -265,7 +320,7 @@ pub fn run_capture_thread(
         let effective_frame_rate: f64 = frames_saved as f64 / total_capture_time_s;
         let delivery_rate: f64 = frames_saved as f64 / (frames_saved + frames_dropped) as f64;
 
-        println!("Finished recording from camera {}.", config.camera_id,);
+        println!("Finished livestreaming from camera {}.", config.camera_id,);
         println!();
         println!(
             "Saved {} frame(s) and dropped {} frames(s) in {:.3} seconds.",
@@ -275,8 +330,6 @@ pub fn run_capture_thread(
             "The effective frame rate was {:.3} FPS (requested {:.3} FPS). Delivery rate was {:.1}%.",
             effective_frame_rate, config.frame_rate_hz, delivery_rate * 100.0,
         );
-        println!();
-        println!("Wrote files into {}.", output_camera_dir.display());
     } else {
         println!("Recording was cancelled before any frames were written.");
     }
