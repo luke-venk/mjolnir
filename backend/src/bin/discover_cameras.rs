@@ -2,8 +2,10 @@
 // cameras on their network via the command-line.
 use backend_lib::camera::aravis_utils::initialize_aravis;
 use backend_lib::camera::discovery::*;
+use backend_lib::timing::init_global_time;
 
 pub fn main() {
+    init_global_time();
     println!("--------------------------------------------");
     println!("DISCOVERING CAMERAS ON LOCAL AREA NETWORK...");
     println!("--------------------------------------------");
