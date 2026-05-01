@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicI64, Ordering};
 #[cfg(not(test))]
 use std::sync::OnceLock;
 #[cfg(test)]
@@ -29,7 +30,9 @@ pub fn global_time() -> GlobalTime {
     GLOBAL_TIME
         .read()
         .expect("GlobalTime lock poisoned")
+        .as_ref()
         .expect("GlobalTime not initialized — call init_global_time() first")
+        .clone()
 }
 
 /// Initializes the global time. This should be called once at the start of the program.
@@ -46,11 +49,11 @@ pub fn init_global_time() {
 }
 
 /// A struct for tracking the global start times of the program accurately
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 pub struct GlobalTime {
     program_start_time_instant: Instant,
     program_start_time_wall_clock_nanoseconds: u64,
-    approximate_additive_ptp_offset_from_wall_clock_nanoseconds: Option<i64>,
+    approximate_additive_ptp_offset_from_wall_clock_nanoseconds: AtomicI64,
 }
 
 impl GlobalTime {
@@ -63,7 +66,7 @@ impl GlobalTime {
         Self {
             program_start_time_instant,
             program_start_time_wall_clock_nanoseconds: wall,
-            approximate_additive_ptp_offset_from_wall_clock_nanoseconds: None,
+            approximate_additive_ptp_offset_from_wall_clock_nanoseconds: i64::MIN.into(),
         }
     }
 
@@ -88,10 +91,12 @@ impl GlobalTime {
     }
 
     pub fn set_approximate_additive_ptp_offset_from_wall_clock_nanoseconds(
-        &mut self,
+        &self,
         offset: Option<i64>,
     ) {
-        self.approximate_additive_ptp_offset_from_wall_clock_nanoseconds = offset;
+        let val = offset.unwrap_or(i64::MIN);
+        self.approximate_additive_ptp_offset_from_wall_clock_nanoseconds
+            .store(val, Ordering::Relaxed);
     }
 
     /// Returns an approximation of the current camera PTP time
@@ -99,12 +104,29 @@ impl GlobalTime {
     /// NOT guaranteed to be highly accurate since we don't actually participate in a PTP sync with the cameras
     /// WILL drift over time since we do not participate in active PTP sync with the cameras
     pub fn camera_ptp_time_now_approximation_nanoseconds(&self) -> Option<u64> {
-        match self.approximate_additive_ptp_offset_from_wall_clock_nanoseconds {
-            Some(offset) => Some(
+        match self
+            .approximate_additive_ptp_offset_from_wall_clock_nanoseconds
+            .load(Ordering::Relaxed)
+        {
+            i64::MIN => None,
+            offset => Some(
                 self.now_monotonic_in_nanoseconds_since_unix_epoch()
                     .saturating_add_signed(offset),
             ),
-            None => None,
+        }
+    }
+}
+
+impl Clone for GlobalTime {
+    fn clone(&self) -> Self {
+        Self {
+            program_start_time_instant: self.program_start_time_instant,
+            program_start_time_wall_clock_nanoseconds: self
+                .program_start_time_wall_clock_nanoseconds,
+            approximate_additive_ptp_offset_from_wall_clock_nanoseconds: AtomicI64::new(
+                self.approximate_additive_ptp_offset_from_wall_clock_nanoseconds
+                    .load(Ordering::Relaxed),
+            ),
         }
     }
 }
