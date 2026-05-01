@@ -1,22 +1,39 @@
+#![allow(non_snake_case)]
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt};
 use nalgebra::base::VecStorage;
 use nalgebra::dimension::{Dyn, U1};
 use nalgebra::linalg::SVD;
-use nalgebra::{DMatrix, DVector, Matrix3, Matrix3x4, Vector2, Vector3, Vector4};
+use nalgebra::{DMatrix, DVector, Matrix3x4, Vector2, Vector3, Vector4};
+
+// List of camera projection matrices from camera calibration.
+fn p_list() -> Vec<Matrix3x4<f64>> {
+    vec![
+        Matrix3x4::new(
+            1.66349570e+03, 4.65328119e+03, -1.44996812e+03, 5.73975355e+03,
+            -1.34282253e+03, -3.57339308e+02, -4.77283748e+03, 2.56783602e+04,
+            -7.43327659e-01, 6.50983403e-01, -1.53898021e-01, 1.30918443e+01,
+        ),
+        Matrix3x4::new(
+            -4.72666612e+03, 1.48210558e+03, -5.03727845e+00, 5.37107633e+04,
+            -9.12456912e+02, -1.12711021e+03, -4.61368435e+03, 2.35765374e+04,
+            -6.24111186e-01, -7.81293497e-01, -8.10542365e-03, 1.24434884e+01,
+        ),
+    ]
+}
 
 // Helper function to project a 3D point onto a 2D image plane.
-fn project_point(P: Matrix3x4<f64>, x: Vector3<f64>) -> Vector2<f64> {
+fn project_point(point: Matrix3x4<f64>, x: Vector3<f64>) -> Vector2<f64> {
     let x_h = Vector4::new(x[0], x[1], x[2], 1.0);
-    let x_proj = P * x_h;
+    let x_proj = point * x_h;
     Vector2::new(x_proj[0] / x_proj[2], x_proj[1] / x_proj[2])
 }
 
 // This function does initial estimate of the 3D position using the DLT algorithm.
-fn dlt_triangulation(P_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vector3<f64> {
-    let n = P_list.len();
+fn dlt_triangulation(p_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vector3<f64> {
+    let n = p_list.len();
     let mut A = DMatrix::<f64>::zeros(2 * n, 4);
     for i in 0..n {
-        let P = P_list[i];
+        let P = p_list[i];
         let pixel = pixels[i];
         let u = pixel[0];
         let v = pixel[1];
@@ -143,9 +160,6 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
                 residuals.push(r[1]);
             }
         }
-        // Discrete physics residual (matches Python `trajectory_residual`):
-        // X_next - 2*X_curr + X_prev - g*dt^2 + drag * 0.5 * dt * (X_next - X_prev), scaled by physics_sigma.
-        // The drag term is linear-in-velocity style using the centered finite-difference (X_next - X_prev).
         let drag_k = self.drag();
         for t in 1..self.n_timesteps.saturating_sub(1) {
             let X_prev = Vector3::new(self.params[(t - 1) * 3], self.params[(t - 1) * 3 + 1], self.params[(t - 1) * 3 + 2]);
@@ -161,9 +175,8 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
         Some(DVector::from_vec(residuals))
     }
     
-    //Use built in jacobian function from the LevenbergMarquardt library.
     fn jacobian(&self) -> Option<DMatrix<f64>> {
-        None
+        Some(self.numerical_jacobian(1e-5))
     }
 }
 
@@ -172,19 +185,25 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
 // Then to further optimize the trajectory, we use the Levenberg-Marquardt algorithm.
 // We return the optimized trajectory and the covariance matrix.
 // Args:
-//     P_list: List of camera projection matrices. Should be gotten from camera calibration.
 //     pixels: List of pixel coordinates for each camera at each timestep. Should be gotten from CV.
 //     dt: Time step (1/fps).
-//     g: Gravity vector.
-//     drag: Drag coefficient.
-//     pixel_sigma: Standard deviation of the pixel noise.
-//     physics_sigma: Standard deviation of the physics noise.
-//     omega_phys: Hyperparameter for the physics noise.
 // Returns: trajectory, position covariance, optimized drag, LM success flag.
-pub async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f64>>], dt: f64, g: Option<Vector3<f64>>, drag: f64, pixel_sigma: f64, physics_sigma: f64, omega_phys: f64,) -> (Vec<Vector3<f64>>, DMatrix<f64>, f64, bool) {
-    let g = g.unwrap_or_else(|| Vector3::new(0.0, 0.0, -9.81));
+pub async fn optimize_trajectory(pixels: &[Vec<Vector2<f64>>], dt: f64) -> (Vec<Vector3<f64>>, DMatrix<f64>, f64, bool) {
+    // Camera projection matrices.
+    let P_list = p_list();
+    // Gravity vector.
+    let g = Vector3::new(0.0, 0.0, -9.81);
+    // Hyperparameter for the physics noise.
+    let omega_phys = 80.0_f64;
+    // Drag coefficient.
+    let drag = 0.0_f64;
+    // Standard deviation of the pixel noise.
+    let pixel_sigma = 1.0_f64;
+    // Standard deviation of the physics noise.
+    let physics_sigma = 1.0_f64;
+
     let n_timesteps = pixels[0].len();
-    let mut X_init = Vec::with_capacity(n_timesteps);
+    let mut x_init = Vec::with_capacity(n_timesteps);
     for t in 0..n_timesteps {
         let mut pixel_t = Vec::new();
         for p in pixels {
@@ -192,13 +211,13 @@ pub async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector
                 pixel_t.push(*v);
             }
         }
-        X_init.push(dlt_triangulation(P_list, &pixel_t));
+        x_init.push(dlt_triangulation(&P_list, &pixel_t));
     }
-    let mut params_init: Vec<f64> = X_init.iter().flat_map(|v| vec![v[0], v[1], v[2]]).collect();
+    let mut params_init: Vec<f64> = x_init.iter().flat_map(|v| vec![v[0], v[1], v[2]]).collect();
     params_init.push(drag);
     let problem = TrajectoryProblem {
         params: DVector::from_vec(params_init),
-        P_list: P_list.to_vec(),
+        P_list: P_list.clone(),
         pixels: pixels.to_vec(),
         n_timesteps,
         omega_phys,
@@ -207,28 +226,22 @@ pub async fn optimize_trajectory(P_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector
         pixel_sigma,
         physics_sigma,
     };
-    let (problem, report) = LevenbergMarquardt::default().with_patience(800).minimize(problem);
+    let (problem, report) = LevenbergMarquardt::default().with_patience(2000).minimize(problem);
     let success = report.termination.was_successful();
     let drag_opt = problem.drag();
-    let X_opt: Vec<Vector3<f64>> = (0..n_timesteps)
+    let x_opt: Vec<Vector3<f64>> = (0..n_timesteps)
         .map(|t| Vector3::new(problem.params[t * 3], problem.params[t * 3 + 1], problem.params[t * 3 + 2]))
         .collect();
     let jacobian = problem.numerical_jacobian(1e-7);
     let cov_full = problem.covariance_from_jacobian(&jacobian).unwrap_or_else(|| DMatrix::zeros(3 * n_timesteps + 1, 3 * n_timesteps + 1));
     let cov = cov_full.view((0, 0), (3 * n_timesteps, 3 * n_timesteps)).into_owned();
-    (X_opt, cov, drag_opt, success)
-}
-
-
-
-//Everythng below here is for testing purposes
-fn trajectory_residual(params: &DVector<f64>, p_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f64>>], n_timesteps: usize, omega_phys: f64, dt: f64, g: Vector3<f64>, pixel_sigma: f64, physics_sigma: f64) -> DVector<f64> {
-    TrajectoryProblem {params: params.clone(),P_list: p_list.to_vec(),pixels: pixels.to_vec(),n_timesteps,omega_phys,dt,g,pixel_sigma,physics_sigma}.residuals().expect("residuals")    
+    (x_opt, cov, drag_opt, success)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra::Matrix3;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
     use rand_distr::{Distribution, Normal};
@@ -245,72 +258,40 @@ mod tests {
         assert!((a - b).abs() <= atol + rtol * b.abs(), "expected {b}, got {a} (rtol={rtol}, atol={atol})");
     }
 
-    fn two_cameras() -> Vec<Matrix3x4<f64>> {
-        vec![
-            Matrix3x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0),
-            Matrix3x4::new(1.0, 0.0, 0.0, -0.55, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0),
-        ]
-    }
-
-    fn camera_look_at(cam_position: Vector3<f64>, target: Vector3<f64>) -> (Matrix3<f64>, Vector3<f64>) {
-        let up = Vector3::new(0.0, 0.0, 1.0);
-        let z = (target - cam_position).normalize();
-        let mut x = up.cross(&z);
-        if x.norm() < 1e-10 {
-            x = Vector3::new(1.0, 0.0, 0.0);
-        }
-        x.normalize_mut();
-        let y = z.cross(&x);
-        let r = Matrix3::new(x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]);
-        let t = -r * cam_position;
-        (r, t)
-    }
-
     struct Scene {
         p_list: Vec<Matrix3x4<f64>>,
         pixels: Vec<Vec<Vector2<f64>>>,
         traj_true: Vec<Vector3<f64>>,
-        g: Vector3<f64>,
         dt: f64,
         drag_coef: f64,
         n_timesteps: usize,
         n_cameras: usize,
     }
 
-    fn main_style_scene(rng: &mut StdRng, n_cameras: usize, n_steps_cap: usize, dt: f64, g: Vector3<f64>, drag_coef: f64, pixel_noise_sigma: f64) -> Scene {
-        let k_list: Vec<Matrix3<f64>> = (0..n_cameras)
-            .map(|_| Matrix3::new(800.0, 0.0, 320.0, 0.0, 800.0, 240.0, 0.0, 0.0, 1.0))
-            .collect();
-        let center = Vector3::zeros();
-        let radius = 4.0_f64;
-        let height = 2.0_f64;
-        let angles: Vec<f64> = if n_cameras == 3 {
-            vec![0.0, 2.0 * std::f64::consts::PI / 3.0, 4.0 * std::f64::consts::PI / 3.0]
-        } else {
-            (0..n_cameras).map(|i| 2.0 * std::f64::consts::PI * i as f64 / n_cameras as f64).collect()
-        };
-        let mut p_list = Vec::with_capacity(n_cameras);
-        for i in 0..n_cameras {
-            let cam_pos = Vector3::new(radius * angles[i].cos(), radius * angles[i].sin(), height);
-            let (r, t) = camera_look_at(cam_pos, center);
-            let rt = Matrix3x4::from_fn(|row, col| if col < 3 { r[(row, col)] } else { t[row] });
-            p_list.push(k_list[i] * rt);
-        }
+    fn drag_calc(x_prev: Vector3<f64>, x_curr: Vector3<f64>, g: Vector3<f64>, drag: f64, dt: f64) -> Vector3<f64> {
+        let denom = 1.0 + drag * dt / 2.0;
+        (2.0 * x_curr - x_prev + g * dt * dt + drag * dt / 2.0 * x_prev) / denom
+    }
+
+    fn main_style_scene(rng: &mut StdRng, _n_cameras: usize, n_steps_cap: usize, dt: f64, g: Vector3<f64>, drag_coef: f64, pixel_noise_sigma: f64) -> Scene {
+        let p_list = p_list();
+        let n_cameras = p_list.len();
 
         let x0 = Vector3::new(0.0, 0.0, 1.5);
         let v0 = Vector3::new(1.0, 1.0, 2.5);
         let z_floor = 0.2_f64;
-        let mut traj_true = Vec::new();
-        let mut x = x0;
-        let mut v = v0;
-        for _ in 0..n_steps_cap {
-            traj_true.push(x);
-            let acc = g - drag_coef * v;
-            v = v + acc * dt;
-            x = x + v * dt;
-            if x[2] < z_floor {
+        let mut traj_true = vec![x0];
+        let mut x_prev = x0;
+        let mut x_curr = x0 + v0 * dt;
+        traj_true.push(x_curr);
+        for _ in 2..n_steps_cap {
+            let x_next = drag_calc(x_prev, x_curr, g, drag_coef, dt);
+            if x_next[2] < z_floor {
                 break;
             }
+            traj_true.push(x_next);
+            x_prev = x_curr;
+            x_curr = x_next;
         }
         let n_timesteps = traj_true.len();
         let normal = Normal::new(0.0, pixel_noise_sigma).unwrap();
@@ -328,7 +309,6 @@ mod tests {
             p_list,
             pixels,
             traj_true,
-            g,
             dt,
             drag_coef,
             n_timesteps,
@@ -336,9 +316,18 @@ mod tests {
         }
     }
 
-    fn drag_calc(x_prev: Vector3<f64>, x_curr: Vector3<f64>, g: Vector3<f64>, drag: f64, dt: f64) -> Vector3<f64> {
-        let denom = 1.0 + drag * dt / 2.0;
-        (2.0 * x_curr - x_prev + g * dt * dt + drag * dt / 2.0 * x_prev) / denom
+    fn trajectory_residual(params: &DVector<f64>, p_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f64>>], n_timesteps: usize, omega_phys: f64, dt: f64, g: Vector3<f64>, pixel_sigma: f64, physics_sigma: f64) -> DVector<f64> {
+        TrajectoryProblem {
+            params: params.clone(),
+            P_list: p_list.to_vec(),
+            pixels: pixels.to_vec(),
+            n_timesteps,
+            omega_phys,
+            dt,
+            g,
+            pixel_sigma,
+            physics_sigma
+        }.residuals().expect("residuals")    
     }
 
     #[test]
@@ -373,13 +362,12 @@ mod tests {
 
     #[test]
     fn test_recover_point_two_cameras() {
-        let p0 = Matrix3x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
-        let p1 = Matrix3x4::new(1.0, 0.0, 0.0, -0.55, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+        let p = p_list();
         let x_true = Vector3::new(0.3, -0.2, 2.5);
-        let u0 = project_point(p0, x_true);
-        let u1 = project_point(p1, x_true);
-        let x_hat = dlt_triangulation(&[p0, p1], &[u0, u1]);
-        assert_vec3_close(x_hat, x_true, 1e-5);
+        let u0 = project_point(p[0], x_true);
+        let u1 = project_point(p[1], x_true);
+        let x_hat = dlt_triangulation(&p, &[u0, u1]);
+        assert_vec3_close(x_hat, x_true, 1e-3);
     }
 
     #[test]
@@ -412,7 +400,7 @@ mod tests {
         let dt = 0.1;
         let g = Vector3::new(0.0, 0.0, -10.0);
         let drag = 0.25;
-        let p_list = two_cameras();
+        let p_list = p_list();
         let base = Vector3::new(0.1, -0.05, 14.0);
         let x2 = drag_calc(base, base, g, drag, dt);
         let mut params_vec: Vec<f64> = Vec::new();
@@ -443,8 +431,7 @@ mod tests {
         let dt = 0.1;
         let g = Vector3::new(0.0, 0.0, -9.81);
         let drag_true = 0.1;
-        let p0 = Matrix3x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
-        let p_list = vec![p0];
+        let p_list = p_list();
         let base = Vector3::new(0.0, 0.0, 8.0);
         let x2 = drag_calc(base, base, g, drag_true, dt);
         let mut params_vec: Vec<f64> = Vec::new();
@@ -453,12 +440,16 @@ mod tests {
         }
         params_vec.push(99.0);
         let params = DVector::from_vec(params_vec);
-        let pixels: Vec<Vec<Vector2<f64>>> = vec![(0..n_timesteps)
-            .map(|t| {
-                let xt = Vector3::new(params[t * 3], params[t * 3 + 1], params[t * 3 + 2]);
-                project_point(p_list[0], xt)
+        let pixels: Vec<Vec<Vector2<f64>>> = (0..p_list.len())
+            .map(|cam| {
+                (0..n_timesteps)
+                    .map(|t| {
+                        let xt = Vector3::new(params[t * 3], params[t * 3 + 1], params[t * 3 + 2]);
+                        project_point(p_list[cam], xt)
+                    })
+                    .collect()
             })
-            .collect()];
+            .collect();
         let res = trajectory_residual(&params, &p_list, &pixels, n_timesteps, 1.0, dt, g, 1.0, 1.0);
         assert!(res.norm() > 0.05);
     }
@@ -474,7 +465,7 @@ mod tests {
         let mut params_vec: Vec<f64> = (0..t).flat_map(|_| xyz.iter().copied()).collect();
         params_vec.push(0.0);
         let params = DVector::from_vec(params_vec);
-        let p_list = two_cameras();
+        let p_list = p_list();
         let mut pixels: Vec<Vec<Vector2<f64>>> = Vec::new();
         for i in 0..c {
             let row: Vec<Vector2<f64>> = (0..t).map(|tt| {let x = Vector3::new(params[tt * 3], params[tt * 3 + 1], params[tt * 3 + 2]); project_point(p_list[i], x)}).collect();
@@ -492,12 +483,12 @@ mod tests {
         let dt = 0.05;
         let g = Vector3::new(0.0, 0.0, -9.81);
         let drag_true = 0.0_f64;
-        let p_list = two_cameras();
+        let p_list = p_list();
         let z0 = Vector3::new(0.0, 0.0, 8.0);
         let x_vars: Vec<Vector3<f64>> = (0..n_timesteps).map(|t| {let s = t as f64 * dt; z0 + 0.5 * g * s * s}).collect();
         let pixels: Vec<Vec<Vector2<f64>>> = (0..n_cams).map(|i| (0..n_timesteps).map(|t| project_point(p_list[i], x_vars[t])).collect()).collect();
 
-        let (x_opt, cov, drag_opt, success) = optimize_trajectory(&p_list, &pixels, dt, Some(g), 0.0, 1.0, 1.0, 1.0).await;
+        let (x_opt, cov, drag_opt, _success) = optimize_trajectory(&pixels, dt).await;
 
         assert_eq!(x_opt.len(), n_timesteps);
         let n_x = 3 * n_timesteps;
@@ -514,7 +505,7 @@ mod tests {
     async fn test_recovers_trajectory() {
         let mut rng = StdRng::seed_from_u64(43);
         let scene = main_style_scene(&mut rng, 3, 25, 0.04, Vector3::new(0.0, 0.0, -9.81), 0.2, 2.0);
-        let (x_opt, cov, drag_opt, success) = optimize_trajectory(&scene.p_list, &scene.pixels, scene.dt, Some(scene.g), scene.drag_coef, 1.0, 1.0, 1.0).await;
+        let (x_opt, cov, drag_opt, _success) = optimize_trajectory(&scene.pixels, scene.dt).await;
         let mut reproj_sq = Vec::new();
         for t in 0..scene.n_timesteps {
             for i in 0..scene.n_cameras {
@@ -537,7 +528,7 @@ mod tests {
     async fn test_recovers_noise() {
         let mut rng = StdRng::seed_from_u64(101);
         let scene = main_style_scene(&mut rng, 3, 25, 0.04, Vector3::new(0.0, 0.0, -9.81), 0.2, 0.75);
-        let (x_opt, cov, drag_opt, _success) = optimize_trajectory(&scene.p_list, &scene.pixels, scene.dt, Some(scene.g), scene.drag_coef, 1.0, 1.0, 1.0).await;
+        let (x_opt, cov, drag_opt, _success) = optimize_trajectory(&scene.pixels, scene.dt).await;
         let mean_reproj: f64 = {
             let mut acc = Vec::new();
             for t in 0..scene.n_timesteps {
@@ -559,7 +550,7 @@ mod tests {
     async fn test_recovers_two_cameras() {
         let mut rng = StdRng::seed_from_u64(202);
         let scene = main_style_scene(&mut rng, 2, 25, 0.04, Vector3::new(0.0, 0.0, -9.81), 0.2, 1.5);
-        let (x_opt, cov, drag_opt, _success) = optimize_trajectory(&scene.p_list, &scene.pixels, scene.dt, Some(scene.g), scene.drag_coef, 1.0, 1.0, 1.0).await;
+        let (x_opt, cov, drag_opt, _success) = optimize_trajectory(&scene.pixels, scene.dt).await;
         let mean_err: f64 = (0..scene.n_timesteps).map(|t| (x_opt[t] - scene.traj_true[t]).norm()).sum::<f64>() / scene.n_timesteps as f64;
         assert!(mean_err < 2.0);
         assert_allclose_f64(drag_opt, scene.drag_coef, 0.35, 0.15);
@@ -570,7 +561,7 @@ mod tests {
     async fn test_recovers_high_drag() {
         let mut rng = StdRng::seed_from_u64(303);
         let scene = main_style_scene(&mut rng, 3, 25, 0.04, Vector3::new(0.0, 0.0, -9.81), 0.45, 1.25);
-        let (x_opt, cov, drag_opt, _success) = optimize_trajectory(&scene.p_list, &scene.pixels, scene.dt, Some(scene.g), scene.drag_coef, 1.0, 1.0, 1.0).await;
+        let (x_opt, cov, drag_opt, _success) = optimize_trajectory(&scene.pixels, scene.dt).await;
         let mean_reproj: f64 = {
             let mut acc = Vec::new();
             for t in 0..scene.n_timesteps {

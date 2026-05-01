@@ -152,6 +152,7 @@ rust_library(
         "@crates//:clap",
         "@crates//:crossbeam",
         "@crates//:if-addrs",
+        "@crates//:levenberg-marquardt",
         "@crates//:nalgebra",
         "@crates//:opencv",
         "@crates//:rand",
@@ -375,6 +376,7 @@ rust_test(
     crate = ":backend_lib_all_real",
     deps = [
         "@crates//:http-body-util",
+        "@crates//:rand_distr",
         "@crates//:rstest",
         "@crates//:tower",
     ],
