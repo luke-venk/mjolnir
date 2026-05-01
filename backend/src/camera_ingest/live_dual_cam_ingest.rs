@@ -16,13 +16,14 @@ pub fn begin_live_dual_cam_ingest(
     left_cam_id: String,
     right_cam_id: String,
     exposure_time_us: f64,
+    shutdown_rx: Receiver<()>,
 ) -> (Receiver<Frame>, Receiver<Frame>) {
     let _ = initialize_aravis();
 
     let left_cam_ingest_config = CameraIngestConfig {
         camera_id: left_cam_id,
         exposure_time_us,
-        frame_rate_hz: 30.0,
+        frame_rate_hz: 42.5,
         resolution: AtlasATP124SResolution::Full,
         num_buffers: 16,
         timeout_ms: 5000,
@@ -32,7 +33,7 @@ pub fn begin_live_dual_cam_ingest(
     let right_cam_ingest_config = CameraIngestConfig {
         camera_id: right_cam_id,
         exposure_time_us,
-        frame_rate_hz: 30.0,
+        frame_rate_hz: 42.5,
         resolution: AtlasATP124SResolution::Full,
         num_buffers: 16,
         timeout_ms: 5000,
@@ -65,7 +66,8 @@ pub fn begin_live_dual_cam_ingest(
     let acquisition_barrier_1 = acquisition_barrier.clone();
     let acquisition_barrier_2 = acquisition_barrier.clone();
 
-    ctrlc::set_handler(move || {
+    std::thread::spawn(move || {
+        let _ = shutdown_rx.recv();
         println!("\nShutdown signal received, stopping recording...");
         shutdown.store(true, Ordering::SeqCst);
         ptp_enable_barrier.cancel();
@@ -73,8 +75,7 @@ pub fn begin_live_dual_cam_ingest(
         ptp_lock_barrier.cancel();
         configuration_barrier.cancel();
         acquisition_barrier.cancel();
-    })
-    .expect("Error setting Ctrl+C handler.");
+    });
 
     let ptp_config_1 = PtpConfig {
         is_slave: false,
@@ -199,7 +200,8 @@ pub fn run_capture_thread(
         if start_time.elapsed() <= Duration::from_secs_f64(throwaway_duration_s) {
             if countdown_timer.elapsed() >= Duration::from_secs_f64(1.0) {
                 let throwaway_seconds_remaining: Duration =
-                    Duration::from_secs_f64(throwaway_duration_s) - start_time.elapsed();
+                    Duration::from_secs_f64(throwaway_duration_s)
+                        .saturating_sub(start_time.elapsed());
                 println!(
                     "Throwing away frames for {} more seconds...",
                     throwaway_seconds_remaining.as_secs_f64().round()

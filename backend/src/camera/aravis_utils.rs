@@ -111,7 +111,7 @@ fn estimate_global_time_ptp_offset(camera: &Camera) {
         .map(|(_, offset)| offset)
         .collect();
 
-    let avg_offset = offsets.iter().sum::<i64>() / offsets.len() as i64;
+    let avg_offset = (offsets.iter().map(|&x| x as i128).sum::<i128>() / offsets.len() as i128) as i64;
     global_time().set_approximate_additive_ptp_offset_from_wall_clock_nanoseconds(Some(avg_offset));
 }
 

@@ -2,6 +2,7 @@
 use super::infraction_byte_decoder;
 #[cfg(feature = "real_circle_sensors")]
 use super::infraction_byte_decoder::InfractionState;
+#[cfg(feature = "real_circle_sensors")]
 use crate::timing::global_time;
 use crossbeam::channel::{bounded, Receiver, TrySendError};
 #[cfg(feature = "real_circle_sensors")]
