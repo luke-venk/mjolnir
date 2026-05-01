@@ -89,7 +89,7 @@ fn read_ptp_time_ns(camera: &Camera) -> u64 {
 /// Estimates the round trip time and offset
 /// Removes outliers
 /// And sets the PTP offset in global time to the average of the offsets after outliers are removed.
-/// 'Outlier' is classified as any sample with a rount-trip time >3x the minimum one
+/// 'Outlier' is classified as any sample with a round-trip time (RTT) >3x the minimum one
 /// Since it is hard to get good camera time if IO/OS/network jitter fucked our RTT
 fn estimate_global_time_ptp_offset(camera: &Camera) {
     let mut samples = Vec::with_capacity(50);
