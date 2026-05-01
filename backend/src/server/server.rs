@@ -115,16 +115,27 @@ pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleIn
     Router::new().nest("/api", http_routes).with_state(state)
 }
 
-pub async fn start_server(app: Router, addr: &str) {
+pub async fn start_server(app: Router, addr: &str, shutdown_rx: Option<Receiver<()>>) {
     // Listener.
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("Failed to bind TCP listener.");
 
-    // Start the server.
-    axum::serve(listener, app)
-        .await
-        .expect("Failed to start server.");
+    match shutdown_rx {
+        Some(rx) => {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    tokio::task::spawn_blocking(move || rx.recv()).await.ok();
+                })
+                .await
+                .expect("failed to serve app");
+        },
+        None => {
+            axum::serve(listener, app)
+                .await
+                .expect("failed to serve app");
+        },
+    };
 }
 
 #[cfg(test)]
