@@ -1,7 +1,8 @@
-// Forward downsampled copy is the 3rd computer vision stage in the pipeline.
+// Forward downsampled copy is the 2nd computer vision stage in the pipeline.
 // In general, this means reducing an image's resolution, taking our 4k image
 // and shrinking it to a smaller one. This also would entail converting our
 // frames from color to grayscale, but our cameras are already monochrome.
+#![allow(unused_imports)]
 use crate::pipeline::Frame;
 use opencv::core::{Mat, Size};
 use opencv::imgproc::{resize, INTER_LINEAR};
@@ -29,8 +30,6 @@ pub fn forward_downsampled_copy(frame: Frame) -> Frame {
     }
 
     // Set the downsampled image to the result and return the frame.
-    // Note: I know that we are throwing away the result but idk if I should
-    // handle this now or not.
     frame
         .set_downsampled_image(output_mat)
         .expect("Error: Failed to set DownsampledImage Mat.");

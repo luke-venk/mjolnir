@@ -1504,6 +1504,7 @@ cmake(
         "WITH_ITT": "OFF",
         "WITH_OPENCL": "OFF",
         "WITH_CAROTENE": "OFF",
+        "WITH_LAPACK": "OFF",
         # Enable only the core modules
         "BUILD_opencv_core": "ON",
         "BUILD_opencv_imgproc": "ON",

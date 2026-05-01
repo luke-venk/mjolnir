@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+#[allow(dead_code)]
 fn unsafe_read_camera_integer(camera: &Camera, node_name: &str) -> i64 {
     unsafe {
         let mut error: *mut glib::ffi::GError = ptr::null_mut();
@@ -32,6 +33,7 @@ fn unsafe_read_camera_integer(camera: &Camera, node_name: &str) -> i64 {
     }
 }
 
+#[allow(dead_code)]
 fn read_ptp_time_ns(camera: &Camera) -> u64 {
     camera
         .execute_command("PtpDataSetLatch")
