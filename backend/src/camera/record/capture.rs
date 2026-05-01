@@ -6,38 +6,11 @@ use crate::camera::aravis_utils::{
 use crate::camera::CameraIngestConfig;
 use crate::camera::{BarrierResult, CancelableBarrier};
 use crate::computer_vision::mog2::MOG2_HISTORY_FRAMES;
-use aravis::{BufferStatus, Camera, CameraExt, StreamExt};
-use aravis_sys::arv_camera_get_integer;
-use glib::translate::*; // To convert high-level types to raw pointers
-use std::ffi::CString;
+use aravis::{BufferStatus, CameraExt, StreamExt};
 use std::path::PathBuf;
-use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-fn unsafe_read_camera_integer(camera: &Camera, node_name: &str) -> i64 {
-    unsafe {
-        let mut error: *mut glib::ffi::GError = ptr::null_mut();
-        let camera_ptr: *mut aravis_sys::ArvCamera = camera.to_glib_none().0;
-        let feature_c_str = CString::new(node_name).unwrap();
-        let raw_res = arv_camera_get_integer(camera_ptr, feature_c_str.as_ptr(), &mut error);
-        if !error.is_null() {
-            panic!(
-                "Error calling arv_camera_get_integer for node: {}",
-                node_name
-            );
-        }
-        raw_res
-    }
-}
-
-fn read_ptp_time_ns(camera: &Camera) -> u64 {
-    camera
-        .execute_command("PtpDataSetLatch")
-        .expect("Failed to latch PTP dataset.");
-    unsafe_read_camera_integer(camera, "PtpDataSetLatchValue") as u64
-}
 
 /// Records stream from a single camera.
 pub fn run_capture_thread(
