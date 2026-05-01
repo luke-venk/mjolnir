@@ -14,7 +14,6 @@ use axum::{
 use crate::timing::global_time;
 use crossbeam::channel::Receiver;
 use serde_json::json;
-use std::path::PathBuf;
 
 // Informs us that server is up and running.
 async fn health_check() -> impl IntoResponse {
@@ -86,10 +85,9 @@ async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisR
 pub fn create_api_router(
     throw_source: ThrowSource,
     circle_rx: Receiver<CircleInfractionDetectionState>,
-    frames_dir: Option<PathBuf>,
 ) -> Router {
     // Thread-safe shared app state for current throw event.
-    let state = AppState::new(throw_source, frames_dir);
+    let state = AppState::new(throw_source);
     let state_clone = state.clone();
     tokio::spawn(async move {
         loop {
@@ -115,7 +113,7 @@ pub fn create_api_router(
         .route("/health", get(health_check))
         .route("/throw-type", post(post_throw_type).get(get_throw_type))
         .route("/analyze-throw", get(get_throw_results))
-        .route("/frames/{*path}", get(get_frame));
+        .route("/frames/{camera}", get(get_frame));
 
     // Nest the routes behind the "/api" prefix so no naming collisions
     // with frontend requests.
@@ -144,7 +142,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_check() {
         let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx, None);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .uri("/api/health")
@@ -165,7 +163,7 @@ mod tests {
     #[tokio::test]
     async fn test_default_throw_type_is_shotput() {
         let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx, None);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .uri("/api/throw-type")
@@ -182,7 +180,7 @@ mod tests {
     #[tokio::test]
     async fn test_valid_throw_type_post_and_get() {
         let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx, None);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let post_request = Request::builder()
             .method("POST")
@@ -208,7 +206,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_throw_type_post() {
         let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx, None);
+        let app: Router = create_api_router(ThrowSource::Simulated, rx);
 
         let request = Request::builder()
             .method("POST")
@@ -221,12 +219,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_frames_route_returns_404_when_no_frames_dir() {
+    async fn test_frames_route_returns_404_when_slot_is_empty() {
         let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router = create_api_router(ThrowSource::Simulated, rx, None);
+        let app: Router = create_api_router(ThrowSource::Camera, rx);
 
         let request = Request::builder()
-            .uri("/api/frames/anything.tiff")
+            .uri("/api/frames/left")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
@@ -234,38 +232,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_frames_route_serves_recorded_tiff_as_png() {
-        use std::env;
-        use std::fs::{self, File};
-        use std::io::BufWriter;
-        use std::time::{SystemTime, UNIX_EPOCH};
-        use tiff::encoder::{colortype, TiffEncoder};
-
-        let frames_dir = env::temp_dir().join(format!(
-            "mjolnir_server_frames_{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&frames_dir).unwrap();
-        let tiff_path = frames_dir.join("frame_0001.tiff");
-        {
-            let file = File::create(&tiff_path).unwrap();
-            let mut writer = BufWriter::new(file);
-            let mut encoder = TiffEncoder::new(&mut writer).unwrap();
-            let pixels = vec![0x42u8; 16];
-            encoder
-                .write_image::<colortype::Gray8>(4, 4, &pixels)
-                .unwrap();
-        }
-
+    async fn test_frames_route_returns_404_for_unknown_camera() {
         let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router =
-            create_api_router(ThrowSource::Camera, rx, Some(frames_dir.clone()));
+        let app: Router = create_api_router(ThrowSource::Camera, rx);
 
         let request = Request::builder()
-            .uri("/api/frames/frame_0001.tiff")
+            .uri("/api/frames/middle")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_frames_route_serves_published_impact_frame_as_png() {
+        use crate::pipeline::CameraId;
+
+        // Build the app inline so the test can publish an impact frame
+        // into AppState before issuing the request.
+        let state = AppState::new(ThrowSource::Camera);
+        state
+            .set_impact_frame(CameraId::FieldLeft, (vec![0x42u8; 16], (4, 4)))
+            .await;
+
+        let http_routes = Router::new()
+            .route("/health", get(health_check))
+            .route("/throw-type", post(post_throw_type).get(get_throw_type))
+            .route("/analyze-throw", get(get_throw_results))
+            .route("/frames/{camera}", get(get_frame));
+        let app: Router = Router::new().nest("/api", http_routes).with_state(state);
+
+        let request = Request::builder()
+            .uri("/api/frames/left")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
@@ -281,36 +279,5 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         // PNG files start with the magic bytes 89 50 4E 47 0D 0A 1A 0A.
         assert_eq!(&body[..8], &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-
-        let _ = fs::remove_dir_all(frames_dir);
-    }
-
-    #[tokio::test]
-    async fn test_frames_route_blocks_path_traversal() {
-        use std::env;
-        use std::fs;
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let frames_dir = env::temp_dir().join(format!(
-            "mjolnir_server_frames_traversal_{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&frames_dir).unwrap();
-
-        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
-        let app: Router =
-            create_api_router(ThrowSource::Camera, rx, Some(frames_dir.clone()));
-
-        let request = Request::builder()
-            .uri("/api/frames/../../etc/hosts")
-            .body(Body::empty())
-            .unwrap();
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-        let _ = fs::remove_dir_all(frames_dir);
     }
 }
