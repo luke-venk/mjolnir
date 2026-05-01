@@ -84,7 +84,4 @@ pub struct RecordWithBothCamerasArgs {
     // Common record args.
     #[command(flatten)]
     pub common_args: CommonRecordArgs,
-
-    #[arg(long = "interface", required = true)]
-    pub interface: String,
 }
