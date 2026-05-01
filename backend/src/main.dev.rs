@@ -1,20 +1,14 @@
 use axum::{Router, http::Method};
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
-use backend_lib::aggregator::{AggregationCommand, AggregationCoordinator};
+use backend_lib::aggregator::{
+    AggregationCommand, AggregationCoordinator, MatchedFramePairAggregator, OptimizeTrajectoryInput,
+};
 #[cfg(feature = "real_cameras")]
 use backend_lib::camera::parse_real_backend_args;
 #[cfg(feature = "real_cameras")]
-use backend_lib::aggregator::MatchedFramePairAggregator;
-#[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::{CameraId, Pipeline};
+use backend_lib::pipeline::{Frame, MatchedFramePair, Pipeline};
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
-#[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::{Frame, MatchedFramePair};
-#[cfg(feature = "real_cameras")]
-use backend_lib::aggregator::OptimizeTrajectoryInput;
-#[cfg(feature = "real_cameras")]
-use clap::Parser;
 use tower_http::cors::{Any, CorsLayer};
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
@@ -56,7 +50,7 @@ async fn main() {
 
     // Start the 2 computer vision pipelines (one for each camera).
     let rolling_buffer_size: usize = 10;
-    let expected_frame_interval_ns = (1_000_000_000.0 / args.frame_rate_hz) as u64;
+    let expected_frame_interval_ns = (1_000_000_000.0 / 30.0) as u64;
     let (frame_output_tx, frame_output_rx) =
         crossbeam::channel::bounded::<Frame>(rolling_buffer_size);
     let (matched_pair_tx, matched_pair_rx) =
@@ -79,22 +73,20 @@ async fn main() {
         250,
     );
 
-    let _ = Pipeline::new(
-        CameraId::FieldLeft,
-        args.left_camera_id,
-        rolling_buffer_size,
-        frame_output_tx.clone(),
-    );
-    let _ = Pipeline::new(
-        CameraId::FieldRight,
-        args.right_camera_id,
-        rolling_buffer_size,
-        frame_output_tx,
-    );
+    let (left_tx, left_rx) = crossbeam::channel::bounded::<Frame>(rolling_buffer_size);
+    let (right_tx, right_rx) = crossbeam::channel::bounded::<Frame>(rolling_buffer_size);
+    let footage_dir = args.feed_footage_dir;
+    let _replay_handle = std::thread::spawn(move || {
+        backend_lib::camera_ingest::replay_recorded_session(footage_dir, left_tx, right_tx);
+    });
+    let _left_pipeline = Pipeline::from_receiver(left_rx, rolling_buffer_size, frame_output_tx.clone());
+    let _right_pipeline = Pipeline::from_receiver(right_rx, rolling_buffer_size, frame_output_tx);
 
     // Build the Axum router.
     let app = create_dev_app(ThrowSource::Camera);
 
     // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
+
+    // TODO(#7): Implement Clean Shutdown.
 }

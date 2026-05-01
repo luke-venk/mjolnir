@@ -1,11 +1,9 @@
 use backend_lib::camera::aravis_utils::{initialize_aravis, PtpConfig};
 use backend_lib::camera::discovery::get_camera_ids;
-use backend_lib::camera::ip_identifier::resolve_iface_to_ip;
 use backend_lib::camera::record::run_capture_thread;
 use backend_lib::camera::record::writer::{ensure_dir, write_to_disk, Frame};
 use backend_lib::camera::{CameraIngestConfig, CancelableBarrier, RecordWithBothCamerasArgs};
 use clap::Parser;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -25,10 +23,6 @@ pub fn main() {
     args.common_args
         .validate()
         .unwrap_or_else(|err| panic!("{err}"));
-    let ip = resolve_iface_to_ip(args.interface.as_str()).unwrap_or_else(|e| {
-        panic!("failed to resolve interface: {:?} (pretty: {})", e, e);
-    });
-    let addr = SocketAddr::new(ip, 0);
 
     // Create output directory based on command-line argument, with timestamp
     // so each recording session is stored in its own directory.
@@ -123,11 +117,6 @@ pub fn main() {
 
     // Spawn 1st recording thread.
     let record_handle_1 = thread::spawn(move || {
-        let ptp_config = if args.common_args.enable_ptp {
-            Some(ptp_config_1)
-        } else {
-            None
-        };
         run_capture_thread(
             output_base_dir,
             &camera_ingest_config1,
@@ -136,20 +125,14 @@ pub fn main() {
             args.common_args.max_duration_s,
             args.common_args.throwaway_duration_s,
             Arc::clone(&shutdown_clone1),
-            Some(addr),
             Some(configuration_barrier_1),
             Some(acquisition_barrier_1),
-            ptp_config,
+            Some(ptp_config_1),
         );
     });
 
     // Spawn 2nd recording thread.
     let record_handle_2 = thread::spawn(move || {
-        let ptp_config = if args.common_args.enable_ptp {
-            Some(ptp_config_2)
-        } else {
-            None
-        };
         run_capture_thread(
             output_base_dir_clone,
             &camera_ingest_config2,
@@ -158,10 +141,9 @@ pub fn main() {
             args.common_args.max_duration_s,
             args.common_args.throwaway_duration_s,
             Arc::clone(&shutdown_clone2),
-            None,
             Some(configuration_barrier_2),
             Some(acquisition_barrier_2),
-            ptp_config,
+            Some(ptp_config_2),
         );
     });
 

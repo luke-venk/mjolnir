@@ -1,17 +1,14 @@
 use clap::Parser;
+use std::path::PathBuf;
 
-/// Command line arguments for running the real-camera CV backend pipelines.
+/// CLI arguments for the real backend binary when running against recorded footage.
 #[derive(Parser, Debug, Clone)]
 #[command(name = "real_backend_args")]
-#[command(about = "Runs the real-camera CV backend pipelines with explicit left/right camera names.")]
+#[command(about = "Runs the real backend against a recorded footage session.")]
 pub struct RealBackendArgs {
-    /// Camera identifier for the left-field camera pipeline.
-    #[arg(long = "left-camera", required = true)]
-    pub left_camera_id: String,
-
-    /// Camera identifier for the right-field camera pipeline.
-    #[arg(long = "right-camera", required = true)]
-    pub right_camera_id: String,
+    /// Replay a session directory containing `left_cam/` and `right_cam/` subdirectories.
+    #[arg(long = "feed-footage-dir", required = true)]
+    pub feed_footage_dir: PathBuf,
 }
 
 pub fn parse_real_backend_args() -> RealBackendArgs {

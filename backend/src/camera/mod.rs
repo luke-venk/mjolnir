@@ -5,7 +5,6 @@ pub mod cli_record;
 pub mod cli_stream;
 pub mod config;
 pub mod discovery;
-pub mod ip_identifier;
 pub mod record;
 
 pub use cancelable_barrier::*;
