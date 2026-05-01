@@ -1,9 +1,10 @@
 use super::{BarrierResult, CancelableBarrier};
 use crate::camera::CameraIngestConfig;
+use crate::timing::global_time;
 use aravis::glib::translate::ToGlibPtr;
 use aravis::prelude::*;
 use aravis::{Aravis, Buffer, Camera, Stream};
-use aravis_sys::arv_camera_get_string;
+use aravis_sys::{arv_camera_get_string, arv_camera_get_integer};
 use glib::translate::*; // To convert high-level types to raw pointers
 use std::ffi::CString;
 use std::ptr;
@@ -58,6 +59,60 @@ fn unsafe_read_camera_boolean(camera: &Camera, node_name: &str) -> bool {
         }
         raw_res != 0
     }
+}
+
+fn unsafe_read_camera_integer(camera: &Camera, node_name: &str) -> i64 {
+    unsafe {
+        let mut error: *mut glib::ffi::GError = ptr::null_mut();
+        let camera_ptr: *mut aravis_sys::ArvCamera = camera.to_glib_none().0;
+        let feature_c_str = CString::new(node_name).unwrap();
+        let raw_res = arv_camera_get_integer(camera_ptr, feature_c_str.as_ptr(), &mut error);
+        if !error.is_null() {
+            panic!(
+                "Error calling arv_camera_get_integer for node: {}",
+                node_name
+            );
+        }
+        raw_res
+    }
+}
+
+fn read_ptp_time_ns(camera: &Camera) -> u64 {
+    camera
+        .execute_command("PtpDataSetLatch")
+        .expect("Failed to latch PTP dataset.");
+    unsafe_read_camera_integer(camera, "PtpDataSetLatchValue") as u64
+}
+
+/// This mutates the global time to include a PTP offset
+/// It makes 50 'what PTP time is it' calls to the camera
+/// Estimates the round trip time and offset
+/// Removes outliers
+/// And sets the PTP offset in global time to the average of the offsets after outliers are removed.
+/// 'Outlier' is classified as any sample with a rount-trip time >3x the minimum one
+/// Since it is hard to get good camera time if IO/OS/network jitter fucked our RTT
+fn estimate_global_time_ptp_offset(camera: &Camera) {
+    let mut samples = Vec::with_capacity(50);
+
+    for _ in 0..50 {
+        let gt = global_time();
+        let before = gt.now_monotonic_in_nanoseconds_since_unix_epoch();
+        let camera_time = read_ptp_time_ns(camera);
+        let after = gt.now_monotonic_in_nanoseconds_since_unix_epoch();
+        let round_trip = after - before;
+        let local_midpoint = before + round_trip / 2;
+        samples.push((round_trip, camera_time as i64 - local_midpoint as i64));
+    }
+
+    let min_round_trip = samples.iter().map(|(rt, _)| *rt).min().unwrap();
+    let offsets: Vec<i64> = samples
+        .into_iter()
+        .filter(|(rt, _)| *rt < min_round_trip * 3)
+        .map(|(_, offset)| offset)
+        .collect();
+
+    let avg_offset = offsets.iter().sum::<i64>() / offsets.len() as i64;
+    global_time().set_approximate_additive_ptp_offset_from_wall_clock_nanoseconds(Some(avg_offset));
 }
 
 pub struct PtpConfig {
@@ -137,6 +192,11 @@ pub fn configure_camera(
             .set_binning(config.resolution.binning(), config.resolution.binning())
             .expect("Error: Failed to set binning for camera.");
     }
+
+    // Pixel format.
+    camera
+        .set_pixel_format(aravis::PixelFormat::MONO_8)
+        .expect("Failed to set the pixel format in camera configuration.");
 
     // PTP enabling.
     // https://support.thinklucid.com/app-note-multi-camera-synchronization-using-ptp-and-scheduled-action-commands/
@@ -249,16 +309,15 @@ pub fn configure_camera(
         if consecutive_successes < 10 {
             panic!("Camera {} failed to establish PTP lock", config.camera_id);
         }
+        if !ptp_config.is_slave {
+            println!("Finding global time to camera PTP time offset...");
+            estimate_global_time_ptp_offset(camera);
+            println!("PTP offset calculated!");
+        }
         if ptp_config.lock_barrier.wait() == BarrierResult::Canceled {
             return;
         }
-
     }
-
-    // Pixel format.
-    camera
-        .set_pixel_format(aravis::PixelFormat::MONO_8)
-        .expect("Failed to set the pixel format in camera configuration.");
 }
 
 /// Creates Aravis camera stream and allocates frame buffers.
