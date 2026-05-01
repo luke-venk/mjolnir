@@ -1,4 +1,4 @@
-use crate::pipeline::Frame;
+use crate::pipeline::{Frame, PipelineStageOptions};
 use opencv::core::{self, CV_32F, Mat, Point, Point2f, Scalar, Vector};
 use opencv::imgproc;
 use opencv::prelude::*;
@@ -67,8 +67,8 @@ impl ContourTracker {
         }
     }
 
-    pub fn process_frame(&mut self, mut frame: Frame) -> Frame {
-        let Some(mask) = frame.downsampled_image() else {
+    pub fn process_frame(&mut self, mut frame: Frame, _options: PipelineStageOptions) -> Frame {
+        let Some(mask) = frame.mog2_image() else {
             self.mark_missed();
             frame.context_mut().set_detected(Some(false));
             frame.context_mut().set_centroid(None);
@@ -92,6 +92,9 @@ impl ContourTracker {
             }
         }
 
+        frame
+            .clear_mog2_image()
+            .expect("failed to clear MOG2 image after contour detection");
         frame
     }
 
@@ -349,7 +352,11 @@ thread_local! {
 }
 
 pub fn contour(frame: Frame) -> Frame {
-    CONTOUR_TRACKER.with(|tracker| tracker.borrow_mut().process_frame(frame))
+    contour_with_options(frame, PipelineStageOptions::default())
+}
+
+pub fn contour_with_options(frame: Frame, options: PipelineStageOptions) -> Frame {
+    CONTOUR_TRACKER.with(|tracker| tracker.borrow_mut().process_frame(frame, options))
 }
 
 fn make_kalman() -> opencv::Result<KalmanFilter> {
@@ -485,7 +492,7 @@ mod tests {
     use opencv::core::{Mat, Scalar};
     use rstest::rstest;
 
-    fn blank_downsampled_frame() -> Frame {
+    fn blank_mog2_frame() -> Frame {
         let frame = generate_frame(
             0,
             6969,
@@ -495,16 +502,16 @@ mod tests {
 
         let mask = Mat::new_rows_cols_with_default(540, 960, opencv::core::CV_8U, Scalar::all(0.0))
             .expect("failed to create blank mask");
-        frame.clear_downsampled_image().unwrap();
-        frame.set_downsampled_image(mask).unwrap();
+        frame.clear_mog2_image().unwrap();
+        frame.set_mog2_image(mask).unwrap();
         frame
     }
 
     #[rstest]
     fn test_contour_tracker_sets_false_and_none_when_no_candidate() {
-        let frame = blank_downsampled_frame();
+        let frame = blank_mog2_frame();
         let mut tracker = ContourTracker::new();
-        let output = tracker.process_frame(frame);
+        let output = tracker.process_frame(frame, PipelineStageOptions::default());
 
         assert_eq!(output.context().detected(), Some(false));
         assert_eq!(output.context().centroid(), None);
@@ -512,8 +519,8 @@ mod tests {
 
     #[rstest]
     fn test_contour_tracker_sets_true_and_centroid_for_valid_circle() {
-        let frame = blank_downsampled_frame();
-        let mut mask = frame.downsampled_image().unwrap();
+        let frame = blank_mog2_frame();
+        let mut mask = frame.mog2_image().unwrap();
 
         imgproc::circle(
             &mut mask,
@@ -526,11 +533,11 @@ mod tests {
         )
         .unwrap();
 
-        frame.clear_downsampled_image().unwrap();
-        frame.set_downsampled_image(mask).unwrap();
+        frame.clear_mog2_image().unwrap();
+        frame.set_mog2_image(mask).unwrap();
 
         let mut tracker = ContourTracker::new();
-        let output = tracker.process_frame(frame);
+        let output = tracker.process_frame(frame, PipelineStageOptions::default());
 
         assert_eq!(output.context().detected(), Some(true));
         let (cx, cy) = output.context().centroid().expect("expected centroid");
@@ -540,8 +547,8 @@ mod tests {
 
     #[rstest]
     fn test_contour_tracker_rejects_large_blob() {
-        let frame = blank_downsampled_frame();
-        let mut mask = frame.downsampled_image().unwrap();
+        let frame = blank_mog2_frame();
+        let mut mask = frame.mog2_image().unwrap();
 
         imgproc::circle(
             &mut mask,
@@ -554,11 +561,11 @@ mod tests {
         )
         .unwrap();
 
-        frame.clear_downsampled_image().unwrap();
-        frame.set_downsampled_image(mask).unwrap();
+        frame.clear_mog2_image().unwrap();
+        frame.set_mog2_image(mask).unwrap();
 
         let mut tracker = ContourTracker::new();
-        let output = tracker.process_frame(frame);
+        let output = tracker.process_frame(frame, PipelineStageOptions::default());
         assert_eq!(output.context().detected(), Some(false));
         assert_eq!(output.context().centroid(), None);
     }

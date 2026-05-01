@@ -44,6 +44,9 @@ pub fn generate_frame(
     if stage_to_prep_for > ComputerVisionStage::ForwardDownsampledCopy {
         frame.set_downsampled_image(mat.clone()).unwrap();
     }
+    if stage_to_prep_for > ComputerVisionStage::Mog2 {
+        frame.set_mog2_image(mat.clone()).unwrap();
+    }
 
     frame
 }

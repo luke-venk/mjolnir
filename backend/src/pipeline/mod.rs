@@ -7,5 +7,5 @@ pub mod test_utils;
 
 pub use frame::{CameraId, Context, Frame};
 pub use matched_frame_pair::MatchedFramePair;
-pub use pipeline::Pipeline;
+pub use pipeline::{Pipeline, PipelineStageOptions};
 pub use pipeline_stage::PipelineStage;

@@ -36,6 +36,9 @@ pub struct Frame {
     /// The frame after downsampling is applied, before Mog2 is applied.
     downsampled_image: RwLock<Option<Mat>>,
 
+    /// The frame after MOG2 is applied, before contour detection is applied.
+    mog2_image: RwLock<Option<Mat>>,
+
     /// Frame metadata like timestamps.
     context: Context,
 }
@@ -47,6 +50,7 @@ impl Frame {
             raw_full_resolution: resolution,
             undistorted_image: RwLock::new(None),
             downsampled_image: RwLock::new(None),
+            mog2_image: RwLock::new(None),
             context,
         }
     }
@@ -115,6 +119,31 @@ impl Frame {
             .downsampled_image
             .write()
             .map_err(|_| "Downsampled image lock poisoned.".to_string())?;
+        *guard = None;
+        Ok(())
+    }
+
+    pub fn mog2_image(&self) -> Option<Mat> {
+        self.mog2_image.read().ok().and_then(|guard| guard.clone())
+    }
+
+    pub fn set_mog2_image(&self, mat: Mat) -> Result<(), String> {
+        let mut guard = self
+            .mog2_image
+            .write()
+            .map_err(|_| "MOG2 image lock poisoned.".to_string())?;
+        if guard.is_some() {
+            return Err("MOG2 image already set.".to_string());
+        }
+        *guard = Some(mat);
+        Ok(())
+    }
+
+    pub fn clear_mog2_image(&self) -> Result<(), String> {
+        let mut guard = self
+            .mog2_image
+            .write()
+            .map_err(|_| "MOG2 image lock poisoned.".to_string())?;
         *guard = None;
         Ok(())
     }

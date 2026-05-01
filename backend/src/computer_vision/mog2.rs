@@ -1,4 +1,4 @@
-use crate::pipeline::Frame;
+use crate::pipeline::{Frame, PipelineStageOptions};
 use opencv::core::{Mat, Point, Scalar, Size, BORDER_CONSTANT};
 use opencv::imgproc::{self, MORPH_CLOSE, MORPH_ELLIPSE, MORPH_OPEN, THRESH_BINARY};
 use opencv::prelude::*;
@@ -49,8 +49,14 @@ impl Mog2Processor {
         }
     }
 
-    fn process_frame(&mut self, frame: Frame) -> Frame {
-        let Some(gray) = frame.downsampled_image() else {
+    fn process_frame(&mut self, frame: Frame, options: PipelineStageOptions) -> Frame {
+        let input_image = if options.rerun_4k_mode {
+            frame.undistorted_image()
+        } else {
+            frame.downsampled_image()
+        };
+
+        let Some(gray) = input_image else {
             return frame;
         };
 
@@ -108,14 +114,13 @@ impl Mog2Processor {
             return frame;
         }
 
-        // Replace the downsampled image with the cleaned binary mask.
-        // The contour stage reads downsampled_image as its input mask.
+        // Store the cleaned binary mask as a dedicated MOG2 stage output.
         frame
-            .clear_downsampled_image()
-            .expect("failed to clear downsampled image before writing mog2 output");
+            .clear_mog2_image()
+            .expect("failed to clear MOG2 image before writing MOG2 output");
         frame
-            .set_downsampled_image(mask_clean)
-            .expect("failed to set mog2 cleaned mask as downsampled image");
+            .set_mog2_image(mask_clean)
+            .expect("failed to set cleaned mask as MOG2 image");
         frame
     }
 }
@@ -125,5 +130,9 @@ thread_local! {
 }
 
 pub fn mog2(frame: Frame) -> Frame {
-    MOG2_PROCESSOR.with(|processor| processor.borrow_mut().process_frame(frame))
+    mog2_with_options(frame, PipelineStageOptions::default())
+}
+
+pub fn mog2_with_options(frame: Frame, options: PipelineStageOptions) -> Frame {
+    MOG2_PROCESSOR.with(|processor| processor.borrow_mut().process_frame(frame, options))
 }

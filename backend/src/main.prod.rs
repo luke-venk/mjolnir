@@ -8,7 +8,7 @@ use backend_lib::camera::parse_real_backend_args;
 #[cfg(feature = "real_cameras")]
 use backend_lib::aggregator::MatchedFramePairAggregator;
 #[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::{CameraId, Pipeline};
+use backend_lib::pipeline::{CameraId, Pipeline, PipelineStageOptions};
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{Frame, MatchedFramePair};
@@ -88,12 +88,14 @@ async fn main() {
         args.left_camera_id,
         rolling_buffer_size,
         frame_output_tx.clone(),
+        PipelineStageOptions::default(),
     );
     let _ = Pipeline::new(
         CameraId::FieldRight,
         args.right_camera_id,
         rolling_buffer_size,
         frame_output_tx,
+        PipelineStageOptions::default(),
     );
 
     // Build the Axum router.
