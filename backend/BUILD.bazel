@@ -225,6 +225,7 @@ rust_binary(
     deps = [
         ":backend_lib_real_cameras",
         "@crates//:axum",
+        "@crates//:crossbeam",
         "@crates//:tokio",
         "@crates//:tower-http",
     ],
@@ -248,6 +249,7 @@ rust_binary(
     deps = [
         ":backend_lib_all_real",
         "@crates//:axum",
+        "@crates//:crossbeam",
         "@crates//:tokio",
         "@crates//:tower-http",
     ],
@@ -308,6 +310,7 @@ rust_binary(
         ":backend_lib_real_cameras",
         "@crates//:axum",
         "@crates//:axum-embed",
+        "@crates//:crossbeam",
         "@crates//:rust-embed",
         "@crates//:tokio",
     ],
@@ -367,6 +370,7 @@ rust_binary(
         ":backend_lib_all_real",
         "@crates//:axum",
         "@crates//:axum-embed",
+        "@crates//:crossbeam",
         "@crates//:rust-embed",
         "@crates//:tokio",
     ],

@@ -15,8 +15,8 @@ pub enum ComputerVisionStage {
 ///
 /// `stage_to_prep_for` is used to populate the matrices up to that stage, since
 /// the stages before the stage need to populate the matrices before, but the
-/// current stage needs to have an empty `Mat` since `OnceLock` only lets populating
-/// one time.
+/// current stage needs to have an empty `Mat` since the stage-output slots are
+/// intended to be set once during forward processing.
 pub fn generate_frame(
     value: u8,
     timestamp: u64,

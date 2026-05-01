@@ -1,26 +1,23 @@
 use axum::{Router, http::Method};
-#[cfg(feature = "real_cameras")]
-use backend_lib::camera::parse_real_backend_args;
 use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::start_recorded_footage_pipelines;
+use backend_lib::aggregator::{
+    AggregationCommand, AggregationCoordinator, MatchedFramePairAggregator, OptimizeTrajectoryInput,
+};
+#[cfg(feature = "real_cameras")]
+use backend_lib::camera::parse_real_backend_args;
+#[cfg(feature = "real_cameras")]
+use backend_lib::camera_ingest::begin_live_dual_cam_ingest;
+#[cfg(feature = "real_cameras")]
+use backend_lib::pipeline::{Frame, MatchedFramePair, Pipeline};
+use backend_lib::pipeline::CAPACITY_PER_CROSSBEAM_CHANNEL;
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
 use backend_lib::timing::init_global_time;
 use tower_http::cors::{Any, CorsLayer};
-#[cfg(feature = "real_cameras")]
-use backend_lib::pipeline::{CameraId, Pipeline};
-#[cfg(feature = "real_cameras")]
-use backend_lib::camera_ingest::begin_live_dual_cam_ingest;
-use backend_lib::pipeline::CAPACITY_PER_CROSSBEAM_CHANNEL;
 
 const ARDUINO_BAUD_RATE: u32 = 115200;
 
-// In dev mode, the backend can serve the API via command line, and it will
-// also serve the Next.js server, so it will need CORS. It will not have any
-// embedded assets.
 pub fn create_dev_app(throw_source: ThrowSource) -> Router {
-    // Set up CORS layer to allow cross-origin sharing for integration mode.
-    // Next.js requests will come from port 3000.
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::HEAD])
@@ -31,43 +28,87 @@ pub fn create_dev_app(throw_source: ThrowSource) -> Router {
     create_api_router(throw_source, infractions_rx).layer(cors)
 }
 
-// Lacking a "real_cameras" feature flag will not start the CV pipelines, and will point the
-// `analyze-throw` route to simulated throw data.
 #[cfg(not(feature = "real_cameras"))]
 #[tokio::main]
 async fn main() {
     init_global_time();
-    // Build the Axum router.
     let app = create_dev_app(ThrowSource::Simulated);
-
-    // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
 }
 
-// The "real_cameras" configuration will start the CV pipelines, and will point the
-// `analyze-throw` route to the processed throw data from the pipelines.
 #[cfg(feature = "real_cameras")]
 #[tokio::main]
 async fn main() {
     init_global_time();
     let args = parse_real_backend_args();
+
+    let expected_frame_interval_ns = (1_000_000_000.0 / 30.0) as u64;
+    let (frame_output_tx, frame_output_rx) =
+        crossbeam::channel::bounded::<Frame>(CAPACITY_PER_CROSSBEAM_CHANNEL);
+    let (matched_pair_tx, matched_pair_rx) =
+        crossbeam::channel::bounded::<MatchedFramePair>(CAPACITY_PER_CROSSBEAM_CHANNEL);
+    let (_aggregation_command_tx, aggregation_command_rx) =
+        crossbeam::channel::unbounded::<AggregationCommand>();
+    let (optimize_input_tx, _optimize_input_rx) =
+        crossbeam::channel::unbounded::<OptimizeTrajectoryInput>();
+
+    let _matched_frame_pair_aggregator = MatchedFramePairAggregator::new(
+        frame_output_rx,
+        matched_pair_tx,
+        expected_frame_interval_ns,
+    );
+    let _aggregation_coordinator = AggregationCoordinator::new(
+        matched_pair_rx,
+        aggregation_command_rx,
+        optimize_input_tx,
+        250,
+        250,
+    );
+
     if let Some(dir) = args.feed_footage_dir {
         println!(
             "Starting real dev backend in recorded-footage replay mode from {}.",
             dir.display()
         );
-        let _ = start_recorded_footage_pipelines(dir, CAPACITY_PER_CROSSBEAM_CHANNEL);
+        let (left_tx, left_rx) = crossbeam::channel::bounded::<Frame>(CAPACITY_PER_CROSSBEAM_CHANNEL);
+        let (right_tx, right_rx) = crossbeam::channel::bounded::<Frame>(CAPACITY_PER_CROSSBEAM_CHANNEL);
+        let _replay_handle = std::thread::spawn(move || {
+            backend_lib::camera_ingest::replay_recorded_session(dir, left_tx, right_tx);
+        });
+        let _left_pipeline = Pipeline::from_receiver(
+            left_rx,
+            CAPACITY_PER_CROSSBEAM_CHANNEL,
+            frame_output_tx.clone(),
+        );
+        let _right_pipeline = Pipeline::from_receiver(
+            right_rx,
+            CAPACITY_PER_CROSSBEAM_CHANNEL,
+            frame_output_tx,
+        );
     } else {
-        let (left_rx, right_rx) = begin_live_dual_cam_ingest(args.left_camera_id, args.right_camera_id, 10_000.0);
-        let _left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, CAPACITY_PER_CROSSBEAM_CHANNEL);
-        let _right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, CAPACITY_PER_CROSSBEAM_CHANNEL);
+        let left_camera_id = args
+            .left_camera_id
+            .expect("--left-camera-id is required unless --feed-footage-dir is used");
+        let right_camera_id = args
+            .right_camera_id
+            .expect("--right-camera-id is required unless --feed-footage-dir is used");
+        let (left_rx, right_rx) = begin_live_dual_cam_ingest(
+            left_camera_id,
+            right_camera_id,
+            args.exposure_time_us,
+        );
+        let _left_pipeline = Pipeline::from_receiver(
+            left_rx,
+            CAPACITY_PER_CROSSBEAM_CHANNEL,
+            frame_output_tx.clone(),
+        );
+        let _right_pipeline = Pipeline::from_receiver(
+            right_rx,
+            CAPACITY_PER_CROSSBEAM_CHANNEL,
+            frame_output_tx,
+        );
     }
 
-    // Build the Axum router.
     let app = create_dev_app(ThrowSource::Camera);
-
-    // Start the Axum server.
     start_server(app, "0.0.0.0:5001").await;
-
-    // TODO(#7): Implement Clean Shutdown.
 }

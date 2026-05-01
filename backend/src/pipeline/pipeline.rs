@@ -1,28 +1,44 @@
 use super::PipelineStage;
-use crate::camera_ingest::replay_recorded_session;
+use crate::camera_ingest::ingest_frames;
 use crate::computer_vision::{contour, forward_downsampled_copy, mog2, undistortion};
-use crate::pipeline::{CameraId, Frame as PipelineFrame};
-use crossbeam::channel::{Receiver, bounded};
-use std::path::PathBuf;
+use crate::pipeline::{CameraId, Frame};
+use crossbeam::channel::{Receiver, Sender, bounded};
 use std::thread::{self, JoinHandle};
 
 pub struct Pipeline {
-    _camera_id: CameraId,
     handles: Vec<JoinHandle<()>>,
 }
 
 #[allow(dead_code)]
 impl Pipeline {
-    // Builds one pipeline stage graph around an incoming frame receiver.
+    // The live-camera constructor creates the ingest thread, all inter-stage
+    // channels, stage workers, and output forwarding thread.
     pub fn new(
         camera_id: CameraId,
-        rx_stage1: Receiver<PipelineFrame>,
+        camera_name: String,
         capacity_per_channel: usize,
+        frame_output_tx: Sender<Frame>,
     ) -> Self {
-        let (tx_stage1, rx_stage2) = bounded::<PipelineFrame>(capacity_per_channel);
-        let (tx_stage2, rx_stage3) = bounded::<PipelineFrame>(capacity_per_channel);
-        let (tx_stage3, rx_stage4) = bounded::<PipelineFrame>(capacity_per_channel);
-        let (tx_stage4, rx_output) = bounded::<PipelineFrame>(capacity_per_channel);
+        let (tx_ingest, rx_stage1) = bounded::<Frame>(capacity_per_channel);
+        let handle_ingest = thread::spawn(move || {
+            ingest_frames(camera_id, camera_name, tx_ingest);
+        });
+
+        let mut pipeline = Self::from_receiver(rx_stage1, capacity_per_channel, frame_output_tx);
+        pipeline.handles.insert(0, handle_ingest);
+        pipeline
+    }
+
+    // Builds one pipeline stage graph around an incoming frame receiver.
+    pub fn from_receiver(
+        rx_stage1: Receiver<Frame>,
+        capacity_per_channel: usize,
+        frame_output_tx: Sender<Frame>,
+    ) -> Self {
+        let (tx_stage1, rx_stage2) = bounded::<Frame>(capacity_per_channel);
+        let (tx_stage2, rx_stage3) = bounded::<Frame>(capacity_per_channel);
+        let (tx_stage3, rx_stage4) = bounded::<Frame>(capacity_per_channel);
+        let (tx_stage4, rx_output) = bounded::<Frame>(capacity_per_channel);
 
         let handle_stage1 = PipelineStage::new(rx_stage1, tx_stage1, undistortion).spawn();
         let handle_stage2 =
@@ -32,17 +48,13 @@ impl Pipeline {
 
         let handle_output = thread::spawn(move || {
             for frame in rx_output.iter() {
-                println!(
-                    "pipeline: {:?} produced output frame at timestamp {}",
-                    camera_id,
-                    frame.context().camera_buffer_timestamp()
-                );
-                // TODO: forward results to output.
+                frame_output_tx
+                    .send(frame)
+                    .expect("Error sending processed frame to aggregator.");
             }
         });
 
         Self {
-            _camera_id: camera_id,
             handles: vec![
                 handle_stage1,
                 handle_stage2,
@@ -60,22 +72,6 @@ impl Pipeline {
             let _ = handle.join();
         }
     }
-}
-
-// Starts one replay thread and one left/right pipeline pair for recorded footage.
-pub fn start_recorded_footage_pipelines(
-    footage_dir: PathBuf,
-    capacity_per_channel: usize,
-) -> (JoinHandle<()>, Pipeline, Pipeline) {
-    let (left_tx, left_rx) = bounded::<PipelineFrame>(capacity_per_channel);
-    let (right_tx, right_rx) = bounded::<PipelineFrame>(capacity_per_channel);
-    let replay_handle = thread::spawn(move || {
-        replay_recorded_session(footage_dir, left_tx, right_tx);
-    });
-    let left_pipeline = Pipeline::new(CameraId::FieldLeft, left_rx, capacity_per_channel);
-    let right_pipeline = Pipeline::new(CameraId::FieldRight, right_rx, capacity_per_channel);
-
-    (replay_handle, left_pipeline, right_pipeline)
 }
 
 #[cfg(test)]
@@ -100,9 +96,10 @@ mod tests {
     const RIGHT_CAM_DIR: &str = "right_cam";
 
     #[test]
-    fn pipeline_new_starts_and_stops_after_input_channel_closes() {
+    fn pipeline_from_receiver_starts_and_stops_after_input_channel_closes() {
         let (tx, rx) = bounded::<PipelineFrame>(2);
-        let pipeline = Pipeline::new(CameraId::FieldLeft, rx, 2);
+        let (output_tx, output_rx) = bounded::<PipelineFrame>(2);
+        let pipeline = Pipeline::from_receiver(rx, 2, output_tx);
 
         tx.send(PipelineFrame::new(
             vec![1, 2, 3, 4].into_boxed_slice(),
@@ -111,6 +108,7 @@ mod tests {
         ))
         .expect("send pipeline frame");
         drop(tx);
+        let _ = output_rx.recv_timeout(Duration::from_secs(5));
 
         pipeline.stop();
     }

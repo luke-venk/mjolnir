@@ -1,8 +1,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-/// CLI arguments for the real backend binary (`prod_real_cameras` /
-/// `dev_real_cameras`) when running against recorded footage.
+/// CLI arguments for the real backend binary when running against recorded footage.
 #[derive(Parser, Debug, Clone)]
 #[command(name = "real_backend_args")]
 #[command(about = "Runs the real backend against a recorded footage session.")]
@@ -18,12 +17,12 @@ pub struct RealBackendArgs {
     pub exposure_time_us: f64,
 
     /// Left camera id (figure this out with the :discover binary)
-    #[arg(long = "left-camera-id", required = true)]
-    pub left_camera_id: String,
+    #[arg(long = "left-camera-id")]
+    pub left_camera_id: Option<String>,
 
     /// Right camera id (figure this out with the :discover binary)
-    #[arg(long = "right-camera-id", required = true)]
-    pub right_camera_id: String,
+    #[arg(long = "right-camera-id")]
+    pub right_camera_id: Option<String>,
 }
 
 pub fn parse_real_backend_args() -> RealBackendArgs {
