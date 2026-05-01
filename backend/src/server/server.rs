@@ -1,6 +1,7 @@
 use crate::circle_infractions_ingest::CircleInfractionDetectionState;
 use crate::throws::ThrowType;
 use crate::server::app_state::AppState;
+use crate::server::frames_route::get_frame;
 use crate::throws::{simulate_throw::simulate_throw_event, *};
 use super::ThrowSource;
 use axum::{
@@ -81,7 +82,10 @@ async fn get_throw_results(State(state): State<AppState>) -> Json<ThrowAnalysisR
 
 // In both dev and prod mode, the router will require the HTTP routes
 // and the thread-safe shared app state.
-pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleInfractionDetectionState>) -> Router {
+pub fn create_api_router(
+    throw_source: ThrowSource,
+    circle_rx: Receiver<CircleInfractionDetectionState>,
+) -> Router {
     // Thread-safe shared app state for current throw event.
     let state = AppState::new(throw_source);
     let state_clone = state.clone();
@@ -108,7 +112,8 @@ pub fn create_api_router(throw_source: ThrowSource, circle_rx: Receiver<CircleIn
     let http_routes = Router::new()
         .route("/health", get(health_check))
         .route("/throw-type", post(post_throw_type).get(get_throw_type))
-        .route("/analyze-throw", get(get_throw_results));
+        .route("/analyze-throw", get(get_throw_results))
+        .route("/frames/{camera}", get(get_frame));
 
     // Nest the routes behind the "/api" prefix so no naming collisions
     // with frontend requests.
@@ -222,5 +227,68 @@ mod tests {
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_frames_route_returns_404_when_slot_is_empty() {
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Camera, rx);
+
+        let request = Request::builder()
+            .uri("/api/frames/left")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_frames_route_returns_404_for_unknown_camera() {
+        let (_, rx) = crossbeam::channel::bounded::<CircleInfractionDetectionState>(1);
+        let app: Router = create_api_router(ThrowSource::Camera, rx);
+
+        let request = Request::builder()
+            .uri("/api/frames/middle")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_frames_route_serves_published_impact_frame_as_png() {
+        use crate::pipeline::CameraId;
+
+        // Build the app inline so the test can publish an impact frame
+        // into AppState before issuing the request.
+        let state = AppState::new(ThrowSource::Camera);
+        state
+            .set_impact_frame(CameraId::FieldLeft, (vec![0x42u8; 16], (4, 4)))
+            .await;
+
+        let http_routes = Router::new()
+            .route("/health", get(health_check))
+            .route("/throw-type", post(post_throw_type).get(get_throw_type))
+            .route("/analyze-throw", get(get_throw_results))
+            .route("/frames/{camera}", get(get_frame));
+        let app: Router = Router::new().nest("/api", http_routes).with_state(state);
+
+        let request = Request::builder()
+            .uri("/api/frames/left")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get("content-type")
+                .map(|v| v.to_str().unwrap()),
+            Some("image/png")
+        );
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        // PNG files start with the magic bytes 89 50 4E 47 0D 0A 1A 0A.
+        assert_eq!(&body[..8], &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
     }
 }
