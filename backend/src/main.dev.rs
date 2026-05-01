@@ -5,6 +5,7 @@ use backend_lib::circle_infractions_ingest::begin_detecting_circle_infractions;
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::start_recorded_footage_pipelines;
 use backend_lib::server::{ThrowSource, create_api_router, start_server};
+use backend_lib::timing::init_global_time;
 use tower_http::cors::{Any, CorsLayer};
 #[cfg(feature = "real_cameras")]
 use backend_lib::pipeline::{CameraId, Pipeline};
@@ -34,6 +35,7 @@ pub fn create_dev_app(throw_source: ThrowSource) -> Router {
 #[cfg(not(feature = "real_cameras"))]
 #[tokio::main]
 async fn main() {
+    init_global_time();
     // Build the Axum router.
     let app = create_dev_app(ThrowSource::Simulated);
 
@@ -46,6 +48,7 @@ async fn main() {
 #[cfg(feature = "real_cameras")]
 #[tokio::main]
 async fn main() {
+    init_global_time();
     let args = parse_real_backend_args();
     let capacity_per_channel: usize = 10;
     if let Some(dir) = args.feed_footage_dir {

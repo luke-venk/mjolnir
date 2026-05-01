@@ -6,3 +6,4 @@ pub mod math_triangulation;
 pub mod pipeline;
 pub mod server;
 pub mod throws;
+pub mod timing;
