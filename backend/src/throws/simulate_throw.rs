@@ -34,10 +34,6 @@ pub fn get_random_infractions() -> Vec<InfractionType> {
         infractions.push(InfractionType::RightSector);
     }
 
-    if rand::random::<f32>() < infraction_probability {
-        infractions.push(InfractionType::Circle);
-    }
-
     infractions
 }
 
