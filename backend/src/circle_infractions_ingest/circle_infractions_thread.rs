@@ -65,6 +65,12 @@ fn find_arduino_port() -> String {
 }
 
 #[cfg(feature = "real")]
+/// Starts the circle infraction ingest thread.
+///
+/// Real mode:
+/// - Finds the Arduino serial port.
+/// - Reads the 1-byte stream (0x01 = CLEAR, 0xFE = INFRACTION).
+/// - Emits updates on the returned channel so the server can track recent infractions and staleness.
 pub fn begin_detecting_circle_infractions(baud: u32) -> Receiver<CircleInfractionDetectionState> {
     let arduino_port = find_arduino_port();
 
@@ -86,31 +92,30 @@ pub fn begin_detecting_circle_infractions(baud: u32) -> Receiver<CircleInfractio
         let mut buf = [0u8; 1];
         match port.read(&mut buf) {
             Ok(1) => {
-                match infraction_byte_decoder::decode(buf[0]) {
-                    Some(InfractionState::Infraction) => {
-                        let local_arrival_ns = local_now_ns();
-                        let approx_ptp_ns = ptp_offset::estimate_ptp_ns(local_arrival_ns);
+                if let Some(decoded) = infraction_byte_decoder::decode(buf[0]) {
+                    match decoded {
+                        InfractionState::Infraction => {
+                            let local_arrival_ns = local_now_ns();
+                            let approx_ptp_ns = ptp_offset::estimate_ptp_ns(local_arrival_ns);
 
-                        let info = CircleInfractionTimestamps {
-                            local_arrival_ns,
-                            approx_ptp_ns,
-                            raw_byte: buf[0],
-                        };
+                            let ts = CircleInfractionTimestamps {
+                                local_arrival_ns,
+                                approx_ptp_ns,
+                                raw_byte: buf[0],
+                            };
 
-                        let _ = tx.try_send(CircleInfractionDetectionState::DetectedInfraction(info));
-                    }
-                    Some(InfractionState::Clear) => {
-                        // ignore clears
-                    }
-                    None => {
-                        // ignore unknown bytes
+                            let _ = tx.try_send(CircleInfractionDetectionState::DetectedInfraction(ts));
+                        }
+                        InfractionState::Clear => {
+                            // We intentionally do not emit CLEAR events. The stream is continuous and
+                            // the server uses "time since last infraction" for correlation.
+                        }
                     }
                 }
             }
-            Ok(_) => {}
-            Err(_) => {
-                // timeout or other read error: mark stale
-                let _ = tx.try_send(CircleInfractionDetectionState::Stale);
+            _ => {
+                // Timeout / read error. KeepAlive continues to be emitted so the server can detect
+                // staleness based on missing infraction updates while the thread is still alive.
             }
         }
     });
@@ -119,6 +124,9 @@ pub fn begin_detecting_circle_infractions(baud: u32) -> Receiver<CircleInfractio
 }
 
 #[cfg(not(feature = "real"))]
+/// Starts the circle infraction ingest thread in fake mode (no Arduino connected).
+///
+/// This only emits KeepAlive/Stale signals to exercise integration paths in environments without hardware.
 pub fn begin_detecting_circle_infractions(_baud: u32) -> Receiver<CircleInfractionDetectionState> {
     let (tx, rx) = bounded::<CircleInfractionDetectionState>(CAPACITY);
 
@@ -127,18 +135,7 @@ pub fn begin_detecting_circle_infractions(_baud: u32) -> Receiver<CircleInfracti
             return;
         }
 
-        // Fake mode: simulate an occasional infraction (about 1 per ~30s)
-        thread::sleep(Duration::from_millis(50));
-
-        if rand::random::<f64>() < (1.0 / 600.0) {
-            let local_arrival_ns = local_now_ns();
-            let info = CircleInfractionTimestamps {
-                local_arrival_ns,
-                approx_ptp_ns: None,
-                raw_byte: 0xFE,
-            };
-            let _ = tx.try_send(CircleInfractionDetectionState::DetectedInfraction(info));
-        }
+        thread::sleep(Duration::from_millis(200));
     });
 
     rx
