@@ -8,6 +8,7 @@
 //! This module exposes only the data contract so that #69 can land the
 //! decision logic against a stable shape.
 
+pub mod math_triangulation;
 pub mod triangulation_output;
 
 pub use triangulation_output::TriangulationOutput;

@@ -1,22 +1,39 @@
+#![allow(non_snake_case)]
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt};
 use nalgebra::base::VecStorage;
 use nalgebra::dimension::{Dyn, U1};
 use nalgebra::linalg::SVD;
-use nalgebra::{DMatrix, DVector, Matrix3, Matrix3x4, Vector2, Vector3, Vector4};
+use nalgebra::{DMatrix, DVector, Matrix3x4, Vector2, Vector3, Vector4};
+
+// List of camera projection matrices from camera calibration.
+fn p_list() -> Vec<Matrix3x4<f64>> {
+    vec![
+        Matrix3x4::new(
+            1.66349570e+03, 4.65328119e+03, -1.44996812e+03, 5.73975355e+03,
+            -1.34282253e+03, -3.57339308e+02, -4.77283748e+03, 2.56783602e+04,
+            -7.43327659e-01, 6.50983403e-01, -1.53898021e-01, 1.30918443e+01,
+        ),
+        Matrix3x4::new(
+            -4.72666612e+03, 1.48210558e+03, -5.03727845e+00, 5.37107633e+04,
+            -9.12456912e+02, -1.12711021e+03, -4.61368435e+03, 2.35765374e+04,
+            -6.24111186e-01, -7.81293497e-01, -8.10542365e-03, 1.24434884e+01,
+        ),
+    ]
+}
 
 // Helper function to project a 3D point onto a 2D image plane.
-fn project_point(P: Matrix3x4<f64>, x: Vector3<f64>) -> Vector2<f64> {
+fn project_point(point: Matrix3x4<f64>, x: Vector3<f64>) -> Vector2<f64> {
     let x_h = Vector4::new(x[0], x[1], x[2], 1.0);
-    let x_proj = P * x_h;
+    let x_proj = point * x_h;
     Vector2::new(x_proj[0] / x_proj[2], x_proj[1] / x_proj[2])
 }
 
 // This function does initial estimate of the 3D position using the DLT algorithm.
-fn dlt_triangulation(P_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vector3<f64> {
-    let n = P_list.len();
+fn dlt_triangulation(p_list: &[Matrix3x4<f64>], pixels: &[Vector2<f64>]) -> Vector3<f64> {
+    let n = p_list.len();
     let mut A = DMatrix::<f64>::zeros(2 * n, 4);
     for i in 0..n {
-        let P = P_list[i];
+        let P = p_list[i];
         let pixel = pixels[i];
         let u = pixel[0];
         let v = pixel[1];
@@ -172,32 +189,21 @@ impl LeastSquaresProblem<f64, Dyn, Dyn> for TrajectoryProblem {
 //     dt: Time step (1/fps).
 // Returns: trajectory, position covariance, optimized drag, LM success flag.
 pub async fn optimize_trajectory(pixels: &[Vec<Vector2<f64>>], dt: f64) -> (Vec<Vector3<f64>>, DMatrix<f64>, f64, bool) {
-    //P_list: List of camera projection matrices. Should be gotten from camera calibration.
-    let P_list = vec![
-        Matrix3x4::new(
-            1.66349570e+03, 4.65328119e+03, -1.44996812e+03, 5.73975355e+03,
-            -1.34282253e+03, -3.57339308e+02, -4.77283748e+03, 2.56783602e+04,
-            -7.43327659e-01, 6.50983403e-01, -1.53898021e-01, 1.30918443e+01,
-        ),
-        Matrix3x4::new(
-            -4.72666612e+03, 1.48210558e+03, -5.03727845e+00, 5.37107633e+04,
-            -9.12456912e+02, -1.12711021e+03, -4.61368435e+03, 2.35765374e+04, 
-            -6.24111186e-01, -7.81293497e-01, -8.10542365e-03, 1.24434884e+01,
-        ),
-    ];
-
-    //g: Gravity vector.
+    // Camera projection matrices.
+    let P_list = p_list();
+    // Gravity vector.
     let g = Vector3::new(0.0, 0.0, -9.81);
-    //omega_phys: Hyperparameter for the physics noise.
+    // Hyperparameter for the physics noise.
     let omega_phys = 80.0_f64;
-    //drag: Drag coefficient.
+    // Drag coefficient.
     let drag = 0.0_f64;
-    //pixel_sigma: Standard deviation of the pixel noise.
+    // Standard deviation of the pixel noise.
     let pixel_sigma = 1.0_f64;
-    //physics_sigma: Standard deviation of the physics noise.
+    // Standard deviation of the physics noise.
     let physics_sigma = 1.0_f64;
+
     let n_timesteps = pixels[0].len();
-    let mut X_init = Vec::with_capacity(n_timesteps);
+    let mut x_init = Vec::with_capacity(n_timesteps);
     for t in 0..n_timesteps {
         let mut pixel_t = Vec::new();
         for p in pixels {
@@ -205,9 +211,9 @@ pub async fn optimize_trajectory(pixels: &[Vec<Vector2<f64>>], dt: f64) -> (Vec<
                 pixel_t.push(*v);
             }
         }
-        X_init.push(dlt_triangulation(&P_list, &pixel_t));
+        x_init.push(dlt_triangulation(&P_list, &pixel_t));
     }
-    let mut params_init: Vec<f64> = X_init.iter().flat_map(|v| vec![v[0], v[1], v[2]]).collect();
+    let mut params_init: Vec<f64> = x_init.iter().flat_map(|v| vec![v[0], v[1], v[2]]).collect();
     params_init.push(drag);
     let problem = TrajectoryProblem {
         params: DVector::from_vec(params_init),
@@ -223,25 +229,19 @@ pub async fn optimize_trajectory(pixels: &[Vec<Vector2<f64>>], dt: f64) -> (Vec<
     let (problem, report) = LevenbergMarquardt::default().with_patience(2000).minimize(problem);
     let success = report.termination.was_successful();
     let drag_opt = problem.drag();
-    let X_opt: Vec<Vector3<f64>> = (0..n_timesteps)
+    let x_opt: Vec<Vector3<f64>> = (0..n_timesteps)
         .map(|t| Vector3::new(problem.params[t * 3], problem.params[t * 3 + 1], problem.params[t * 3 + 2]))
         .collect();
     let jacobian = problem.numerical_jacobian(1e-7);
     let cov_full = problem.covariance_from_jacobian(&jacobian).unwrap_or_else(|| DMatrix::zeros(3 * n_timesteps + 1, 3 * n_timesteps + 1));
     let cov = cov_full.view((0, 0), (3 * n_timesteps, 3 * n_timesteps)).into_owned();
-    (X_opt, cov, drag_opt, success)
-}
-
-
-
-//Everythng below here is for testing purposes
-fn trajectory_residual(params: &DVector<f64>, p_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f64>>], n_timesteps: usize, omega_phys: f64, dt: f64, g: Vector3<f64>, pixel_sigma: f64, physics_sigma: f64) -> DVector<f64> {
-    TrajectoryProblem {params: params.clone(),P_list: p_list.to_vec(),pixels: pixels.to_vec(),n_timesteps,omega_phys,dt,g,pixel_sigma,physics_sigma}.residuals().expect("residuals")    
+    (x_opt, cov, drag_opt, success)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra::Matrix3;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
     use rand_distr::{Distribution, Normal};
@@ -258,26 +258,10 @@ mod tests {
         assert!((a - b).abs() <= atol + rtol * b.abs(), "expected {b}, got {a} (rtol={rtol}, atol={atol})");
     }
 
-    fn calibration_p_list() -> Vec<Matrix3x4<f64>> {
-        vec![
-            Matrix3x4::new(
-                1.66349570e+03, 4.65328119e+03, -1.44996812e+03, 5.73975355e+03,
-                -1.34282253e+03, -3.57339308e+02, -4.77283748e+03, 2.56783602e+04,
-                -7.43327659e-01, 6.50983403e-01, -1.53898021e-01, 1.30918443e+01,
-            ),
-            Matrix3x4::new(
-                -4.72666612e+03, 1.48210558e+03, -5.03727845e+00, 5.37107633e+04,
-                -9.12456912e+02, -1.12711021e+03, -4.61368435e+03, 2.35765374e+04,
-                -6.24111186e-01, -7.81293497e-01, -8.10542365e-03, 1.24434884e+01,
-            ),
-        ]
-    }
-
     struct Scene {
         p_list: Vec<Matrix3x4<f64>>,
         pixels: Vec<Vec<Vector2<f64>>>,
         traj_true: Vec<Vector3<f64>>,
-        g: Vector3<f64>,
         dt: f64,
         drag_coef: f64,
         n_timesteps: usize,
@@ -290,7 +274,7 @@ mod tests {
     }
 
     fn main_style_scene(rng: &mut StdRng, _n_cameras: usize, n_steps_cap: usize, dt: f64, g: Vector3<f64>, drag_coef: f64, pixel_noise_sigma: f64) -> Scene {
-        let p_list = calibration_p_list();
+        let p_list = p_list();
         let n_cameras = p_list.len();
 
         let x0 = Vector3::new(0.0, 0.0, 1.5);
@@ -325,12 +309,25 @@ mod tests {
             p_list,
             pixels,
             traj_true,
-            g,
             dt,
             drag_coef,
             n_timesteps,
             n_cameras,
         }
+    }
+
+    fn trajectory_residual(params: &DVector<f64>, p_list: &[Matrix3x4<f64>], pixels: &[Vec<Vector2<f64>>], n_timesteps: usize, omega_phys: f64, dt: f64, g: Vector3<f64>, pixel_sigma: f64, physics_sigma: f64) -> DVector<f64> {
+        TrajectoryProblem {
+            params: params.clone(),
+            P_list: p_list.to_vec(),
+            pixels: pixels.to_vec(),
+            n_timesteps,
+            omega_phys,
+            dt,
+            g,
+            pixel_sigma,
+            physics_sigma
+        }.residuals().expect("residuals")    
     }
 
     #[test]
@@ -365,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_recover_point_two_cameras() {
-        let p = calibration_p_list();
+        let p = p_list();
         let x_true = Vector3::new(0.3, -0.2, 2.5);
         let u0 = project_point(p[0], x_true);
         let u1 = project_point(p[1], x_true);
@@ -403,7 +400,7 @@ mod tests {
         let dt = 0.1;
         let g = Vector3::new(0.0, 0.0, -10.0);
         let drag = 0.25;
-        let p_list = calibration_p_list();
+        let p_list = p_list();
         let base = Vector3::new(0.1, -0.05, 14.0);
         let x2 = drag_calc(base, base, g, drag, dt);
         let mut params_vec: Vec<f64> = Vec::new();
@@ -434,7 +431,7 @@ mod tests {
         let dt = 0.1;
         let g = Vector3::new(0.0, 0.0, -9.81);
         let drag_true = 0.1;
-        let p_list = calibration_p_list();
+        let p_list = p_list();
         let base = Vector3::new(0.0, 0.0, 8.0);
         let x2 = drag_calc(base, base, g, drag_true, dt);
         let mut params_vec: Vec<f64> = Vec::new();
@@ -468,7 +465,7 @@ mod tests {
         let mut params_vec: Vec<f64> = (0..t).flat_map(|_| xyz.iter().copied()).collect();
         params_vec.push(0.0);
         let params = DVector::from_vec(params_vec);
-        let p_list = calibration_p_list();
+        let p_list = p_list();
         let mut pixels: Vec<Vec<Vector2<f64>>> = Vec::new();
         for i in 0..c {
             let row: Vec<Vector2<f64>> = (0..t).map(|tt| {let x = Vector3::new(params[tt * 3], params[tt * 3 + 1], params[tt * 3 + 2]); project_point(p_list[i], x)}).collect();
@@ -486,7 +483,7 @@ mod tests {
         let dt = 0.05;
         let g = Vector3::new(0.0, 0.0, -9.81);
         let drag_true = 0.0_f64;
-        let p_list = calibration_p_list();
+        let p_list = p_list();
         let z0 = Vector3::new(0.0, 0.0, 8.0);
         let x_vars: Vec<Vector3<f64>> = (0..n_timesteps).map(|t| {let s = t as f64 * dt; z0 + 0.5 * g * s * s}).collect();
         let pixels: Vec<Vec<Vector2<f64>>> = (0..n_cams).map(|i| (0..n_timesteps).map(|t| project_point(p_list[i], x_vars[t])).collect()).collect();
